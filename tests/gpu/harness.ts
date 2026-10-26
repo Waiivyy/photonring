@@ -51,6 +51,23 @@ const harness: Harness = {
     await r.renderAll();
     return [...(await r.readImageRGB8())];
   },
+  async benchmark(request, repeats) {
+    const r = await get();
+    const info = await ready;
+    r.resize(request.width, request.height);
+    r.setScene({ ...parityScene, ...request });
+    await r.renderAll(); // warm-up: pipeline caches, first allocation
+    const gpuMs: (number | null)[] = [];
+    const wallMs: number[] = [];
+    for (let i = 0; i < repeats; i++) {
+      const t0 = performance.now();
+      const ms = await r.renderAll();
+      await r.device.queue.onSubmittedWorkDone();
+      wallMs.push(performance.now() - t0);
+      gpuMs.push(info.timestampQuery ? ms : null);
+    }
+    return { gpuMs, wallMs };
+  },
 };
 
 window.harness = harness;

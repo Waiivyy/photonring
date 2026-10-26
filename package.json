@@ -21,6 +21,7 @@
     "test:watch": "vitest",
     "test:gpu": "playwright test --project=gpu",
     "test:e2e": "playwright test --project=e2e",
+    "bench:gpu": "playwright test --project=bench",
     "spike": "node tools/precision-spike.ts",
     "render:cpu": "node tools/render-cpu.ts",
     "golden:update": "node tools/update-goldens.ts",
