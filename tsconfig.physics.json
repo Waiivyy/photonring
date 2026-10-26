@@ -1,0 +1,9 @@
+{
+  "//": "Guard: src/physics must compile with no DOM, no GPU and no Node types, so it runs unchanged everywhere.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": []
+  },
+  "include": ["src/physics"]
+}

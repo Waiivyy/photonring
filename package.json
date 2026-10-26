@@ -1,0 +1,31 @@
+{
+  "name": "photonring",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Validated, real-time Schwarzschild black hole renderer for the browser (WebGPU)",
+  "license": "MIT",
+  "author": "Waiivyy",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.physics.json",
+    "lint": "eslint . && node tools/check-text.ts",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "spike": "node tools/precision-spike.ts",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm test"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.19.2",
+    "eslint": "^10.13.0",
+    "prettier": "^3.9.10",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.0",
+    "vitest": "^5.0.5"
+  }
+}
