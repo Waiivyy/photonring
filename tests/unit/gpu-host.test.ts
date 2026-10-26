@@ -157,7 +157,7 @@ describe('tile schedule', () => {
     s.reset(planTiles(1024, 1024, 256)); // 16 tiles
     // Unknown cost: one tile, to measure.
     expect(s.takeForFrame(16)).toHaveLength(1);
-    s.recordCost(4 * 65536, 4); // 4 ms for a 256 x 256 tile
+    s.recordCost(65536, 4); // 4 ms for one 256 x 256 tile
     const batch = s.takeForFrame(16);
     expect(batch).toHaveLength(4);
     s.recordCost(1e9, 1e9); // absurdly slow
