@@ -1,9 +1,9 @@
 # Design decisions
 
-Status: Stage 1 (physics library and CPU reference renderer). Every number below was measured unless it is labelled as an
+Status: Stage 2 (GPU renderer without the disk). Every number below was measured unless it is labelled as an
 estimate. Machine for all measurements: Apple M5 (10-core GPU), 24 GB, macOS 27.0, Node 25.6.1.
-The f32 results come from an emulation (`Math.fround` after every operation), not from a GPU; GPU
-measurements start in Stage 2.
+In sections 3 and 6 the f32 results come from an emulation (`Math.fround` after every operation);
+section 11 has the measurements on the GPU.
 
 | Decision             | Choice                                                                                                                | Section |
 | -------------------- | --------------------------------------------------------------------------------------------------------------------- | ------- |
@@ -123,7 +123,9 @@ a single draw varied by up to a factor of 3):
 | Binet RK4     | 0.05 | 0.052 / 0.044 / 0.002                             | 0.285 / 0.263 / 0.042     | 0             |
 | Cartesian RK4 | 0.1  | 0.199 / 0.171 / 0.060                             | 1.384 / 0.465 / 0.086     | 0             |
 
-This model is pessimistic: it also perturbs $+, -, \times$, which WGSL rounds correctly, and the
+**Measured on the GPU in Stage 2** (section 11): over 6196 escaped rays the largest escape
+direction error is 0.058 px, so the real GPU sits at the correctly rounded level, not at the
+pessimistic one. This model is pessimistic: it also perturbs $+, -, \times$, which WGSL rounds correctly, and the
 Binet inner loop uses nothing else, so on a GPU it should sit closer to the correctly rounded
 column. Even so, its worst case (0.285 px) slightly exceeds the 0.25 px target proposed in
 section 6. Stage 2 measures this on hardware.
@@ -347,3 +349,47 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
 - **Goldens** are 160x90 with 2x2 samples (8 to 13 KB each). `npm run golden:update` re-renders
   them, reports what changed and writes candidates to `artifacts/golden-candidates/`; it
   overwrites a golden only for names passed with `--accept`, or with `--accept-all`.
+
+## 11. Stage 2 decisions
+
+- **Browser tests use the installed Google Chrome** through Playwright (`channel: 'chrome'`,
+  headless). On Apple Silicon its headless mode exposes the Metal GPU to WebGPU without flags
+  (adapter "apple / metal-3", not the fallback adapter, with `timestamp-query`), so no browser
+  binaries are downloaded. Note that WebGPU only exists in secure contexts: tests load pages from
+  the Vite dev server on localhost.
+- **One WGSL module for rendering and for the parity tests.** `renderTile` (the image) and the
+  `traceRays` and `skySamples` entry points (the tests) call the same `traceGeodesic` and
+  `skyRadiance`, so the tests check the shipped shader code rather than a copy. A generated header
+  (`src/gpu/host/wgsl.ts`) supplies the uniform structs, built from the same field lists as the
+  host-side byte layout, plus the star layers and colour-table parameters from TypeScript.
+- **GPU integrator** as decided in Stage 0: $d\phi = 0.05$, step cap 1000. The radial threshold is
+  $|\sin\psi| < 10^{-6}$ in f32 (the f64 library uses $10^{-7}$; in f32 an exactly radial
+  direction leaves rounding noise near $10^{-7}$ in the tangential part).
+- **Escape direction without WGSL sin/cos:** the shader rotates $(\cos, \sin)$ by the
+  $(\cos d\phi, \sin d\phi)$ computed in f64 on the CPU at every step, and uses a Taylor series
+  for the final partial step.
+- **Blackbody colour** comes from a 2048-entry table, log-spaced from 300 K to $10^5$ K, built by
+  the f64 library and uploaded as a 32 KB storage buffer. Error against the spectral integral:
+  at most 0.19 % from 1000 to 2000 K and under 0.03 % above 2000 K (1024 entries left 0.79 %).
+- **Output path:** the compute pass writes linear radiance to an `rgba16float` storage texture at
+  the internal resolution; a render pass tone maps, applies the sRGB transfer function and writes
+  to the canvas, whose backing store has the internal resolution, so nothing is resampled.
+- **Limits:** the internal resolution is CSS size x device pixel ratio, reduced to fit
+  `maxTextureDimension2D` and a 3840 x 2160 pixel budget, keeping the aspect ratio. Everything else
+  fits the default limits by a wide margin (uniforms 128 bytes, colour table 32 KB, at most
+  32 x 32 workgroups per tile), so the device is requested with default limits. `?maxdim=N` lowers
+  the texture limit for testing; it can only reduce the size.
+- **Tiling and time budget:** 256 x 256 tiles, centre first, each submitted separately with its own
+  parameters. Each animation frame dispatches only as many tiles as its 12 ms budget allows, from
+  the measured cost per pixel (timestamp queries when available, wall-clock otherwise). With the
+  step cap, no single tile can run away.
+- **Device loss** shows a message with the reason and a Restart button that creates a new adapter
+  and device. `device.destroy()` from the debug hook exercises this path in the tests.
+- **Unsupported browsers** get the reason, the supported browsers and versions (section 4), and
+  four 640 x 360 images from the CPU reference renderer (88 to 128 KB each, `npm run gallery`).
+- **Measured** (`docs/VALIDATION.md` item 11, `docs/PERFORMANCE.md`): escape directions within
+  0.058 px of the f64 reference over 6196 rays with no termination mismatches; deflection within
+  $2.8\times10^{-5}$; a 1920 x 1080 frame without the disk in 6.2 ms of GPU time in headless
+  Chrome.
+- **Production build** already works (35 KB of JavaScript, 13 KB gzipped, hashed assets, relative
+  paths); the CSP and deployment come in Stage 5.
