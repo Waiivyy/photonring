@@ -7,3 +7,4 @@ export * from './observer.ts';
 export * from './orbits.ts';
 export * from './redshift.ts';
 export * from './integrators.ts';
+export * from './camera.ts';
