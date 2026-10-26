@@ -149,27 +149,62 @@ direction maps to exactly $b_c$ by this route.
 ## 7. The Binet form used for integration
 
 The planar orbit equation $u'' = 3Mu^2 - u$ with state $(u, w = u')$ is the integrator chosen in
-Stage 0 (`traceBinetRK4`; the comparison is in `docs/DESIGN.md`). From the observer,
+Stage 0 (`integrateBinet` in `src/physics/integrators.ts`; the comparison is in
+`docs/DESIGN.md`). The 3D tracer `traceRay` (`src/physics/raytrace.ts`) reduces every ray to it.
+From the observer,
 
 $$u_0 = 1/r_o, \qquad w_0 = -u_0\sqrt{1-2Mu_0}\,\cot\psi,$$
 
 from $P(u_0) = u_0^2(1-2Mu_0)\cot^2\psi$, with the sign chosen so that an outward ray
-($\cos\psi > 0$) has decreasing $u$. The impact parameter is never needed.
+($\cos\psi > 0$) has decreasing $u$. The impact parameter is not needed for the integration.
 
-- **Ray plane.** Basis $e_1 = \hat{\mathbf r}_o$, $e_2$ = normalised tangential part of $d$.
-  $\phi$ is the polar angle inside this plane, so there are no coordinate poles. The only
-  degenerate case is a radial ray ($\sin\psi = 0$), which is a straight line and is handled
-  exactly (escaped if outward, captured if inward).
-- **Escape** is detected when $u$ crosses 0, that is at $r = \infty$, by a Newton solve on the
-  cubic Hermite interpolant of the last step. The asymptotic direction is
-  $\cos\phi_\infty e_1 + \sin\phi_\infty e_2$, because far away the direction of travel and the
-  position direction coincide. No escape radius is needed, so no residual bending is left out.
-- **Capture** uses the exact criterion of section 2.
-- **Disk crossings** (Stage 1): the equatorial plane meets the ray plane in a line through the
-  origin, so the crossing angles $\phi_d + k\pi$ are known before integration. Detection reduces
-  to comparing $\phi$ with known angles, and the radius follows from Hermite interpolation. A ray
-  plane that coincides with the equatorial plane sees a zero-thickness disk edge-on and gets no
-  emission.
+- **Ray plane.** Basis $e_1 = \hat{\mathbf r}_o$, $e_2$ = normalised tangential part of $d$, with
+  $\cos\psi = d\cdot e_1$ and $\sin\psi$ the length of the tangential part. $\phi$ is the
+  polar angle inside this plane, so there are no coordinate poles. The only degenerate case is a
+  radial ray ($|\sin\psi| < 10^{-7}$), which is a straight line and is handled exactly (escaped
+  if outward, captured if inward, no disk crossing either way).
+- **Escape** is detected when $u$ crosses 0, that is at $r = \infty$, by solving the cubic
+  Hermite interpolant of the last step (Newton iteration, bracketed, stopped at convergence). The
+  asymptotic direction is $\cos\phi_\infty e_1 + \sin\phi_\infty e_2$, because far away the
+  direction of travel and the position direction coincide. No escape radius is needed, so no
+  residual bending is left out.
+- **Capture** uses the exact criterion of section 2 at a capture radius in $(2M, 3M]$ (default
+  $3M$); the capture point is also refined on the Hermite interpolant.
+- **Disk crossings.** On the ray plane, $z(\phi) = r(e_{1z}\cos\phi + e_{2z}\sin\phi)$
+  vanishes at $\phi_0 + k\pi$ with $\phi_0 = \operatorname{atan2}(-e_{1z}, e_{2z})$ reduced to
+  $(0, \pi]$; an observer exactly in the plane ($e_{1z} = 0$) gets $\phi_0 = \pi$, so the
+  observer's own position never counts. Because $\phi$ only increases, each crossing angle is met
+  once, in order: a crossing can be neither missed nor counted twice, at any step size. The
+  radius at the crossing comes from the Hermite interpolant of the step that contains it. If the
+  ray plane is the equatorial plane itself ($|(e_{1z}, e_{2z})| < 10^{-14}$) the ray sees a
+  zero-thickness disk edge-on and gets no crossing.
+- **Physical angular momentum.** The traced ray's plane normal is $n = e_1 \times e_2$. The
+  physical photon travels the other way, so its conserved $L_z/E = -b\,n_z$ with
+  $b = r_o\sin\psi/\sqrt{1-2M/r_o}$; positive values co-rotate with the disk.
+- **Flat space** ($M = 0$) is the straight line itself: the escape direction is $d$ exactly and
+  the one possible crossing is the intersection of the line with $z = 0$.
+
+## 7a. Camera
+
+The camera is a static observer at $r_o$ on a sphere around the hole, at azimuth $\alpha$ and
+elevation $\epsilon$ above the disk plane, looking at the hole (`cameraFrame` in
+`src/physics/camera.ts`). Its basis is forward $= -\hat{\mathbf r}$,
+up $= \partial\hat{\mathbf r}/\partial\epsilon = (-\sin\epsilon\cos\alpha,
+-\sin\epsilon\sin\alpha, \cos\epsilon)$, which stays defined at the poles, and
+right $=$ forward $\times$ up. Because the static frame's axes are aligned with the Euclidean
+axes (section 6), these vectors are directly the local view directions.
+
+A pinhole maps the image point $(x, y)$ of a $W \times H$ image (pixels from the top-left corner)
+to the unit direction along forward $+ s_x$ right $+ s_y$ up with
+$s_x = (2x/W - 1)(W/H)\tan(f/2)$ and $s_y = (1 - 2y/H)\tan(f/2)$, $f$ the vertical field of
+view. Directions depend only on $x/W$ and $y/H$, so the device pixel ratio does not change them.
+A cone of half-angle $\psi$ around the optical axis images to a circle of radius
+$\tan\psi/\tan(f/2)$ half-heights; the shadow-size measurement relies on this.
+
+`autoFieldOfView` widens $f$ so that the shadow radius is at most 60 % of the half-height,
+$f = 2\arctan(\tan\psi_{sh}/0.6)$, never narrower than requested and at most $120°$. With the
+default $60°$ it starts widening below about $14.8M$; at $5M$ it reaches the cap and the shadow
+fills 78 % of the half-height.
 
 ## 8. Deflection angle: two independent reference methods
 
@@ -267,6 +302,63 @@ relativistic Page and Thorne (1974) solution, and the disk has no thickness, no 
 no self-illumination and no magnetic fields. It is a toy for demonstration and must not be
 presented as a model of any real observation.
 
+## 10a. Colour
+
+- **Spectrum.** Planck's law $B_\lambda \propto \lambda^{-5}/(e^{c_2/\lambda T} - 1)$ with
+  $c_2 = 1.438776877\times10^{-2}$ m K (exact since the 2019 SI; NIST CODATA).
+- **Colour matching.** The CIE 1931 2-degree functions are approximated by the multi-lobe
+  piecewise Gaussian fit of Wyman, Sloan and Shirley (2013), eq. (4) and table 1, integrated at
+  1 nm steps from 360 to 830 nm (`blackbodyXYZ`). The fit avoids redistributing the CIE dataset,
+  which is licensed CC BY-SA 4.0; four sample values from that dataset are quoted, with
+  attribution, as test expectations.
+- **To sRGB.** XYZ to linear sRGB uses the matrix of the W3C CSS Color 4 sample code (D65, after
+  IEC 61966-2-1); luminance is the Y row of its inverse. Encoding uses the sRGB transfer function
+  ($12.92c$ below 0.0031308, $1.055c^{1/2.4} - 0.055$ above).
+- **Scale.** `blackbodyColour` is normalised so a 6500 K blackbody has luminance 1, which keeps
+  the physical temperature dependence of brightness: steep in the Wien regime, linear in $T$ in
+  the Rayleigh-Jeans regime (measured ratio 2.027 between $10^6$ and $5\times10^5$ K).
+  Deep-red blackbodies lie outside the sRGB gamut and get a slightly negative blue channel; the
+  renderer clamps negative emission to zero.
+- **Accuracy (measured).** Chromaticity against the Planckian locus computed from the CIE data:
+  within 0.0002 at 6500 K and above, 0.0013 at 2856 K (illuminant A), 0.0046 at 1500 K, where the
+  fit's red tail dominates.
+- **Tone mapping.** $1 - e^{-kx}$ per channel, $k$ the exposure: linear near 0, saturating
+  smoothly below 1. Validation and debug renders skip it and clamp to $[0, 1]$ instead.
+
+## 10b. Star field (procedural)
+
+Stars live on three cubic lattices in direction space (`src/physics/starfield.ts`). Cell $c$ of
+a layer with $K$ cells per unit length holds at most one star, with probability $p$, at the point
+$(c + j)/K$ with a hashed jitter $j \in [0, 1)^3$, and only if that point lies within half a cell
+of the unit sphere. The star's direction is that point normalised.
+
+- **Hash.** pcg3d of Jarzynski and Olano (2020), section 6.1, on the integer cell coordinates:
+  all arithmetic modulo $2^{32}$, so the catalogue is bit-identical in JavaScript and in WGSL.
+  Hash outputs become floats in $[0, 1)$ from their top 24 bits, exact in f32.
+- **Seamless lookup.** A star's profile is a Gaussian in chord distance with
+  $\sigma = \rho/4$, truncated (and shifted to reach zero) at $\rho$ = half a cell. Any star
+  that can contribute in direction $d$ therefore lies in one of the 27 cells around
+  $\lfloor dK \rfloor$, so the radiance is continuous across cell boundaries, even where f32 and
+  f64 floor to different cells. Using only cell indices and chord distances avoids transcendental
+  functions, whose WGSL accuracy is loose (section 11).
+- **Layers.** $K = 40, 120, 360$ with $p = 0.06, 0.06, 0.03$: few large bright stars, more medium
+  ones, many small faint ones. Expected density is about $pK^2$ stars per steradian per layer.
+- **Brightness and colour.** Each star is a blackbody at a hashed temperature from 2500 to
+  32500 K, with peak luminance $L = L_{max}u^4$ for a hashed $u$ (many faint stars). For a static
+  observer at $r_o$ every frequency is multiplied by $g = (1 - 2M/r_o)^{-1/2}$ (section 9), so
+  the star is drawn as a blackbody at $gT$, scaled so that its luminance is $L$ when $g = 1$.
+
+## 10c. Rendering a sample
+
+For each sample direction, `renderImage` (`src/cpu-renderer/render.ts`) traces the ray and then
+composites front to back along the traced path: each crossing with $r_{in} \le r \le r_{out}$
+adds $\tau\,a\,B(g\,T(r))$ and multiplies the transmittance $\tau$ by $1 - a$, where $a$ is
+the disk opacity, $B$ the normalised blackbody colour and
+$g = g_\infty(r, L_z/E)/\sqrt{1 - 2M/r_o}$; finally an escaped ray adds $\tau$ times the sky
+radiance in its escape direction. Supersampling averages an $n \times n$ grid of samples per
+pixel. Validation renders use one sample at each pixel centre, no disk, a sky of radiance 1 and
+no tone mapping, so captured pixels are exactly 0 and escaped pixels exactly 1.
+
 ## 11. Floating point
 
 - **f32 emulation.** `Math.fround(a op b)` on f32 inputs gives the correctly rounded f32 result for
@@ -285,6 +377,8 @@ presented as a model of any real observation.
 
 All entries were confirmed from the source text or publisher metadata.
 
+- CIE (2019). CIE 1931 colour-matching functions, 2 degree observer. Dataset,
+  doi:10.25039/CIE.DS.xvudnb9b, licence CC BY-SA 4.0 (four sample values quoted in tests)
 - Bardeen, J. M., Press, W. H. and Teukolsky, S. A. (1972). Rotating black holes: locally
   nonrotating frames, energy extraction, and scalar synchrotron radiation. ApJ 178, 347-369.
   doi:10.1086/151796
@@ -304,6 +398,8 @@ All entries were confirmed from the source text or publisher metadata.
   doi:10.1145/221332.221334 (metadata confirmed via Crossref)
 - Iyer, S. V. and Petters, A. O. (2007). Light's bending angle due to black holes: from the photon
   sphere to infinity. Gen. Rel. Grav. 39, 1563-1582. arXiv:gr-qc/0611086
+- Jarzynski, M. and Olano, M. (2020). Hash functions for GPU rendering. Journal of Computer
+  Graphics Techniques 9(3). https://jcgt.org/published/0009/03/02/ (pcg3d, section 6.1)
 - Keeton, C. R. and Petters, A. O. (2005). Formalism for testing theories of gravity using lensing
   by compact objects: static, spherically symmetric case. Phys. Rev. D 72, 104006.
   arXiv:gr-qc/0511019
@@ -315,10 +411,17 @@ All entries were confirmed from the source text or publisher metadata.
   structure of accretion disk. ApJ 191, 499-506. doi:10.1086/152990
 - Perlick, V. and Tsupko, O. Yu. (2022). Calculating black hole shadows: review of analytical
   studies. Phys. Rep. 947, 1-39. doi:10.1016/j.physrep.2021.10.004, arXiv:2105.07101
+- NIST CODATA: second radiation constant $c_2 = 1.438776877\times10^{-2}$ m K (exact),
+  https://physics.nist.gov/cgi-bin/cuu/Value?c22ndrc
 - Shakura, N. I. and Sunyaev, R. A. (1973). Black holes in binary systems. Observational
   appearance. A&A 24, 337-355.
 - Synge, J. L. (1966). The escape of photons from gravitationally intense stars. MNRAS 131,
   463-466. doi:10.1093/mnras/131.3.463
+- W3C CSS Color Module Level 4, sample code `conversions.js` (`XYZ_to_lin_sRGB`, `gam_sRGB`),
+  https://drafts.csswg.org/css-color-4/ (matrix and transfer function after IEC 61966-2-1)
+- Wyman, C., Sloan, P.-P. and Shirley, P. (2013). Simple analytic approximations to the CIE
+  XYZ color matching functions. Journal of Computer Graphics Techniques 2(2), 1-11.
+  https://jcgt.org/published/0002/02/01/ (multi-lobe fit, eq. 4 and table 1)
 - WGSL: WebGPU Shading Language, W3C draft, section "Floating Point Accuracy",
   https://www.w3.org/TR/WGSL/
 $$

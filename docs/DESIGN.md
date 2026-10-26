@@ -1,18 +1,21 @@
 # Design decisions
 
-Status: Stage 0 (feasibility). Every number below was measured unless it is labelled as an
+Status: Stage 1 (physics library and CPU reference renderer). Every number below was measured unless it is labelled as an
 estimate. Machine for all measurements: Apple M5 (10-core GPU), 24 GB, macOS 27.0, Node 25.6.1.
 The f32 results come from an emulation (`Math.fround` after every operation), not from a GPU; GPU
 measurements start in Stage 2.
 
-| Decision             | Choice                                                                                                         | Section |
-| -------------------- | -------------------------------------------------------------------------------------------------------------- | ------- |
-| Language and tooling | TypeScript 6.0 (strict), Vite, Vitest, Playwright, ESLint, Prettier                                            | 2       |
-| GPU API              | Raw WebGPU with WGSL compute shaders, no rendering framework                                                   | 2       |
-| Integrator           | Planar Binet equation $u'' = 3Mu^2 - u$, classical RK4, fixed step $d\phi = 0.05$ (f32)                        | 3       |
-| Final direction      | Rotation recurrence instead of WGSL `sin`/`cos`                                                                | 3       |
-| Fallback             | No WebGL2 renderer in the MVP; explanation page plus pre-rendered gallery                                      | 4       |
-| CI                   | Physics, CPU renderer and page tests on Ubuntu; GPU parity job on a macOS runner, to be proven in Stage 2 or 5 | 5       |
+| Decision             | Choice                                                                                                                | Section |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------- | ------- |
+| Language and tooling | TypeScript 6.0 (strict), Vite, Vitest, Playwright, ESLint, Prettier                                                   | 2       |
+| GPU API              | Raw WebGPU with WGSL compute shaders, no rendering framework                                                          | 2       |
+| Integrator           | Planar Binet equation $u'' = 3Mu^2 - u$, classical RK4, fixed step $d\phi = 0.05$ (f32)                               | 3       |
+| Final direction      | Rotation recurrence instead of WGSL `sin`/`cos`                                                                       | 3       |
+| Fallback             | No WebGL2 renderer in the MVP; explanation page plus pre-rendered gallery                                             | 4       |
+| Star field           | Three cubic lattices in direction space hashed with pcg3d; profiles truncated at half a cell, so lookups are seamless | 10      |
+| Colour               | Planck spectrum against an analytic CIE 1931 fit (no CC BY-SA data in the repository), CSS Color 4 sRGB matrix        | 10      |
+| CPU reference        | f64, $d\phi = 0.0125$, own PNG codec on `node:zlib`, goldens at 160x90 with a documented tolerance                    | 10      |
+| CI                   | Physics, CPU renderer and page tests on Ubuntu; GPU parity job on a macOS runner, to be proven in Stage 2 or 5        | 5       |
 
 ## 1. Positioning: what already exists
 
@@ -112,15 +115,18 @@ second order and far behind.
 ### Robustness to GPU arithmetic
 
 WGSL only guarantees correct rounding for $+, -, \times$ (see `docs/PHYSICS.md`, section 11).
-Perturbing every f32 result by a random amount up to about 2 ULP:
+Perturbing every f32 result by a random amount up to about 2 ULP (worst of five random seeds;
+a single draw varied by up to a factor of 3):
 
 | Method        | Step | Max error, correctly rounded (px), 5 / 30 / 200 M | Max error, perturbed (px) | Misclassified |
 | ------------- | ---- | ------------------------------------------------- | ------------------------- | ------------- |
-| Binet RK4     | 0.05 | 0.052 / 0.044 / 0.002                             | 0.127 / 0.043 / 0.024     | 0             |
-| Cartesian RK4 | 0.1  | 0.199 / 0.171 / 0.060                             | 0.632 / 0.865 / 0.083     | 0             |
+| Binet RK4     | 0.05 | 0.052 / 0.044 / 0.002                             | 0.285 / 0.263 / 0.042     | 0             |
+| Cartesian RK4 | 0.1  | 0.199 / 0.171 / 0.060                             | 1.384 / 0.465 / 0.086     | 0             |
 
-The Binet inner loop uses only $+, -, \times$, so on a GPU it should sit closer to the correctly
-rounded column. Stage 2 measures this on hardware.
+This model is pessimistic: it also perturbs $+, -, \times$, which WGSL rounds correctly, and the
+Binet inner loop uses nothing else, so on a GPU it should sit closer to the correctly rounded
+column. Even so, its worst case (0.285 px) slightly exceeds the 0.25 px target proposed in
+section 6. Stage 2 measures this on hardware.
 
 ### Deflection against the reference integrals
 
@@ -251,7 +257,7 @@ truth. macOS arm64 runners are free for this public repository (section 9).
 | ---------------------------------------------------------------------------------------------------- | ------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------- |
 | Deflection, f64 library, $b$ = 1.02 to 100 $b_c$                                                     | $< 10^{-6}$ relative            | Keep $< 10^{-6}$                           | Reference methods agree to $10^{-11}$; Binet at $d\phi = 0.0125$: $8\times10^{-8}$ |
 | Deflection, f32 path, same range                                                                     | $< 10^{-3}$ relative            | $< 10^{-4}$ relative                       | Emulated $2.8\times10^{-6}$; margin for GPU arithmetic; confirm in Stage 2         |
-| Escape direction, f32, all directions outside $\lvert b/b_c - 1\rvert < 10^{-3}$, $r_o$ = 5 to 200 M | (new)                           | $\le 0.25$ px at 1080 rows, 60 degree FOV  | Emulated 0.052 px; 0.127 px with 2-ULP perturbation                                |
+| Escape direction, f32, all directions outside $\lvert b/b_c - 1\rvert < 10^{-3}$, $r_o$ = 5 to 200 M | (new)                           | $\le 0.25$ px at 1080 rows, 60 degree FOV  | Emulated 0.052 px; 0.285 px with the pessimistic 2-ULP perturbation (section 3)    |
 | Capture or escape classification outside that band                                                   | (new)                           | Zero errors; f32 $b_c$ within $10^{-6}$    | 0 of 9000 per configuration; $2.4\times10^{-7}$                                    |
 | Step-limit hits                                                                                      | "investigate"                   | Zero, with a cap of 1000 steps             | 0 observed; longest ray 251 steps                                                  |
 | Shadow radius                                                                                        | 1 px or 0.5 %, whichever larger | Keep until Stage 1 measures the CPU render |                                                                                    |
@@ -288,6 +294,10 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
 - Integrating the orbit equation $u(\phi)$ per ray is also what oseiskar/black-hole and
   YIHnb/schwarzschild-ray-tracer do; the exact capture criterion, Hermite escape interpolation and
   rotation-recurrence direction here are this project's own choices.
+- The star field hashes lattice cells with pcg3d from Jarzynski and Olano (2020), "Hash
+  Functions for GPU Rendering", implemented here from the paper's description.
+- Blackbody colours use the CIE 1931 colour-matching fit of Wyman, Sloan and Shirley (2013) and
+  the sRGB matrix and transfer function from the W3C CSS Color 4 sample code (constants only).
 - If the Stage 3 lookup-table experiment is adopted, credit Bruneton (2020) for precomputed
   tables in a real-time black hole shader.
 
@@ -299,7 +309,8 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
 2. **Camera distance.** The minimum stays at $5M$. Near the hole the vertical field of view widens
    automatically so the shadow radius never exceeds 60 % of the half-height, capped at $120°$
    (`autoFieldOfView` in `src/physics/camera.ts`). At $30M$ the user's field of view is unchanged;
-   at $5M$ the shadow (radius $53.6°$) fills 89 % of the half-height at the cap.
+   at $5M$ the shadow (radius $53.6°$) fills 78 % of the half-height at the cap. With the default
+   $60°$ the widening starts below about $14.8M$.
 3. **Star field blueshift.** Applied. Starlight reaching the static observer is blueshifted by
    $g = 1/\sqrt{1-2M/r_o}$: every sky source is a blackbody whose temperature is multiplied by
    $g$, so colour and brightness change consistently with the disk.
@@ -307,3 +318,32 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
    `macos-15` and `macos-26` (arm64, 3-core M1, 7 GB) as standard runners for public
    repositories, and Actions usage on standard runners is free for public repositories
    (GitHub docs, "GitHub-hosted runners" and "GitHub Actions billing", read 2026-10-26).
+
+## 10. Stage 1 decisions
+
+- **3D tracing** reduces every ray to the planar Binet integrator (`traceRay`). It agrees with an
+  independent 3D Cartesian RK4 integration to $5\times10^{-10}$ rad on 60 random rays from 5 to
+  200 M, and that Cartesian path stays in its initial plane to $4\times10^{-15}$.
+- **Disk crossings** use the analytically known angles $\phi_0 + k\pi$ (`docs/PHYSICS.md`,
+  section 7). Crossing radii match the exact radius at the same angle within $2.8\times10^{-8}$
+  (relative) at $d\phi = 0.0125$ and $7.2\times10^{-6}$ at $d\phi = 0.05$.
+- **Star field.** A cube map would need `atan` for an equal-area warp, and WGSL allows large
+  errors in it; lattice cells in direction space need only `floor`, integer hashing and chord
+  distances. Truncating each star's profile at half a cell makes the 27-cell lookup seamless
+  even where the CPU and the GPU floor to different cells. No nebula band yet (optional in the
+  brief); it can come with the Stage 3 look.
+- **Colour.** The CIE 1931 tables are CC BY-SA 4.0, so instead of committing them the code uses
+  the Wyman-Sloan-Shirley analytic fit. Its chromaticity error against the CIE-derived Planckian
+  locus is at most 0.0002 from 6500 K up and 0.0046 at 1500 K.
+- **Disk defaults** (for the visual check-in to confirm or change): inner edge at the ISCO, outer
+  edge at $20M$, opaque, 6500 K at the hottest radius, exposure 1. The opacity default is the
+  user's call; a 0.6-opacity render is included for comparison.
+- **CPU reference settings:** $d\phi = 0.0125$ (f64 deflection error $8\times10^{-8}$, section 3),
+  step cap 4000. Rendering 320x180 with 3x3 samples (518,400 rays) takes 1.0 to 3.5 s per image
+  on the Apple M5 in Node 25.6.1.
+- **PNG** is written by a 60-line encoder on `node:zlib` (deflate and CRC-32) rather than a
+  dependency. Goldens are compared on decoded pixels, not file bytes, so a different zlib build
+  cannot break them.
+- **Goldens** are 160x90 with 2x2 samples (8 to 13 KB each). `npm run golden:update` re-renders
+  them, reports what changed and writes candidates to `artifacts/golden-candidates/`; it
+  overwrites a golden only for names passed with `--accept`, or with `--accept-all`.
