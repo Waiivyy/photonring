@@ -1,15 +1,20 @@
 // Independent 3D reference tracer: x'' = -3 M h^2 x / r^5 with classical RK4 in Cartesian
 // coordinates, written separately from src/physics so it can check the planar reduction.
 type V = [number, number, number];
+type ReadonlyV = readonly [number, number, number];
 
-const dot = (a: V, b: V) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-const cross = (a: V, b: V): V => [
+const dot = (a: ReadonlyV, b: ReadonlyV) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const cross = (a: ReadonlyV, b: ReadonlyV): V => [
   a[1] * b[2] - a[2] * b[1],
   a[2] * b[0] - a[0] * b[2],
   a[0] * b[1] - a[1] * b[0],
 ];
-const add = (a: V, b: V, s: number): V => [a[0] + s * b[0], a[1] + s * b[1], a[2] + s * b[2]];
-const len = (a: V) => Math.hypot(a[0], a[1], a[2]);
+const add = (a: ReadonlyV, b: ReadonlyV, s: number): V => [
+  a[0] + s * b[0],
+  a[1] + s * b[1],
+  a[2] + s * b[2],
+];
+const len = (a: ReadonlyV) => Math.hypot(a[0], a[1], a[2]);
 
 export interface Cartesian3DResult {
   termination: 'escaped' | 'captured' | 'stepLimit';
@@ -21,8 +26,8 @@ export interface Cartesian3DResult {
 
 export function traceCartesian3D(
   M: number,
-  origin: V,
-  localDir: V,
+  origin: ReadonlyV,
+  localDir: ReadonlyV,
   eta = 0.004,
   rEscape = 1e5,
   maxSteps = 200000,
