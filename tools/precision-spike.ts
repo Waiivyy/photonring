@@ -270,7 +270,7 @@ json.nearCritical = tableD;
 // Model this crudely by perturbing every f32 result by a random amount of up to about 2 ULP.
 log();
 log(
-  '## E. Sensitivity to arithmetic that is not correctly rounded (every op perturbed by up to about 2 ULP)',
+  '## E. Sensitivity to arithmetic that is not correctly rounded (every op perturbed by up to about 2 ULP; worst of 5 random seeds)',
 );
 log();
 log(
@@ -299,15 +299,19 @@ for (const cfg of configs.filter(
     let maxExact = 0;
     let maxPert = 0;
     let mis = 0;
-    for (const { psi, b, exact } of rows) {
-      if (Math.abs(b / BC - 1) < 1e-3 && Math.cos(psi) < 0) continue;
-      const a = cfg.trace(r0, psi, f32);
-      const p = cfg.trace(r0, psi, perturbedF32);
-      if ((p.termination === 'escaped') !== !Number.isNaN(exact)) mis++;
-      if (Number.isNaN(exact)) continue;
-      if (a.termination === 'escaped')
-        maxExact = Math.max(maxExact, Math.abs(a.escapeAngle - exact));
-      if (p.termination === 'escaped') maxPert = Math.max(maxPert, Math.abs(p.escapeAngle - exact));
+    for (const s of [0x9e3779b9, 12345, 777, 31337, 4242]) {
+      seed = s;
+      for (const { psi, b, exact } of rows) {
+        if (Math.abs(b / BC - 1) < 1e-3 && Math.cos(psi) < 0) continue;
+        const a = cfg.trace(r0, psi, f32);
+        const p = cfg.trace(r0, psi, perturbedF32);
+        if ((p.termination === 'escaped') !== !Number.isNaN(exact)) mis++;
+        if (Number.isNaN(exact)) continue;
+        if (a.termination === 'escaped')
+          maxExact = Math.max(maxExact, Math.abs(a.escapeAngle - exact));
+        if (p.termination === 'escaped')
+          maxPert = Math.max(maxPert, Math.abs(p.escapeAngle - exact));
+      }
     }
     tableE.push({ method: cfg.method, step: cfg.param, r0, maxExact, maxPert, mis });
     log(

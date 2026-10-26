@@ -43,7 +43,7 @@ export interface CartesianOptions extends CommonOptions {
 }
 
 /** Below this |sin psi| a ray is treated as exactly radial, which is a straight line. */
-const RADIAL_SIN = 1e-7;
+export const RADIAL_SIN = 1e-7;
 
 function radialRay(cosPsi: number, r0: number): PlanarRayResult {
   return cosPsi > 0
@@ -51,33 +51,60 @@ function radialRay(cosPsi: number, r0: number): PlanarRayResult {
     : { termination: 'captured', escapeAngle: NaN, positionAngle: 0, finalRadius: r0, steps: 0 };
 }
 
-/**
- * Candidate A: the orbit equation u'' + u = 3 M u^2 (u = 1/r, ' = d/dphi), classical RK4 with a
- * fixed step in phi. Escape is detected exactly at u = 0 by cubic Hermite interpolation, so no
- * escape radius is needed. Capture: u > 1/(3M) while moving inward (exact for Schwarzschild).
- */
-export function traceBinetRK4(
-  M: number,
-  r0: number,
-  psi: number,
-  opts: BinetOptions,
-): PlanarRayResult {
-  const R = opts.round;
-  const sinPsi = R(Math.sin(psi));
-  const cosPsi = R(Math.cos(psi));
-  if (Math.abs(sinPsi) < RADIAL_SIN) return radialRay(cosPsi, r0);
+/** A crossing of the line phi = firstCrossing + k pi in the ray plane, with u interpolated there. */
+export interface PlaneCrossingSample {
+  readonly phi: number;
+  readonly u: number;
+}
 
+export interface BinetCoreOptions extends CommonOptions {
+  readonly dphi: number;
+  /** Capture threshold: stop when u exceeds it while moving inward. Exact for any u >= 1/(3M). */
+  readonly uCapture: number;
+  /**
+   * First orbital angle, in (0, pi], at which the ray plane meets the disk plane; later crossings
+   * follow every pi. Omit to skip crossing detection.
+   */
+  readonly firstCrossing?: number;
+}
+
+export interface BinetCoreResult {
+  readonly termination: Termination;
+  /** Orbital angle where u reaches 0 (escaped) or uCapture (captured); last angle otherwise. */
+  readonly phiEnd: number;
+  /** u at phiEnd. */
+  readonly uEnd: number;
+  readonly steps: number;
+  /** Plane crossings before phiEnd, in order along the traced path. */
+  readonly crossings: PlaneCrossingSample[];
+}
+
+/**
+ * The chosen integrator (Stage 0): the orbit equation u'' + u = 3 M u^2 (u = 1/r, ' = d/dphi),
+ * classical RK4 with a fixed step in phi, from u0 = 1/r0 and w0 = du/dphi. Escape is found exactly
+ * at u = 0 and capture at u = uCapture by solving the cubic Hermite interpolant of the last step,
+ * so no escape radius is needed. Because phi only increases, each disk-plane crossing angle is
+ * met once, in order: none can be missed or counted twice.
+ */
+export function integrateBinet(
+  M: number,
+  u0: number,
+  w0: number,
+  opts: BinetCoreOptions,
+): BinetCoreResult {
+  const R = opts.round;
   const m3 = R(3 * M);
-  const uCapture = R(1 / m3);
+  const uCapture = R(opts.uCapture);
   const h = R(opts.dphi);
   const hHalf = R(h / 2);
   const hSixth = R(h / 6);
+  const pi = R(Math.PI);
   const acc = (x: number) => R(R(m3 * R(x * x)) - x);
+  const crossings: PlaneCrossingSample[] = [];
+  let nextCrossing = opts.firstCrossing ?? Infinity;
 
-  let u = R(1 / R(r0));
-  // w = du/dphi = -u sqrt(1 - 2Mu) cot(psi)
-  let w = R(-R(R(u * R(Math.sqrt(R(1 - R(R(2 * M) * u))))) * R(cosPsi / sinPsi)));
-
+  let u = u0;
+  let w = w0;
   for (let n = 0; n < opts.maxSteps; n++) {
     opts.onStep?.([u, w]);
     const k1u = w;
@@ -91,57 +118,127 @@ export function traceBinetRK4(
     const uNext = R(u + R(hSixth * R(R(k1u + R(2 * k2u)) + R(R(2 * k3u) + k4u))));
     const wNext = R(w + R(hSixth * R(R(k1w + R(2 * k2w)) + R(R(2 * k3w) + k4w))));
 
+    let termination: Termination | null = null;
+    let t = 1;
     if (uNext <= 0) {
-      const t = hermiteRoot(u, w, uNext, wNext, h, R);
-      const phi = R(R(n * h) + R(t * h));
-      return {
-        termination: 'escaped',
-        escapeAngle: phi,
-        positionAngle: phi,
-        finalRadius: Infinity,
-        steps: n + 1,
-      };
+      termination = 'escaped';
+      t = hermiteSolve(u, w, uNext, wNext, h, 0, R);
+    } else if (uNext >= uCapture && wNext > 0) {
+      termination = 'captured';
+      t = hermiteSolve(u, w, uNext, wNext, h, uCapture, R);
     }
-    if (uNext >= uCapture && wNext > 0) {
-      return {
-        termination: 'captured',
-        escapeAngle: NaN,
-        positionAngle: (n + 1) * h,
-        finalRadius: 1 / uNext,
-        steps: n + 1,
-      };
+    const phiStart = R(n * h);
+    const phiStop = termination ? R(phiStart + R(t * h)) : R((n + 1) * h);
+
+    while (termination ? nextCrossing < phiStop : nextCrossing <= phiStop) {
+      const tc = R(R(nextCrossing - phiStart) / h);
+      const uc = hermiteValue(u, w, uNext, wNext, h, tc, R);
+      if (uc > 0) crossings.push({ phi: nextCrossing, u: uc });
+      nextCrossing = R(nextCrossing + pi);
+    }
+
+    if (termination) {
+      const uEnd = termination === 'escaped' ? 0 : uCapture;
+      return { termination, phiEnd: phiStop, uEnd, steps: n + 1, crossings };
     }
     u = uNext;
     w = wNext;
   }
   return {
     termination: 'stepLimit',
-    escapeAngle: NaN,
-    positionAngle: opts.maxSteps * h,
-    finalRadius: 1 / u,
+    phiEnd: R(opts.maxSteps * h),
+    uEnd: u,
     steps: opts.maxSteps,
+    crossings,
   };
 }
 
-/** Root in [0, 1] of the cubic Hermite interpolant of u over one step, by Newton iteration. */
-function hermiteRoot(u0: number, w0: number, u1: number, w1: number, h: number, R: Round): number {
+/**
+ * Candidate A of the spike, for a planar start: observer at r0 on the +x axis, local angle psi
+ * from the outward radial. Capture at u > 1/(3M) while moving inward (exact for Schwarzschild).
+ */
+export function traceBinetRK4(
+  M: number,
+  r0: number,
+  psi: number,
+  opts: BinetOptions,
+): PlanarRayResult {
+  const R = opts.round;
+  const sinPsi = R(Math.sin(psi));
+  const cosPsi = R(Math.cos(psi));
+  if (Math.abs(sinPsi) < RADIAL_SIN) return radialRay(cosPsi, r0);
+
+  const u0 = R(1 / R(r0));
+  // w = du/dphi = -u sqrt(1 - 2Mu) cot(psi)
+  const w0 = R(-R(R(u0 * R(Math.sqrt(R(1 - R(R(2 * M) * u0))))) * R(cosPsi / sinPsi)));
+  const core = integrateBinet(M, u0, w0, { ...opts, uCapture: 1 / (3 * M) });
+  const escaped = core.termination === 'escaped';
+  return {
+    termination: core.termination,
+    escapeAngle: escaped ? core.phiEnd : NaN,
+    positionAngle: core.phiEnd,
+    finalRadius: escaped ? Infinity : 1 / core.uEnd,
+    steps: core.steps,
+  };
+}
+
+/** Cubic Hermite interpolant of u over one step, at fraction t of the step. */
+function hermiteValue(
+  u0: number,
+  w0: number,
+  u1: number,
+  w1: number,
+  h: number,
+  t: number,
+  R: Round,
+): number {
+  const t2 = R(t * t);
+  const t3 = R(t2 * t);
+  const h00 = R(R(R(2 * t3) - R(3 * t2)) + 1);
+  const h10 = R(R(t3 - R(2 * t2)) + t);
+  const h01 = R(R(3 * t2) - R(2 * t3));
+  const h11 = R(t3 - t2);
+  return R(R(R(h00 * u0) + R(h10 * R(h * w0))) + R(R(h01 * u1) + R(h11 * R(h * w1))));
+}
+
+/**
+ * Fraction t in [0, 1] of the step where the Hermite interpolant of u equals `target`, which lies
+ * between u0 and u1: Newton iteration from the linear guess, falling back to bisection whenever a
+ * Newton step leaves the bracket.
+ */
+function hermiteSolve(
+  u0: number,
+  w0: number,
+  u1: number,
+  w1: number,
+  h: number,
+  target: number,
+  R: Round,
+): number {
   const m0 = R(h * w0);
   const m1 = R(h * w1);
-  let t = R(u0 / R(u0 - u1));
-  for (let i = 0; i < 4; i++) {
+  const rising = u1 > u0;
+  let lo = 0;
+  let hi = 1;
+  let t = R(R(u0 - target) / R(u0 - u1));
+  for (let i = 0; i < 8; i++) {
     const t2 = R(t * t);
-    const t3 = R(t2 * t);
-    const h00 = R(R(R(2 * t3) - R(3 * t2)) + 1);
-    const h10 = R(R(t3 - R(2 * t2)) + t);
-    const h01 = R(R(3 * t2) - R(2 * t3));
-    const h11 = R(t3 - t2);
-    const value = R(R(R(h00 * u0) + R(h10 * m0)) + R(R(h01 * u1) + R(h11 * m1)));
+    const value = R(hermiteValue(u0, w0, u1, w1, h, t, R) - target);
+    if (value === 0) break;
+    if (value < 0 === rising) lo = t;
+    else hi = t;
     const d00 = R(R(6 * t2) - R(6 * t));
     const d10 = R(R(R(3 * t2) - R(4 * t)) + 1);
     const d01 = R(R(6 * t) - R(6 * t2));
     const d11 = R(R(3 * t2) - R(2 * t));
     const slope = R(R(R(d00 * u0) + R(d10 * m0)) + R(R(d01 * u1) + R(d11 * m1)));
-    t = R(t - R(value / slope));
+    const next = R(t - R(value / slope));
+    // Converged: further iterations would only chase rounding noise out of the bracket.
+    if (Math.abs(next - t) <= 1e-6) {
+      t = next;
+      break;
+    }
+    t = next >= lo && next <= hi ? next : R(R(lo + hi) / 2);
   }
   return Math.min(1, Math.max(0, t));
 }
