@@ -64,8 +64,10 @@ describe('8. flat-space limit', () => {
               j + (sy + 0.5) / n,
             );
             const c = skyRadiance(d, 1);
-            for (let k = 0; k < 3; k++)
-              linear[(j * s.width + i) * 3 + k] += (c[k] as number) / (n * n);
+            const p = (j * s.width + i) * 3;
+            for (let k = 0; k < 3; k++) {
+              linear[p + k] = (linear[p + k] as number) + (c[k] as number) / (n * n);
+            }
           }
         }
       }
