@@ -1,1 +1,118 @@
-/* App styles (Stage 2 shell). */
+:root {
+  color-scheme: dark;
+  --bg: #000;
+  --fg: #e8e6e3;
+  --muted: #b3b0ab;
+  --panel: rgba(12, 12, 14, 0.78);
+  --accent: #8ab4ff;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+}
+
+canvas.view {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: grab;
+}
+
+canvas.view:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.hud,
+.help {
+  position: absolute;
+  left: 0.75rem;
+  margin: 0;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  background: var(--panel);
+  font-size: 0.8rem;
+  pointer-events: none;
+}
+
+.hud {
+  bottom: 2.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.help {
+  bottom: 0.75rem;
+  color: var(--muted);
+}
+
+.alert {
+  position: absolute;
+  inset: auto 1rem 50% 1rem;
+  max-width: 32rem;
+  margin: 0 auto;
+  padding: 1rem 1.25rem;
+  border-radius: 0.5rem;
+  background: var(--panel);
+  border: 1px solid #444;
+}
+
+.alert button {
+  font: inherit;
+  padding: 0.4rem 0.9rem;
+  border-radius: 0.3rem;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.alert button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.unsupported {
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: 2rem 1rem 3rem;
+  line-height: 1.5;
+  overflow-y: auto;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: 1rem;
+}
+
+.gallery figure {
+  margin: 0;
+}
+
+.gallery img {
+  width: 100%;
+  height: auto;
+  border-radius: 0.25rem;
+}
+
+.gallery figcaption {
+  color: var(--muted);
+  font-size: 0.9rem;
+}

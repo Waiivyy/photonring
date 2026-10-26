@@ -24,6 +24,7 @@
     "spike": "node tools/precision-spike.ts",
     "render:cpu": "node tools/render-cpu.ts",
     "golden:update": "node tools/update-goldens.ts",
+    "gallery": "node tools/render-gallery.ts",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm test"
   },
   "devDependencies": {
