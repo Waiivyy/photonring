@@ -78,9 +78,9 @@ describe('star field', () => {
       const d = randomUnitVector(rand);
       const axis = i % 3;
       const target = Math.round((d[axis] as number) * layer.cellsPerUnit) / layer.cellsPerUnit;
-      const before: Vec3 = [...d];
+      const before: [number, number, number] = [...d];
       const after: [number, number, number] = [...d];
-      (before as number[])[axis] = target - 1e-13;
+      before[axis] = target - 1e-13;
       after[axis] = target + 1e-13;
       const norm = (v: Vec3): Vec3 => {
         const n = Math.hypot(v[0], v[1], v[2]);
