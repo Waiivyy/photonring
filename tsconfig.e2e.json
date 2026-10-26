@@ -1,0 +1,9 @@
+{
+  "//": "Playwright specs: run in Node, with browser types for code passed to page.evaluate.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node", "@webgpu/types"]
+  },
+  "include": ["tests/gpu/*.spec.ts", "tests/e2e", "tests/helpers"]
+}

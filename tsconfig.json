@@ -1,4 +1,5 @@
 {
+  "//": "Node-side code: physics, CPU renderer, unit and golden tests, tools, configs.",
   "compilerOptions": {
     "target": "ES2023",
     "lib": ["ES2023"],
@@ -20,5 +21,14 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["src", "tests", "tools", "*.config.ts"]
+  "include": [
+    "src/physics",
+    "src/cpu-renderer",
+    "src/gpu/host",
+    "tests/unit",
+    "tests/golden",
+    "tests/helpers",
+    "tools",
+    "*.config.ts"
+  ]
 }

@@ -335,9 +335,9 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
 - **Colour.** The CIE 1931 tables are CC BY-SA 4.0, so instead of committing them the code uses
   the Wyman-Sloan-Shirley analytic fit. Its chromaticity error against the CIE-derived Planckian
   locus is at most 0.0002 from 6500 K up and 0.0046 at 1500 K.
-- **Disk defaults** (for the visual check-in to confirm or change): inner edge at the ISCO, outer
-  edge at $20M$, opaque, 6500 K at the hottest radius, exposure 1. The opacity default is the
-  user's call; a 0.6-opacity render is included for comparison.
+- **Disk defaults:** inner edge at the ISCO, outer edge at $20M$, 6500 K at the hottest radius,
+  exposure 1, and opaque (opacity 1), which the user confirmed at the Stage 1 visual check-in
+  after comparing it with a 0.6-opacity render.
 - **CPU reference settings:** $d\phi = 0.0125$ (f64 deflection error $8\times10^{-8}$, section 3),
   step cap 4000. Rendering 320x180 with 3x3 samples (518,400 rays) takes 1.0 to 3.5 s per image
   on the Apple M5 in Node 25.6.1.

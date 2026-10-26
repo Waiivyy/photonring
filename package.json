@@ -10,12 +10,17 @@
     "node": ">=22.18"
   },
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.physics.json",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 5179 --strictPort",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.web.json && tsc -p tsconfig.e2e.json && tsc -p tsconfig.physics.json",
     "lint": "eslint . && node tools/check-text.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:gpu": "playwright test --project=gpu",
+    "test:e2e": "playwright test --project=e2e",
     "spike": "node tools/precision-spike.ts",
     "render:cpu": "node tools/render-cpu.ts",
     "golden:update": "node tools/update-goldens.ts",
@@ -23,11 +28,14 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.1",
     "@types/node": "^24.19.2",
+    "@webgpu/types": "^0.1.74",
     "eslint": "^10.13.0",
     "prettier": "^3.9.10",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.72.0",
+    "vite": "^8.3.5",
     "vitest": "^5.0.5"
   }
 }
