@@ -40,8 +40,8 @@ async function openHarness(page: Page) {
   return info;
 }
 
-const trace = (page: Page, rays: HarnessRay[]) =>
-  page.evaluate((r) => window.harness!.traceRays(r), rays) as Promise<HarnessRayResult[]>;
+const trace = (page: Page, rays: HarnessRay[]): Promise<HarnessRayResult[]> =>
+  page.evaluate((r) => window.harness!.traceRays(r), rays);
 
 /** Pixel-centre rays of cameras at 5, 30 and 200 M over a 64 x 36 grid. */
 function cameraRays(): { ray: HarnessRay; b: number }[] {
@@ -105,7 +105,8 @@ test.describe('GPU against CPU parity', () => {
     const ratios = [1.02, 1.05, 1.1, 1.3, 2, 3, 5, 10, 30, 100];
     const rays = ratios.map((ratio) => {
       const psi = inwardPsiForImpactParameter(r0, ratio * BC, M);
-      return { origin: [r0, 0, 0], direction: [Math.cos(psi), Math.sin(psi), 0] } as HarnessRay;
+      const ray: HarnessRay = { origin: [r0, 0, 0], direction: [Math.cos(psi), Math.sin(psi), 0] };
+      return ray;
     });
     const gpu = await trace(page, rays);
     let worst = 0;
@@ -123,11 +124,16 @@ test.describe('GPU against CPU parity', () => {
   test('sky radiance at star centres and random directions', async ({ page }) => {
     await openHarness(page);
     const dirs: Vec3[] = [];
+    // Cells nearest the unit sphere around +x, where the stars of each layer live.
     for (const layer of STAR_LAYERS) {
+      const k = layer.cellsPerUnit;
       for (let a = -12; a <= 12; a++) {
         for (let b = -12; b <= 12; b++) {
-          const star = starAt(layer, [layer.cellsPerUnit, a, b]);
-          if (star) dirs.push(star.direction);
+          const x0 = Math.floor(Math.sqrt(k * k - a * a - b * b));
+          for (let x = x0 - 1; x <= x0 + 1; x++) {
+            const star = starAt(layer, [x, a, b]);
+            if (star) dirs.push(star.direction);
+          }
         }
       }
     }
