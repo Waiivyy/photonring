@@ -243,8 +243,7 @@ Evidence gathered (third-party CI runs and project configurations, not yet repro
 on Ubuntu. GPU-versus-CPU parity tests run in a separate macOS job with Playwright's new headless
 Chromium, and locally through a documented command (`npm run test:gpu`, Stage 2). If the macOS job
 proves flaky, it becomes manual (`workflow_dispatch`) and the local command remains the source of
-truth. Whether GitHub-hosted macOS runners are free for public repositories should be checked in
-the billing documentation before relying on them.
+truth. macOS arm64 runners are free for this public repository (section 9).
 
 ## 6. Proposed targets
 
@@ -292,13 +291,19 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
 - If the Stage 3 lookup-table experiment is adopted, credit Bruneton (2020) for precomputed
   tables in a real-time black hole shader.
 
-## 9. Open questions for the go/no-go check-in
+## 9. Decisions at the Stage 0 check-in (2026-10-26)
 
-1. **Positioning.** Given LensForge, kyleyhw and YIHnb, proceed as a Schwarzschild-only project
-   that differentiates on validating the GPU output itself in CI, or change scope?
-2. **Minimum camera distance.** With a 60 degree vertical field of view the shadow fills the whole
-   height below about $9.2M$ (shadow radius $30°$); at $5M$ its radius is $53.6°$. Options: keep
-   5M and widen the field of view automatically near the hole, or raise the minimum to about 8M.
-3. **Observer blueshift of the star field.** Apply $1/\sqrt{1-2M/r_o}$ to starlight colour and
-   brightness (physically right, 3.5 % at 30M), or leave the star field untouched and say so?
-4. **macOS CI job** for GPU parity tests: acceptable, assuming it is free for this public repo?
+1. **Positioning.** Schwarzschild only. The project differentiates on validating the WebGPU output
+   itself (GPU against CPU parity in CI, image-level comparison with the CPU reference) rather
+   than on features.
+2. **Camera distance.** The minimum stays at $5M$. Near the hole the vertical field of view widens
+   automatically so the shadow radius never exceeds 60 % of the half-height, capped at $120°$
+   (`autoFieldOfView` in `src/physics/camera.ts`). At $30M$ the user's field of view is unchanged;
+   at $5M$ the shadow (radius $53.6°$) fills 89 % of the half-height at the cap.
+3. **Star field blueshift.** Applied. Starlight reaching the static observer is blueshifted by
+   $g = 1/\sqrt{1-2M/r_o}$: every sky source is a blackbody whose temperature is multiplied by
+   $g$, so colour and brightness change consistently with the disk.
+4. **CI.** GPU parity tests run in a macOS job. GitHub lists `macos-latest`, `macos-14`,
+   `macos-15` and `macos-26` (arm64, 3-core M1, 7 GB) as standard runners for public
+   repositories, and Actions usage on standard runners is free for public repositories
+   (GitHub docs, "GitHub-hosted runners" and "GitHub Actions billing", read 2026-10-26).
