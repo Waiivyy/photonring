@@ -1,4 +1,5 @@
 // Contract between the GPU test harness page (tests/gpu/harness.ts) and the Playwright specs.
+import type { ValidationCounts } from '../../src/gpu/host/shadow-count.ts';
 import type { DiskSettings } from '../../src/physics/index.ts';
 
 export interface HarnessInfo {
@@ -61,6 +62,27 @@ export interface HarnessBenchmark {
   readonly refinedFraction: number;
 }
 
+export interface HarnessShadowRequest {
+  readonly distance: number;
+  readonly azimuthDeg: number;
+  readonly elevationDeg: number;
+  readonly fovYDeg: number;
+  /** Side of the square validation render in pixels. */
+  readonly side: number;
+  /** Time each pass with timestamp queries (bench only). */
+  readonly timed?: boolean;
+}
+
+export interface HarnessShadowResult {
+  readonly counts: ValidationCounts;
+  /** GPU milliseconds of the colour and termination passes, when timed. */
+  readonly gpuMs?: readonly [number, number];
+  /** Wall-clock milliseconds of the readback (mapAsync), when timed. */
+  readonly readbackMs?: number;
+  /** Milliseconds spent classifying the readback in the page. */
+  readonly classifyMs: number;
+}
+
 export interface Harness {
   readonly ready: Promise<HarnessInfo>;
   /**
@@ -86,6 +108,20 @@ export interface Harness {
    * wall-clock): for a pass, from the start of its first tile to the end of its last.
    */
   benchmark(request: HarnessImageRequest, repeats: number): Promise<HarnessBenchmark>;
+  /**
+   * The Validation panel's measurement: the colour validation render (disk off, uniform sky, no
+   * tone mapping, one sample per pixel) and the termination render of the same view, offscreen,
+   * classified in the page.
+   */
+  measureShadow(request: HarnessShadowRequest): Promise<HarnessShadowResult>;
+  /**
+   * Renders `image`, reads it back, runs `shadow`, and reads the image back again: whether the
+   * measurement left the interactive images untouched.
+   */
+  measurementIsolation(
+    image: HarnessImageRequest,
+    shadow: HarnessShadowRequest,
+  ): Promise<{ identical: boolean; bytes: number }>;
 }
 
 declare global {
