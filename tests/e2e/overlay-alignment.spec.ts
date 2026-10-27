@@ -30,11 +30,13 @@ async function checkAlignment(page: Page, path: string) {
   const bytes = Buffer.from(img.rgba, 'base64');
   let inside = 0;
   let outside = 0;
+  let stepLimit = 0;
+  const wrong: string[] = [];
   for (let j = 0; j < img.height; j++) {
     for (let i = 0; i < img.width; i++) {
       const p = 4 * (j * img.width + i);
       const [R, G, B] = [bytes[p]!, bytes[p + 1]!, bytes[p + 2]!];
-      expect(R > 200 && G < 60 && B > 200, 'step-limit colour').toBe(false);
+      if (R > 200 && G < 60 && B > 200) stepLimit++;
       // Distance from the pixel centre to the ellipse, along the ray from its centre.
       const dx = x0 + i + 0.5 - c[0]!;
       const dy = y0 + j + 0.5 - c[1]!;
@@ -44,13 +46,15 @@ async function checkAlignment(page: Page, path: string) {
       const black = R + G + B < 12;
       if (d * (1 / q - 1) > 1) {
         inside++;
-        expect(black, `pixel ${x0 + i},${y0 + j} inside the edge`).toBe(true);
+        if (!black) wrong.push(`${x0 + i},${y0 + j} inside but not captured`);
       } else if (d * (1 - 1 / q) > 1) {
         outside++;
-        expect(black, `pixel ${x0 + i},${y0 + j} outside the edge`).toBe(false);
+        if (black) wrong.push(`${x0 + i},${y0 + j} outside but captured`);
       }
     }
   }
+  expect(stepLimit).toBe(0);
+  expect(wrong.slice(0, 10)).toEqual([]);
   expect(inside).toBeGreaterThan(100);
   expect(outside).toBeGreaterThan(100);
   console.log(

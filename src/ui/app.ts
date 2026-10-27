@@ -16,6 +16,7 @@ import { KEYMAP, ariaKeyshortcuts, keyAction, type Action } from './keymap.ts';
 import { createLifecycle, type Lifecycle } from './lifecycle.ts';
 import { orbitBy, resetOrbit, viewCamera, zoomBy, type OrbitState } from './orbit.ts';
 import { OVERLAY_STYLES, type OverlayId } from './overlay-style.ts';
+import { OverlayLayer } from './overlays.ts';
 import { closePanel, openPanel, topPanel } from './panel-stack.ts';
 import { formatNumber } from './quantise.ts';
 import {
@@ -23,7 +24,7 @@ import {
   type BrightnessLimiter,
   type BrightnessPair,
 } from './rate-limit.ts';
-import type { AppStats } from './stats.ts';
+import type { AppStats, ImageRect } from './stats.ts';
 import { createToolbar } from './toolbar.ts';
 import { showUnsupported } from './unsupported.ts';
 import { formatHash, needsNotice, parseHash } from './url-state.ts';
@@ -118,6 +119,9 @@ class App {
   private readonly toolbar: ReturnType<typeof createToolbar>;
   private readonly controls: ControlsPanel;
   private panels: PanelId[] = [];
+  /** The scene of the image last presented to the canvas: the overlays follow it. */
+  private presented: SceneView | null = null;
+  private readonly overlay: OverlayLayer;
   private readonly urlSync: UrlSync;
   private hashApplies = 0;
   /** Announce the camera once the view settles (after keyboard or camera-button input). */
@@ -162,6 +166,7 @@ class App {
         clearTimer: (id) => this.life.cancel(id),
       },
     );
+    this.overlay = new OverlayLayer(this.life);
     this.urlSync = createUrlSync({
       setTimer: (fn, ms) => this.life.timeout(fn, ms),
       clearTimer: (id) => this.life.cancel(id),
@@ -204,8 +209,10 @@ class App {
     this.root.replaceChildren(
       el('h1', { class: 'sr-only' }, 'photonring'),
       this.canvas,
+      this.overlay.svg,
       this.toolbar.element,
       this.controls.element,
+      this.overlay.legend,
       this.hud,
       help,
       this.announcerRegion,
@@ -228,7 +235,11 @@ class App {
       if (!this.life.disposed) this.showLost(info.reason, info.message);
     });
     window.photonring = {
-      debug: { stats: () => this.stats(), destroyDevice: () => this.device.destroy() },
+      debug: {
+        stats: () => this.stats(),
+        destroyDevice: () => this.device.destroy(),
+        presentedImage: (rect) => this.presentedImage(rect),
+      },
     };
     this.state = 'rendering';
     this.applyScene();
@@ -266,6 +277,8 @@ class App {
       toggleApplies: this.limiter.applies,
       toggleApplyTimes: [...this.limiter.applyTimes],
       hashApplies: this.hashApplies,
+      ringsState: this.overlay.ringsState,
+      ringMs: this.overlay.ringMs,
     };
   }
 
@@ -325,6 +338,7 @@ class App {
     const action = this.plan.next(now);
     if (action.kind !== 'idle') this.run(action);
     if (this.plan.done) this.settled();
+    this.overlay.update(this.overlayFrame());
     this.updateHud();
     this.life.frame(this.frame);
   };
@@ -369,7 +383,40 @@ class App {
         action.present,
       );
       this.frames++;
+      this.presented = this.sceneNow();
     }
+  }
+
+  private overlayFrame() {
+    const { width, height } = this.resolution;
+    return {
+      camera: this.presented?.camera ?? null,
+      aspect: height > 0 ? width / height : 1,
+      cssWidth: this.canvas.clientWidth,
+      cssHeight: this.canvas.clientHeight,
+      overlays: this.view.overlays,
+      termination: this.applied.view === 'termination',
+      controlsOpen: this.panels.includes('controls'),
+    };
+  }
+
+  /** RGBA of the presented full image, optionally cropped, as base64 (debug interface). */
+  private async presentedImage(
+    rect?: ImageRect,
+  ): Promise<{ width: number; height: number; rgba: string }> {
+    const full = await this.renderer.readImageRGBA('full');
+    const W = this.renderer.width;
+    const r = rect ?? { x: 0, y: 0, width: W, height: this.renderer.height };
+    const out = new Uint8Array(r.width * r.height * 4);
+    for (let j = 0; j < r.height; j++) {
+      const from = ((r.y + j) * W + r.x) * 4;
+      out.set(full.subarray(from, from + r.width * 4), j * r.width * 4);
+    }
+    let text = '';
+    for (let i = 0; i < out.length; i += 0x8000) {
+      text += String.fromCharCode(...out.subarray(i, i + 0x8000));
+    }
+    return { width: r.width, height: r.height, rgba: btoa(text) };
   }
 
   private updateHud(): void {
