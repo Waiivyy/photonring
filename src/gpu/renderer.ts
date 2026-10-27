@@ -90,6 +90,10 @@ export class GpuRenderer {
   /** Anti-aliased pixels (alpha = samples) over the first pass; alpha 0 elsewhere. */
   private refined: GPUTexture | null = null;
   private refineGroup: GPUBindGroup | null = null;
+  /** Reduced-resolution frames while the scene changes, in the top-left corner of a half-size image. */
+  private preview: GPUTexture | null = null;
+  private previewGroup: GPUBindGroup | null = null;
+  private previewSize: readonly [number, number] = [1, 1];
   private scene: SceneParams | null = null;
   private querySet: GPUQuerySet | null = null;
   private queryResolve: GPUBuffer | null = null;
@@ -197,6 +201,7 @@ export class GpuRenderer {
           { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
           { binding: 2, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
           { binding: 3, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
+          { binding: 4, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
         ],
       }),
     };
@@ -234,10 +239,11 @@ export class GpuRenderer {
     if (this.image && this.image.width === width && this.image.height === height) return;
     this.image?.destroy();
     this.refined?.destroy();
-    const image = (label: string) =>
+    this.preview?.destroy();
+    const image = (label: string, size = { width, height }) =>
       this.device.createTexture({
         label,
-        size: { width, height },
+        size,
         format: IMAGE_FORMAT,
         usage:
           GPUTextureUsage.STORAGE_BINDING |
@@ -247,6 +253,14 @@ export class GpuRenderer {
       });
     this.image = image('linear image');
     this.refined = image('anti-aliased pixels');
+    this.preview = image('preview', {
+      width: Math.ceil(width / 2),
+      height: Math.ceil(height / 2),
+    });
+    this.previewGroup = this.device.createBindGroup({
+      layout: this.layouts.image,
+      entries: [{ binding: 0, resource: this.preview.createView() }],
+    });
     this.imageGroup = this.device.createBindGroup({
       layout: this.layouts.image,
       entries: [{ binding: 0, resource: this.image.createView() }],
@@ -293,12 +307,13 @@ export class GpuRenderer {
     this.scene = scene;
   }
 
-  private writeFrame(tile: Tile): void {
+  /** Frame parameters for one tile of a width x height image (the full image by default). */
+  private writeFrame(tile: Tile, imageWidth = this.width, imageHeight = this.height): void {
     const scene = this.scene;
     if (!scene) throw new Error('setScene must be called before rendering');
     const f = cameraFrame(scene.camera, scene.M);
-    const width = Math.max(1, this.width);
-    const height = Math.max(1, this.height);
+    const width = Math.max(1, imageWidth);
+    const height = Math.max(1, imageHeight);
     const band = criticalBand(scene.camera.distance, scene.M, f.tanHalfFovY, height);
     const data = packStruct(FRAME_FIELDS, {
       position: f.position,
@@ -343,10 +358,35 @@ export class GpuRenderer {
   dispatchTiles(tiles: readonly Tile[], pass: TilePass = 'trace'): Promise<number> {
     const group = pass === 'trace' ? this.imageGroup : this.refineGroup;
     if (!group) throw new Error('resize must be called before rendering');
+    const pipeline = pass === 'trace' ? this.pipelines.render : this.pipelines.refine;
+    return this.submitTiles(tiles, pipeline, group, this.width, this.height);
+  }
+
+  /**
+   * Renders the whole image at `scale` (at most 1/2) of the full resolution per axis, one sample
+   * per pixel, for blit(..., 'preview'). Resolves to milliseconds as dispatchTiles does.
+   */
+  renderPreview(scale: number): Promise<number> {
+    if (!this.previewGroup) throw new Error('resize must be called before rendering');
+    if (!(scale > 0 && scale <= 0.5)) throw new RangeError('preview scale must be in (0, 1/2]');
+    const width = Math.ceil(this.width * scale);
+    const height = Math.ceil(this.height * scale);
+    this.previewSize = [width, height];
+    const tiles = planTiles(width, height, TILE_SIZE);
+    return this.submitTiles(tiles, this.pipelines.render, this.previewGroup, width, height);
+  }
+
+  private submitTiles(
+    tiles: readonly Tile[],
+    pipeline: GPUComputePipeline,
+    group: GPUBindGroup,
+    width: number,
+    height: number,
+  ): Promise<number> {
     const timed = this.querySet !== null && !this.queryBusy && tiles.length > 0;
     const start = performance.now();
     tiles.forEach((tile, k) => {
-      this.writeFrame(tile);
+      this.writeFrame(tile, width, height);
       const encoder = this.device.createCommandEncoder();
       const timestampWrites: GPUComputePassTimestampWrites | undefined =
         timed && this.querySet
@@ -358,7 +398,7 @@ export class GpuRenderer {
           : undefined;
       const writesAny = timestampWrites && (k === 0 || k === tiles.length - 1);
       const compute = encoder.beginComputePass(writesAny ? { timestampWrites } : {});
-      compute.setPipeline(pass === 'trace' ? this.pipelines.render : this.pipelines.refine);
+      compute.setPipeline(pipeline);
       compute.setBindGroup(0, this.common);
       compute.setBindGroup(1, group);
       compute.dispatchWorkgroups(Math.ceil(tile.width / 8), Math.ceil(tile.height / 8));
@@ -410,14 +450,29 @@ export class GpuRenderer {
     return p;
   }
 
-  /** Tone maps (or clamps) the linear image into a render target. */
-  blit(target: GPUTextureView, format: GPUTextureFormat): void {
-    if (!this.image || !this.refined || !this.scene) return;
+  /**
+   * Tone maps (or clamps) into a render target: the full image with its anti-aliased pixels, or
+   * the last preview, upscaled with bilinear filtering.
+   */
+  blit(
+    target: GPUTextureView,
+    format: GPUTextureFormat,
+    source: 'full' | 'preview' = 'full',
+  ): void {
+    if (!this.image || !this.refined || !this.preview || !this.scene) return;
     const tone = this.scene.toneMapping && this.scene.mode === 'colour';
     this.device.queue.writeBuffer(
       this.blitUniform,
       0,
-      packStruct(BLIT_FIELDS, { exposure: this.scene.exposure, toneMapping: tone ? 1 : 0 }),
+      packStruct(BLIT_FIELDS, {
+        exposure: this.scene.exposure,
+        toneMapping: tone ? 1 : 0,
+        source: source === 'preview' ? 1 : 0,
+        previewScale: [
+          this.previewSize[0] / this.preview.width,
+          this.previewSize[1] / this.preview.height,
+        ],
+      }),
     );
     const group = this.device.createBindGroup({
       layout: this.layouts.blit,
@@ -426,6 +481,7 @@ export class GpuRenderer {
         { binding: 1, resource: this.image.createView() },
         { binding: 2, resource: this.sampler },
         { binding: 3, resource: this.refined.createView() },
+        { binding: 4, resource: this.preview.createView() },
       ],
     });
     const encoder = this.device.createCommandEncoder();
@@ -618,6 +674,7 @@ export class GpuRenderer {
   destroy(): void {
     this.image?.destroy();
     this.refined?.destroy();
+    this.preview?.destroy();
     this.uniform.destroy();
     this.blitUniform.destroy();
     this.querySet?.destroy();

@@ -30,7 +30,7 @@ export function planTiles(width: number, height: number, tileSize: number): Tile
 
 export class TileScheduler {
   private queue: Tile[] = [];
-  private msPerPixel: number | null = null;
+  private cost: number | null = null;
 
   reset(tiles: readonly Tile[]): void {
     this.queue = [...tiles];
@@ -44,15 +44,21 @@ export class TileScheduler {
     return this.queue.length;
   }
 
+  /** Estimated milliseconds per pixel, or null before the first measurement. */
+  get msPerPixel(): number | null {
+    return this.cost;
+  }
+
   /** Tiles to dispatch this frame: at least one, then more while the estimate fits the budget. */
   takeForFrame(budgetMs: number): Tile[] {
     if (this.queue.length === 0) return [];
-    if (this.msPerPixel === null) return this.queue.splice(0, 1);
+    const msPerPixel = this.cost;
+    if (msPerPixel === null) return this.queue.splice(0, 1);
     let spent = 0;
     let count = 0;
     while (count < this.queue.length) {
       const t = this.queue[count] as Tile;
-      const cost = t.width * t.height * this.msPerPixel;
+      const cost = t.width * t.height * msPerPixel;
       if (count > 0 && spent + cost > budgetMs) break;
       spent += cost;
       count++;
@@ -64,6 +70,6 @@ export class TileScheduler {
   recordCost(pixels: number, ms: number): void {
     if (!(pixels > 0 && ms >= 0 && Number.isFinite(ms))) return;
     const sample = ms / pixels;
-    this.msPerPixel = this.msPerPixel === null ? sample : 0.5 * (this.msPerPixel + sample);
+    this.cost = this.cost === null ? sample : 0.5 * (this.cost + sample);
   }
 }

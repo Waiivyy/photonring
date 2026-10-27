@@ -9,9 +9,15 @@ interface AppStats {
   limitedBy: string;
   mode: 'colour' | 'termination';
   disk: boolean;
+  antialias: boolean;
   azimuthDeg: number;
   distance: number;
+  stage: 'preview' | 'trace' | 'refine' | 'done';
+  previews: number;
+  previewScale: number;
   tilesRemaining: number;
+  traceMs: number;
+  refineMs: number;
 }
 
 declare global {
@@ -25,7 +31,7 @@ const stats = (page: Page) => page.evaluate(() => window.photonring!.debug.stats
 async function waitForFullImage(page: Page) {
   await page.waitForFunction(() => {
     const s = window.photonring?.debug.stats();
-    return s !== undefined && s.state === 'rendering' && s.frames > 0 && s.tilesRemaining === 0;
+    return s !== undefined && s.state === 'rendering' && s.frames > 0 && s.stage === 'done';
   });
 }
 
@@ -57,6 +63,38 @@ test('keyboard controls orbit, zoom and toggle the disk and the termination view
   expect(after.distance).toBeGreaterThan(before.distance);
   expect(after.mode).toBe('termination');
   expect(after.disk).toBe(false);
+});
+
+test('a camera move previews at reduced resolution, then refines with anti-aliasing', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 960, height: 540 });
+  // A tiny frame budget, so a full-resolution frame never fits and every move is previewed.
+  await page.goto('/?budget=0.5');
+  await waitForFullImage(page);
+  const before = await stats(page);
+  expect(before.antialias).toBe(true);
+  await page.getByRole('img', { name: /black hole/i }).focus();
+  await page.keyboard.press('ArrowLeft');
+  await waitForFullImage(page);
+  const after = await stats(page);
+  expect(after.previews).toBeGreaterThan(before.previews);
+  expect(after.previewScale).toBeGreaterThanOrEqual(0.25);
+  expect(after.previewScale).toBeLessThanOrEqual(0.5);
+  expect(after.traceMs).toBeGreaterThan(0);
+  expect(after.refineMs).toBeGreaterThan(0);
+  expect(after.tilesRemaining).toBe(0);
+});
+
+test('A toggles anti-aliasing', async ({ page }) => {
+  await page.goto('/');
+  await waitForFullImage(page);
+  await page.getByRole('img', { name: /black hole/i }).focus();
+  await page.keyboard.press('a');
+  await waitForFullImage(page);
+  const s = await stats(page);
+  expect(s.antialias).toBe(false);
+  expect(s.refineMs).toBe(0);
 });
 
 test('device loss shows a recoverable message', async ({ page }) => {

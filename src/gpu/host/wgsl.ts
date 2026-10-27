@@ -43,6 +43,10 @@ export const CROSSING_LOG_SIZE = 8;
 export const BLIT_FIELDS: readonly StructField[] = [
   ['exposure', 'f32'],
   ['toneMapping', 'u32'],
+  // 0: full image (with anti-aliased pixels); 1: preview, upscaled.
+  ['source', 'u32'],
+  // Part of the preview image that holds the preview, as a fraction of its size.
+  ['previewScale', 'vec2f'],
 ];
 
 /**
