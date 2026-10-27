@@ -16,6 +16,7 @@ function counts(black: number, patch: Partial<ValidationCounts> = {}): Validatio
     colour: { black, white: SIDE * SIDE - black, other: 0, touchesBorder: false },
     termination: { escaped: SIDE * SIDE - black, captured: black, stepLimit: 0, other: 0 },
     blackNotCapturedOrStepLimit: 0,
+    whiteCapturedOrStepLimit: 0,
     capturedOutside: 0,
     notCapturedInside: 0,
     maxDisagreementPx: 0,

@@ -29,12 +29,14 @@ export interface ValidationCounts {
   };
   /** Black colour pixels whose ray the termination render neither captured nor ran out of steps. */
   readonly blackNotCapturedOrStepLimit: number;
+  /** White colour pixels whose ray the termination render captured or ran out of steps. */
+  readonly whiteCapturedOrStepLimit: number;
   /** Captured pixels whose centre lies outside the analytic shadow edge, and escaped ones inside. */
   readonly capturedOutside: number;
   readonly notCapturedInside: number;
   /** Largest distance from the analytic edge of a disagreeing pixel centre, in pixels. */
   readonly maxDisagreementPx: number;
-  /** Largest |b/b_c - 1| of a mismatched pixel, and of a pixel disagreeing with the edge (0: none). */
+  /** Largest |b/b_c - 1| of a mismatched pixel (either way), and of one disagreeing with the edge. */
   readonly worstMismatchBand: number;
   readonly worstDisagreementBand: number;
 }
@@ -85,6 +87,7 @@ export function classifyValidation(
   let stepLimit = 0;
   let termOther = 0;
   let mismatched = 0;
+  let whiteCaptured = 0;
   let capturedOutside = 0;
   let notCapturedInside = 0;
   let maxDisagreementPx = 0;
@@ -107,8 +110,10 @@ export function classifyValidation(
       if (isBlack) {
         black++;
         if (i === 0 || j === 0 || i === side - 1 || j === side - 1) touchesBorder = true;
-      } else if (r0 === ONE && g0 === ONE && b0 === ONE) white++;
-      else other++;
+      }
+      const isWhite = !isBlack && r0 === ONE && g0 === ONE && b0 === ONE;
+      if (isWhite) white++;
+      else if (!isBlack) other++;
 
       const k = termBase + c;
       const tr = table[halves[k] as number] as number;
@@ -116,19 +121,25 @@ export function classifyValidation(
       const tb = table[halves[k + 2] as number] as number;
       let isCaptured = false;
       let isEscaped = false;
+      let isStepLimit = false;
       if (near(tr, cr) && near(tg, cg) && near(tb, cb)) {
         captured++;
         isCaptured = true;
       } else if (near(tr, er) && near(tg, eg) && near(tb, eb)) {
         escaped++;
         isEscaped = true;
-      } else if (near(tr, sr) && near(tg, sg) && near(tb, sb)) stepLimit++;
-      else termOther++;
+      } else if (near(tr, sr) && near(tg, sg) && near(tb, sb)) {
+        stepLimit++;
+        isStepLimit = true;
+      } else termOther++;
 
       const sx = ((2 * (i + 0.5)) / side - 1) * t;
       const rho2 = sx * sx + sy * sy;
       if (isBlack && isEscaped) {
         mismatched++;
+        worstMismatchBand = Math.max(worstMismatchBand, band(Math.sqrt(rho2)));
+      } else if (isWhite && (isCaptured || isStepLimit)) {
+        whiteCaptured++;
         worstMismatchBand = Math.max(worstMismatchBand, band(Math.sqrt(rho2)));
       }
       const outside = rho2 > tanPsi2;
@@ -145,6 +156,7 @@ export function classifyValidation(
     colour: { black, white, other, touchesBorder },
     termination: { escaped, captured, stepLimit, other: termOther },
     blackNotCapturedOrStepLimit: mismatched,
+    whiteCapturedOrStepLimit: whiteCaptured,
     capturedOutside,
     notCapturedInside,
     maxDisagreementPx,

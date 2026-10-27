@@ -74,6 +74,7 @@ describe('validation readback classification', () => {
       other: 0,
     });
     expect(c.blackNotCapturedOrStepLimit).toBe(0);
+    expect(c.whiteCapturedOrStepLimit).toBe(0);
     expect(c.capturedOutside).toBe(0);
     expect(c.notCapturedInside).toBe(0);
     expect(c.maxDisagreementPx).toBe(0);
@@ -146,6 +147,23 @@ describe('validation readback classification', () => {
     );
     expect(c.blackNotCapturedOrStepLimit).toBe(1);
     expect(c.worstMismatchBand).toBeGreaterThan(0);
+  });
+
+  it('reports white pixels whose ray the termination render captured or stopped', () => {
+    const c = classifyValidation(
+      readback(SIDE, (i, j) => {
+        if (i === SIDE / 2 && j === SIDE / 2)
+          return { colour: WHITE, termination: TERMINATION_COLOURS.captured };
+        if (i === SIDE / 2 + 1 && j === SIDE / 2)
+          return { colour: WHITE, termination: TERMINATION_COLOURS.stepLimit };
+        return cone(i, j);
+      }),
+      { tanHalfFovY: T, tanPsi: TAN_PSI },
+    );
+    expect(c.whiteCapturedOrStepLimit).toBe(2);
+    expect(c.blackNotCapturedOrStepLimit).toBe(0);
+    expect(c.colour.black).toBe(inside - 2);
+    expect(c.worstMismatchBand).toBeGreaterThan(0.5);
   });
 
   it('rejects a buffer of the wrong size', () => {

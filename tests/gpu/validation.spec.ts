@@ -39,10 +39,13 @@ test.describe('shadow measured on the GPU validation render', () => {
       expect(counts.colour.other, where).toBe(0);
       expect(counts.termination.other, where).toBe(0);
       expect(counts.colour.touchesBorder, where).toBe(false);
-      // Colour black is expected to equal captured (plus step limit); report, then bound.
-      if (counts.blackNotCapturedOrStepLimit > 0) {
-        expect(counts.worstMismatchBand, where).toBeLessThan(BAND);
-      }
+      // Colour black is expected to equal captured plus step limit, pixel by pixel: any pixel
+      // classified differently by the two entry points must lie in the f32 band.
+      const mismatches = counts.blackNotCapturedOrStepLimit + counts.whiteCapturedOrStepLimit;
+      if (mismatches > 0) expect(counts.worstMismatchBand, where).toBeLessThan(BAND);
+      expect(
+        Math.abs(counts.colour.black - counts.termination.captured - counts.termination.stepLimit),
+      ).toBeLessThanOrEqual(mismatches);
       if (counts.capturedOutside + counts.notCapturedInside > 0) {
         expect(counts.worstDisagreementBand, where).toBeLessThan(BAND);
       }
@@ -59,6 +62,7 @@ test.describe('shadow measured on the GPU validation render', () => {
         black: counts.colour.black,
         captured: counts.termination.captured,
         blackNotCaptured: counts.blackNotCapturedOrStepLimit,
+        whiteCaptured: counts.whiteCapturedOrStepLimit,
         capturedOutside: counts.capturedOutside,
         notCapturedInside: counts.notCapturedInside,
         maxDisagreementPx: counts.maxDisagreementPx,
