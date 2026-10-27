@@ -13,7 +13,9 @@ import {
 } from '../../src/ui/url-state.ts';
 import { DEFAULT_VIEW, type ViewState } from '../../src/ui/view-state.ts';
 
-const view = (patch: Partial<ViewState> & { orbit?: Partial<ViewState['orbit']> }): ViewState => ({
+const view = (
+  patch: Omit<Partial<ViewState>, 'orbit'> & { orbit?: Partial<ViewState['orbit']> },
+): ViewState => ({
   ...DEFAULT_VIEW,
   ...patch,
   orbit: { ...DEFAULT_VIEW.orbit, ...patch.orbit },
@@ -29,9 +31,9 @@ function expectValid(s: ViewState): void {
   expect(elevationDeg).toBeGreaterThanOrEqual(-90);
   expect(elevationDeg).toBeLessThanOrEqual(90);
   for (const v of [distance, azimuthDeg, elevationDeg]) expect(Object.is(v, -0)).toBe(false);
-  expect(Number((distance * 1000).toFixed(6)) % 1).toBe(0);
-  expect(Number((azimuthDeg * 100).toFixed(6)) % 1).toBe(0);
-  expect(Number((elevationDeg * 100).toFixed(6)) % 1).toBe(0);
+  expect(Math.abs(Number((distance * 1000).toFixed(6)) % 1)).toBe(0);
+  expect(Math.abs(Number((azimuthDeg * 100).toFixed(6)) % 1)).toBe(0);
+  expect(Math.abs(Number((elevationDeg * 100).toFixed(6)) % 1)).toBe(0);
   expect(typeof s.disk).toBe('boolean');
   expect(typeof s.antialias).toBe('boolean');
   expect(typeof s.validationOpen).toBe('boolean');
