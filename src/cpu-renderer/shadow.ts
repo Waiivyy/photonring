@@ -2,6 +2,7 @@
 // sample per pixel): count the black pixels, treat them as a disc centred on the image centre,
 // and convert its radius to an angle through the pinhole projection. A cone of half-angle psi
 // around the optical axis images to a circle of radius tan(psi) / tan(fov/2) half-heights.
+import { coneAngleFromImageRadius } from '../physics/index.ts';
 import type { RenderOutput, RenderSettings } from './render.ts';
 
 export interface ShadowMeasurement {
@@ -26,6 +27,10 @@ export function measureShadowRadius(out: RenderOutput, s: RenderSettings): Shado
     }
   }
   const radiusPx = Math.sqrt(area / Math.PI);
-  const tanPerPixel = (2 * Math.tan((s.camera.fovYDeg * Math.PI) / 360)) / s.height;
-  return { radiusPx, angularRadius: Math.atan(radiusPx * tanPerPixel), touchesBorder };
+  const tanHalfFovY = Math.tan((s.camera.fovYDeg * Math.PI) / 360);
+  return {
+    radiusPx,
+    angularRadius: coneAngleFromImageRadius(radiusPx, s.height, tanHalfFovY),
+    touchesBorder,
+  };
 }
