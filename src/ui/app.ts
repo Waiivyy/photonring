@@ -1,13 +1,19 @@
 // The interactive page: canvas, orbit controls, progressive rendering within a frame budget
 // (reduced resolution while the view changes, then full resolution and anti-aliasing), a small
-// timing readout, and recovery from device loss.
+// timing readout, and recovery from device loss. Every listener, timer and animation frame the
+// page creates belongs to one lifecycle, released when the renderer restarts.
 import { initWebGpu } from '../gpu/device.ts';
 import { ProgressiveRenderer, type FrameAction } from '../gpu/host/progressive.ts';
 import { chooseInternalResolution, type Resolution } from '../gpu/host/resolution.ts';
 import { GpuRenderer, TILE_SIZE } from '../gpu/renderer.ts';
-import { DEFAULT_DISK } from '../physics/index.ts';
-import { initialOrbit, orbitBy, viewCamera, zoomBy, type OrbitState } from './orbit.ts';
+import { DEFAULT_DISK, type CameraParams } from '../physics/index.ts';
+import { el } from './dom.ts';
+import { bindCanvasInput } from './input.ts';
+import { createLifecycle, type Lifecycle } from './lifecycle.ts';
+import { orbitBy, viewCamera, zoomBy, type OrbitState } from './orbit.ts';
+import type { AppStats } from './stats.ts';
 import { showUnsupported } from './unsupported.ts';
+import { DEFAULT_VIEW, type ViewMode, type ViewState } from './view-state.ts';
 
 /** GPU time per animation frame the renderer aims for. */
 const FRAME_BUDGET_MS = 12;
@@ -16,33 +22,12 @@ const SETTLE_MS = 120;
 /** Pixel cap for the internal resolution (4K UHD). */
 const MAX_PIXELS = 3840 * 2160;
 
-export interface AppStats {
-  state: 'starting' | 'rendering' | 'lost';
-  frames: number;
-  internalWidth: number;
-  internalHeight: number;
-  limitedBy: Resolution['limitedBy'];
-  mode: 'colour' | 'termination';
-  disk: boolean;
-  antialias: boolean;
-  azimuthDeg: number;
-  distance: number;
-  stage: 'preview' | 'trace' | 'refine' | 'done';
-  /** Preview frames rendered so far, and the scale of the last one. */
-  previews: number;
-  previewScale: number;
-  tilesRemaining: number;
-  /** Measured milliseconds of the last preview, and of the current image's first pass and anti-aliasing. */
-  previewMs: number;
-  traceMs: number;
-  refineMs: number;
-  timing: 'timestamp-query' | 'wall-clock';
-}
-
-declare global {
-  interface Window {
-    photonring?: { debug: { stats(): AppStats; destroyDevice(): void } };
-  }
+/** A camera and the scene settings drawn with it. */
+interface SceneView {
+  readonly camera: CameraParams;
+  readonly disk: boolean;
+  readonly view: ViewMode;
+  readonly antialias: boolean;
 }
 
 /** Optional diagnostic cap on the texture size (?maxdim=N), used by the device-limit test. */
@@ -69,9 +54,9 @@ export async function startApp(root: HTMLElement): Promise<void> {
 }
 
 class App {
-  private readonly canvas = document.createElement('canvas');
-  private readonly hud = document.createElement('p');
-  private readonly alert = document.createElement('div');
+  private readonly canvas = el('canvas', { class: 'view', tabindex: 0, role: 'img' });
+  private readonly hud = el('p', { class: 'hud' });
+  private readonly alert = el('div', { class: 'alert', role: 'alert', hidden: true });
   private readonly context: GPUCanvasContext;
   private readonly format = navigator.gpu.getPreferredCanvasFormat();
   private readonly plan = new ProgressiveRenderer(1, 1, {
@@ -79,11 +64,14 @@ class App {
     settleMs: SETTLE_MS,
     tileSize: TILE_SIZE,
   });
-  private readonly pointers = new Map<number, { x: number; y: number }>();
-  private orbit: OrbitState = initialOrbit;
-  private mode: AppStats['mode'] = 'colour';
-  private disk = true;
-  private antialias = true;
+  private readonly life: Lifecycle = createLifecycle({
+    setTimer: (fn, ms) => window.setTimeout(fn, ms),
+    clearTimer: (id) => window.clearTimeout(id),
+    requestFrame: (fn) => window.requestAnimationFrame(fn),
+    cancelFrame: (id) => window.cancelAnimationFrame(id),
+  });
+  /** The view the controls ask for; the camera is always at the URL's precision. */
+  private view: ViewState = DEFAULT_VIEW;
   private state: AppStats['state'] = 'starting';
   private resolution: Resolution = { width: 0, height: 0, limitedBy: 'none' };
   private cssKey = '';
@@ -93,7 +81,6 @@ class App {
   private previewMs = 0;
   private traceMs = 0;
   private refineMs = 0;
-  private disposed = false;
 
   private readonly root: HTMLElement;
   private readonly device: GPUDevice;
@@ -116,48 +103,53 @@ class App {
   }
 
   start(): void {
-    this.canvas.className = 'view';
-    this.canvas.tabIndex = 0;
-    this.canvas.setAttribute('role', 'img');
     this.canvas.setAttribute(
       'aria-label',
       'Rendered view of a black hole and its accretion disk bending the light of the stars behind it',
     );
-    this.hud.className = 'hud';
-    const help = document.createElement('p');
-    help.className = 'help';
-    help.textContent =
-      'Drag or arrow keys: orbit. Scroll, pinch or +/-: zoom. D: disk. A: anti-aliasing. T: termination view.';
-    this.alert.className = 'alert';
-    this.alert.setAttribute('role', 'alert');
-    this.alert.hidden = true;
+    const help = el(
+      'p',
+      { class: 'help' },
+      'Drag or arrow keys: orbit. Scroll, pinch or +/-: zoom. D: disk. A: anti-aliasing. T: termination view.',
+    );
     this.root.replaceChildren(this.canvas, this.hud, help, this.alert);
 
     this.context.configure({ device: this.device, format: this.format, alphaMode: 'opaque' });
-    this.bindInput();
+    bindCanvasInput(
+      this.canvas,
+      {
+        orbit: () => this.view.orbit,
+        setOrbit: (next) => this.setOrbit(next),
+        key: (e) => this.handleKey(e.key),
+      },
+      this.life,
+    );
     void this.device.lost.then((info) => {
-      if (!this.disposed) this.showLost(info.reason, info.message);
+      if (!this.life.disposed) this.showLost(info.reason, info.message);
     });
     window.photonring = {
       debug: { stats: () => this.stats(), destroyDevice: () => this.device.destroy() },
     };
     this.state = 'rendering';
     this.applyScene();
-    requestAnimationFrame(this.frame);
+    this.life.frame(this.frame);
   }
 
   private stats(): AppStats {
+    const camera = viewCamera(this.view.orbit);
     return {
       state: this.state,
       frames: this.frames,
       internalWidth: this.resolution.width,
       internalHeight: this.resolution.height,
       limitedBy: this.resolution.limitedBy,
-      mode: this.mode,
-      disk: this.disk,
-      antialias: this.antialias,
-      azimuthDeg: this.orbit.azimuthDeg,
-      distance: this.orbit.distance,
+      mode: this.view.view,
+      disk: this.view.disk,
+      antialias: this.view.antialias,
+      distance: camera.distance,
+      azimuthDeg: camera.azimuthDeg,
+      elevationDeg: camera.elevationDeg,
+      fovYDeg: camera.fovYDeg,
       stage: this.plan.done ? 'done' : this.plan.stage,
       previews: this.previews,
       previewScale: this.previewScale,
@@ -169,16 +161,27 @@ class App {
     };
   }
 
+  /** The scene the renderer draws. */
+  private sceneNow(): SceneView {
+    return {
+      camera: viewCamera(this.view.orbit),
+      disk: this.view.disk,
+      view: this.view.view,
+      antialias: this.view.antialias,
+    };
+  }
+
   private applyScene(): void {
+    const s = this.sceneNow();
     this.renderer.setScene({
       M: 1,
-      camera: viewCamera(this.orbit),
-      mode: this.mode,
+      camera: s.camera,
+      mode: s.view,
       sky: 'stars',
       exposure: 1,
       toneMapping: true,
-      disk: this.disk ? DEFAULT_DISK : null,
-      antialias: this.antialias,
+      disk: s.disk ? DEFAULT_DISK : null,
+      antialias: s.antialias,
     });
     this.plan.sceneChanged(performance.now(), this.renderer.antialiasing);
   }
@@ -204,12 +207,12 @@ class App {
   }
 
   private readonly frame = (now: number): void => {
-    if (this.disposed || this.state !== 'rendering') return;
+    if (this.state !== 'rendering') return;
     this.resizeIfNeeded();
     const action = this.plan.next(now);
     if (action.kind !== 'idle') this.run(action);
     this.updateHud();
-    requestAnimationFrame(this.frame);
+    this.life.frame(this.frame);
   };
 
   private run(action: Exclude<FrameAction, { kind: 'idle' }>): void {
@@ -260,91 +263,54 @@ class App {
     } else {
       status = `anti-aliasing, ${refine} tiles left`;
     }
-    const view = this.mode === 'termination' ? ', termination view' : '';
+    const view = this.view.view === 'termination' ? ', termination view' : '';
     this.hud.textContent = `${width} x ${height}, ${timing} time: ${status}${view}`;
   }
 
   private setOrbit(next: OrbitState): void {
-    if (next === this.orbit) return;
-    this.orbit = next;
+    if (next === this.view.orbit) return;
+    this.view = { ...this.view, orbit: next };
     this.applyScene();
   }
 
-  private bindInput(): void {
-    const c = this.canvas;
-    c.addEventListener('pointerdown', (e) => {
-      c.setPointerCapture(e.pointerId);
-      this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    });
-    c.addEventListener('pointermove', (e) => {
-      const prev = this.pointers.get(e.pointerId);
-      if (!prev) return;
-      if (this.pointers.size === 1) {
-        this.setOrbit(
-          orbitBy(this.orbit, -(e.clientX - prev.x) * 0.25, (e.clientY - prev.y) * 0.25),
-        );
-      } else if (this.pointers.size === 2) {
-        const other = [...this.pointers.entries()].find(([id]) => id !== e.pointerId)?.[1];
-        if (other) {
-          const before = Math.hypot(prev.x - other.x, prev.y - other.y);
-          const after = Math.hypot(e.clientX - other.x, e.clientY - other.y);
-          if (before > 0 && after > 0) this.setOrbit(zoomBy(this.orbit, before / after));
-        }
-      }
-      this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    });
-    const release = (e: PointerEvent) => this.pointers.delete(e.pointerId);
-    c.addEventListener('pointerup', release);
-    c.addEventListener('pointercancel', release);
-    c.addEventListener(
-      'wheel',
-      (e) => {
-        e.preventDefault();
-        this.setOrbit(zoomBy(this.orbit, Math.exp(e.deltaY * 0.001)));
-      },
-      { passive: false },
-    );
-    c.addEventListener('keydown', (e) => {
-      const handled = this.handleKey(e.key);
-      if (handled) e.preventDefault();
-    });
+  private setView(next: ViewState): void {
+    this.view = next;
+    this.applyScene();
   }
 
   private handleKey(key: string): boolean {
+    const v = this.view;
     switch (key) {
       case 'ArrowLeft':
-        this.setOrbit(orbitBy(this.orbit, 5, 0));
+        this.setOrbit(orbitBy(v.orbit, 5, 0));
         return true;
       case 'ArrowRight':
-        this.setOrbit(orbitBy(this.orbit, -5, 0));
+        this.setOrbit(orbitBy(v.orbit, -5, 0));
         return true;
       case 'ArrowUp':
-        this.setOrbit(orbitBy(this.orbit, 0, 5));
+        this.setOrbit(orbitBy(v.orbit, 0, 5));
         return true;
       case 'ArrowDown':
-        this.setOrbit(orbitBy(this.orbit, 0, -5));
+        this.setOrbit(orbitBy(v.orbit, 0, -5));
         return true;
       case '+':
       case '=':
-        this.setOrbit(zoomBy(this.orbit, 1 / 1.1));
+        this.setOrbit(zoomBy(v.orbit, 1 / 1.1));
         return true;
       case '-':
-        this.setOrbit(zoomBy(this.orbit, 1.1));
+        this.setOrbit(zoomBy(v.orbit, 1.1));
         return true;
       case 'd':
       case 'D':
-        this.disk = !this.disk;
-        this.applyScene();
+        this.setView({ ...v, disk: !v.disk });
         return true;
       case 'a':
       case 'A':
-        this.antialias = !this.antialias;
-        this.applyScene();
+        this.setView({ ...v, antialias: !v.antialias });
         return true;
       case 't':
       case 'T':
-        this.mode = this.mode === 'colour' ? 'termination' : 'colour';
-        this.applyScene();
+        this.setView({ ...v, view: v.view === 'colour' ? 'termination' : 'colour' });
         return true;
       default:
         return false;
@@ -353,22 +319,29 @@ class App {
 
   private showLost(reason: string, message: string): void {
     this.state = 'lost';
-    const text = document.createElement('p');
-    text.textContent = `The GPU device was lost (${reason}${message ? `: ${message}` : ''}). Rendering has stopped.`;
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.textContent = 'Restart the renderer';
-    button.addEventListener('click', () => {
-      this.dispose();
-      void startApp(this.root);
-    });
-    this.alert.replaceChildren(text, button);
+    const button = el('button', { type: 'button' }, 'Restart the renderer');
+    button.addEventListener(
+      'click',
+      () => {
+        this.dispose();
+        void startApp(this.root);
+      },
+      { signal: this.life.signal },
+    );
+    this.alert.replaceChildren(
+      el(
+        'p',
+        {},
+        `The GPU device was lost (${reason}${message ? `: ${message}` : ''}). Rendering has stopped.`,
+      ),
+      button,
+    );
     this.alert.hidden = false;
     button.focus();
   }
 
   private dispose(): void {
-    this.disposed = true;
+    this.life.dispose();
     this.renderer.destroy();
   }
 }

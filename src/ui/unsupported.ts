@@ -1,5 +1,6 @@
 // Shown when WebGPU is missing or no device can be created: why, where it works, and a gallery
 // of images rendered beforehand by the CPU reference renderer (tools/render-gallery.ts).
+import { el } from './dom.ts';
 
 const GALLERY = [
   { file: 'shadow-and-stars.png', caption: 'The shadow and lensed stars, 30 M away, no disk.' },
@@ -14,31 +15,21 @@ const BROWSERS = [
   'Firefox 141 or later on Windows, and 147 or later on Macs with Apple silicon.',
 ];
 
-function el<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  text?: string,
-): HTMLElementTagNameMap[K] {
-  const node = document.createElement(tag);
-  if (text !== undefined) node.textContent = text;
-  return node;
-}
-
 export function showUnsupported(root: HTMLElement, message: string): void {
-  const section = el('section');
-  section.className = 'unsupported';
+  const section = el('section', { class: 'unsupported' });
   section.append(
-    el('h1', 'WebGPU is not available'),
-    el('p', message),
+    el('h1', {}, 'WebGPU is not available'),
+    el('p', {}, message),
     el(
       'p',
+      {},
       'photonring traces light around a black hole in real time with WebGPU compute shaders. It works in:',
     ),
   );
   const list = el('ul');
-  for (const b of BROWSERS) list.append(el('li', b));
-  section.append(list, el('h2', 'Pre-rendered images'));
-  const gallery = el('div');
-  gallery.className = 'gallery';
+  for (const b of BROWSERS) list.append(el('li', {}, b));
+  section.append(list, el('h2', {}, 'Pre-rendered images'));
+  const gallery = el('div', { class: 'gallery' });
   for (const item of GALLERY) {
     const figure = el('figure');
     const img = el('img');
@@ -47,13 +38,14 @@ export function showUnsupported(root: HTMLElement, message: string): void {
     img.width = 640;
     img.height = 360;
     img.loading = 'lazy';
-    figure.append(img, el('figcaption', item.caption));
+    figure.append(img, el('figcaption', {}, item.caption));
     gallery.append(figure);
   }
   section.append(
     gallery,
     el(
       'p',
+      {},
       'These images come from the CPU reference renderer. This is a toy model for learning and demonstration, not a scientific simulation of any real observation.',
     ),
   );
