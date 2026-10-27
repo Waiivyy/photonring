@@ -114,6 +114,70 @@ test('rings are never missing: a save right after a zoom waits for them', async 
   expect(differ / inside).toBeGreaterThan(0.8);
 });
 
+/** Dispatches key presses on the view in one task, so they land before the next frame. */
+const sameFrame = (page: Page, keys: string[]) =>
+  view(page).evaluate((canvas, ks) => {
+    for (const key of ks) {
+      canvas.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    }
+  }, keys);
+
+test('a ring switched on in the same frame as the save is drawn in the image', async ({ page }) => {
+  await openApp(page);
+  await waitForSettled(page);
+  const { png } = await save(page, () => sameFrame(page, ['i', 's']));
+  expect((await stats(page)).ringsState).toBe('ready');
+  const shown = await presented(page);
+  const s = await stats(page);
+  const css = await view(page).evaluate((c) => [c.clientWidth, c.clientHeight] as const);
+  const d = await page
+    .locator('svg.overlay g[data-overlay="isco"] path.line[data-order="0"]')
+    .getAttribute('d');
+  const pts = [...d!.matchAll(/[ML](-?[\d.]+) (-?[\d.]+)/g)].map((m) => [
+    Number(m[1]),
+    Number(m[2]),
+  ]);
+  let differ = 0;
+  let inside = 0;
+  for (const [x, y] of pts.filter((_, i) => i % 10 === 0)) {
+    const px = Math.round((x! * s.internalWidth) / css[0]);
+    const py = Math.round((y! * s.internalHeight) / css[1]);
+    if (px < 0 || py < 0 || px >= png.width || py >= png.height) continue;
+    inside++;
+    if (pixel(png.rgba, png.width, px, py) !== pixel(shown, png.width, px, py)) differ++;
+  }
+  expect(inside).toBeGreaterThan(5);
+  expect(differ / inside).toBeGreaterThan(0.8);
+});
+
+test('a save waits for a pending brightness change and shows the final scene', async ({ page }) => {
+  await openApp(page);
+  // D applies at once; T within 500 ms waits for the limiter; S must wait for both.
+  const { download, png } = await save(page, () => sameFrame(page, ['d', 't', 's']));
+  expect(download.suggestedFilename()).toBe('photonring-r30-az0-el12-termination.png');
+  const s = await stats(page);
+  expect(s.brightnessPending).toBe(false);
+  expect(s.mode).toBe('termination');
+  expect(s.disk).toBe(false);
+  const shown = await presented(page);
+  const w = png.width;
+  const css = await view(page).evaluate((c) => c.clientWidth);
+  const items = [{ label: 'Escaped' }, { label: 'Captured' }, { label: 'Step limit' }];
+  const box = legendLayout(w, png.height, items, w / css)!;
+  let mismatched = 0;
+  for (let y = 0; y < png.height; y += 9) {
+    for (let x = 0; x < w; x += 9) {
+      const inBox =
+        x >= box.x - 2 &&
+        x <= box.x + box.width + 2 &&
+        y >= box.y - 2 &&
+        y <= box.y + box.height + 2;
+      if (!inBox && pixel(png.rgba, w, x, y) !== pixel(shown, w, x, y)) mismatched++;
+    }
+  }
+  expect(mismatched).toBe(0);
+});
+
 test('T then S at once: the name and the pixels both show the termination view', async ({
   page,
 }) => {

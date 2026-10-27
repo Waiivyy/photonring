@@ -107,6 +107,20 @@ test('a plain visit keeps an empty hash until something changes', async ({ page 
   await expect.poll(() => hash(page)).toBe(canonical({ az: '5' }));
 });
 
+test('the hash is rewritten even when the path starts with two slashes', async ({
+  page,
+  baseURL,
+}) => {
+  // A path like //host/ would turn an absolute-path URL into another origin; the page must
+  // write a fragment-only URL instead.
+  await openApp(page, `${baseURL}//x.example/#v=1&r=1e999&view=%3Cimg%3E`);
+  await expect.poll(() => hash(page)).toBe(canonical());
+  expect(await page.evaluate(() => location.pathname)).toBe('//x.example/');
+  await view(page).focus();
+  await page.keyboard.press('ArrowLeft');
+  await expect.poll(() => hash(page)).toBe(canonical({ az: '5' }));
+});
+
 test('unknown keys are dropped from the canonical hash', async ({ page }) => {
   await openApp(page, '/#v=1&r=40&future=1&zz=2');
   await expect.poll(() => hash(page)).toBe(canonical({ r: '40' }));
@@ -125,8 +139,10 @@ test('toggles driven by the hash share the brightness limit', async ({ page }) =
   await page.waitForTimeout(800);
   const s = await stats(page);
   const n = s.toggleApplies - before;
-  const times = s.toggleApplyTimes.slice(-n);
+  // The hash changes went through the limiter (not around it), and were thinned out.
+  expect(n).toBeGreaterThanOrEqual(2);
   expect(n).toBeLessThanOrEqual(4);
+  const times = s.toggleApplyTimes.slice(-n);
   for (let i = 1; i < times.length; i++)
     expect(times[i]! - times[i - 1]!).toBeGreaterThanOrEqual(500);
   for (const t of times)

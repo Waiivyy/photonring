@@ -34,7 +34,8 @@ import { createToolbar } from './toolbar.ts';
 import { showUnsupported } from './unsupported.ts';
 import { formatHash, needsNotice, parseHash } from './url-state.ts';
 import { createUrlSync, type UrlSync } from './url-sync.ts';
-import { announcement, shadowResult, type ShadowResult } from './validation.ts';
+import { announcement, shadowResult } from './validation.ts';
+import { createValidationScheduler, type ValidationScheduler } from './validation-scheduler.ts';
 import {
   VALIDATION_SIDE,
   createValidationPanel,
@@ -57,8 +58,11 @@ const HASH_NOTICE =
 const sameOrbit = (a: OrbitState, b: OrbitState) =>
   a.distance === b.distance && a.azimuthDeg === b.azimuthDeg && a.elevationDeg === b.elevationDeg;
 
-/** Panels become bottom sheets, one at a time, below this width (CSS px). */
-const NARROW = '(max-width: 640px)';
+/**
+ * Panels become bottom sheets, one at a time, at this width and below (CSS px): above it, two
+ * 22rem panels fit side by side without covering each other or the toolbar.
+ */
+const NARROW = '(max-width: 760px)';
 
 /** A camera and the scene settings drawn with it. */
 interface SceneView {
@@ -81,14 +85,21 @@ function budgetOverride(): number | null {
   return Number.isFinite(v) && v >= 0.1 && v <= 100 ? v : null;
 }
 
-export async function startApp(root: HTMLElement): Promise<void> {
+/**
+ * Starts the page, or explains why it cannot run. After a restart, `focusView` moves focus to
+ * the new view, which replaces the Restart button that had it.
+ */
+export async function startApp(
+  root: HTMLElement,
+  opts: { focusView?: boolean } = {},
+): Promise<void> {
   const init = await initWebGpu();
   if (!init.ok) {
     showUnsupported(root, init.message);
     return;
   }
   const renderer = await GpuRenderer.create(init.device, init.timestampQuery);
-  new App(root, init.device, renderer, init.timestampQuery).start();
+  new App(root, init.device, renderer, init.timestampQuery).start(opts.focusView === true);
 }
 
 class App {
@@ -131,14 +142,7 @@ class App {
   private readonly controls: ControlsPanel;
   private readonly validation: ValidationPanel;
   private readonly about: About = createAbout();
-  /** Validation: the camera its rows show, the camera of its result, and the measurement state. */
-  private validationShown = '';
-  private validationDone = '';
-  private validationBusy = false;
-  private validationGen = 0;
-  private validationRuns = 0;
-  private validationMs = 0;
-  private lastValidation: ShadowResult | null = null;
+  private readonly validationScheduler: ValidationScheduler;
   private lastAnnounced = '';
   private saving = false;
   private saveWaiters: { resolve: () => void; reject: (e: Error) => void }[] = [];
@@ -227,6 +231,34 @@ class App {
       },
     ]);
     this.validation = createValidationPanel({ close: () => this.closePanel('validation', true) });
+    this.validationScheduler = createValidationScheduler({
+      measure: (camera) =>
+        this.renderer.measureShadow(camera, VALIDATION_SIDE).then((readback) =>
+          shadowResult({
+            ...camera,
+            side: VALIDATION_SIDE,
+            counts: classifyValidation(readback, {
+              tanHalfFovY: Math.tan((camera.fovYDeg * Math.PI) / 360),
+              tanPsi: Math.tan(shadowAngularRadius(camera.distance, 1)),
+            }),
+          }),
+        ),
+      pending: (state, camera) => this.validation.pending(state, camera.distance, camera.fovYDeg),
+      done: (result, fresh) => {
+        if (this.life.disposed) return;
+        this.validation.done(result);
+        if (!fresh) return;
+        const text = announcement(result);
+        if (text !== this.lastAnnounced) this.announcer.announce(text);
+        this.lastAnnounced = text;
+      },
+      failed: () => {
+        if (!this.life.disposed) {
+          this.validation.failed('Measurement unavailable: the GPU device was lost.');
+        }
+      },
+      now: () => performance.now(),
+    });
     this.controls = createControlsPanel({
       action: (a) => this.dispatch(a, 'button'),
       scene: (toggle, on) => this.setSceneToggle(toggle, on, false),
@@ -235,7 +267,7 @@ class App {
     });
   }
 
-  start(): void {
+  start(focusView = false): void {
     this.loadHash();
     this.canvas.setAttribute('aria-label', this.summary());
     this.canvas.setAttribute('aria-keyshortcuts', ariaKeyshortcuts(KEYMAP));
@@ -256,15 +288,19 @@ class App {
       this.toolbar.element,
       this.controls.element,
       this.validation.element,
-      this.overlay.legend,
-      this.hud,
-      help,
+      el(
+        'div',
+        { class: 'bottom' },
+        el('div', { class: 'readouts' }, this.hud, help),
+        this.overlay.legend,
+      ),
       this.announcerRegion,
       this.alert,
       this.about.dialog,
     );
     this.syncControls();
     this.syncValidationPanel();
+    if (focusView) this.canvas.focus({ preventScroll: true });
 
     this.context.configure({ device: this.device, format: this.format, alphaMode: 'opaque' });
     bindCanvasInput(
@@ -277,6 +313,16 @@ class App {
       this.life,
     );
     window.addEventListener('hashchange', this.onHashChange, { signal: this.life.signal });
+    // Becoming narrow with two panels open: keep only the newest, as opening one there would.
+    const narrow = window.matchMedia(NARROW);
+    narrow.addEventListener(
+      'change',
+      () => {
+        if (!narrow.matches) return;
+        for (const p of this.panels.slice(0, -1)) this.closePanel(p, false);
+      },
+      { signal: this.life.signal },
+    );
     void this.device.lost.then((info) => {
       if (!this.life.disposed) this.showLost(info.reason, info.message);
     });
@@ -285,7 +331,7 @@ class App {
         stats: () => this.stats(),
         destroyDevice: () => this.device.destroy(),
         presentedImage: (rect) => this.presentedImage(rect),
-        validation: () => this.lastValidation,
+        validation: () => this.validationScheduler.last,
       },
     };
     this.state = 'rendering';
@@ -327,8 +373,8 @@ class App {
       ringsState: this.overlay.ringsState,
       ringMs: this.overlay.ringMs,
       validationOpen: this.view.validationOpen,
-      validationRuns: this.validationRuns,
-      validationMs: this.validationMs,
+      validationRuns: this.validationScheduler.runs,
+      validationMs: this.validationScheduler.lastMs,
     };
   }
 
@@ -389,7 +435,11 @@ class App {
     if (action.kind !== 'idle') this.run(action);
     if (this.plan.done) this.settled();
     this.overlay.update(this.overlayFrame());
-    this.updateValidation();
+    this.validationScheduler.update(
+      this.view.validationOpen,
+      this.presented?.camera ?? null,
+      this.plan.done,
+    );
     if (this.saveWaiters.length > 0 && this.readyToSave()) {
       const waiters = this.saveWaiters;
       this.saveWaiters = [];
@@ -544,9 +594,13 @@ class App {
 
   // ---- URL hash ----------------------------------------------------------------------------
 
-  /** Writes the hash now, with replaceState: no history entry, no hashchange. */
+  /**
+   * Writes the hash now, with replaceState: no history entry, no hashchange. A fragment-only
+   * URL keeps the path and query and can never resolve to another origin (a path starting with
+   * // would).
+   */
   private writeHash(hash: string): void {
-    history.replaceState(history.state, '', `${location.pathname}${location.search}#${hash}`);
+    history.replaceState(history.state, '', `#${hash}`);
   }
 
   /** Reads the hash on load: a shared view renders without the default view first. */
@@ -694,9 +748,7 @@ class App {
     this.root.classList.toggle('panel-open', this.panels.length > 0);
     if (id === 'validation') {
       // Discard a measurement in flight and free the offscreen render.
-      this.validationGen++;
-      this.validationShown = '';
-      this.validationDone = '';
+      this.validationScheduler.close();
       this.renderer.releaseValidation();
     }
   }
@@ -705,6 +757,8 @@ class App {
 
   /** Everything visible is complete: the image, any pending brightness change, the rings. */
   private readyToSave(): boolean {
+    // Overlays switched on since the last frame must count as pending, not as off.
+    this.overlay.update(this.overlayFrame());
     return (
       this.state === 'rendering' &&
       this.plan.done &&
@@ -772,57 +826,6 @@ class App {
     }
   }
 
-  // ---- Validation --------------------------------------------------------------------------
-
-  /**
-   * While the panel is open: its analytic rows follow the presented camera at once, and once
-   * the image is complete the shadow is measured on the offscreen validation render, unless a
-   * result for this camera is already shown or a measurement is in flight.
-   */
-  private updateValidation(): void {
-    if (!this.view.validationOpen || !this.presented) return;
-    const camera = this.presented.camera;
-    const key = `${camera.distance}|${camera.azimuthDeg}|${camera.elevationDeg}|${camera.fovYDeg}`;
-    if (key !== this.validationShown && key !== this.validationDone) {
-      this.validationShown = key;
-      this.validation.pending('waiting', camera.distance, camera.fovYDeg);
-    }
-    if (!this.plan.done || this.validationBusy || key === this.validationDone) return;
-    this.validationBusy = true;
-    const gen = ++this.validationGen;
-    const t0 = performance.now();
-    this.validation.pending('measuring', camera.distance, camera.fovYDeg);
-    this.renderer
-      .measureShadow(camera, VALIDATION_SIDE)
-      .then((readback) => {
-        const counts = classifyValidation(readback, {
-          tanHalfFovY: Math.tan((camera.fovYDeg * Math.PI) / 360),
-          tanPsi: Math.tan(shadowAngularRadius(camera.distance, 1)),
-        });
-        return shadowResult({ ...camera, side: VALIDATION_SIDE, counts });
-      })
-      .then(
-        (result) => {
-          this.validationBusy = false;
-          if (gen !== this.validationGen || this.life.disposed) return;
-          this.validationMs = performance.now() - t0;
-          this.validationRuns++;
-          this.lastValidation = result;
-          this.validationDone = key;
-          this.validationShown = key;
-          this.validation.done(result);
-          const text = announcement(result);
-          if (text !== this.lastAnnounced) this.announcer.announce(text);
-          this.lastAnnounced = text;
-        },
-        () => {
-          this.validationBusy = false;
-          if (gen !== this.validationGen || this.life.disposed) return;
-          this.validation.failed('Measurement unavailable: the GPU device was lost.');
-        },
-      );
-  }
-
   // ---- Device loss -------------------------------------------------------------------------
 
   private showLost(reason: string, message: string): void {
@@ -836,7 +839,7 @@ class App {
       'click',
       () => {
         this.dispose();
-        void startApp(this.root);
+        void startApp(this.root, { focusView: true });
       },
       { signal: this.life.signal },
     );
@@ -853,6 +856,8 @@ class App {
   }
 
   private dispose(): void {
+    // Changes made after the loss must reach the hash that the restarted page reads.
+    this.urlSync.flush();
     for (const w of this.saveWaiters) w.reject(new Error('the GPU device was lost'));
     this.saveWaiters = [];
     this.life.dispose();

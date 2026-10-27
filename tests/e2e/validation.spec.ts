@@ -93,6 +93,21 @@ test('a zoom sends the panel back to waiting, then measures the new view', async
   expect((await stats(page)).validationMs).toBeGreaterThan(0);
 });
 
+test('going back to the measured view before the new one settles shows its result again', async ({
+  page,
+}) => {
+  await openApp(page, full(30));
+  await expect(panel(page)).toHaveAttribute('data-state', 'done');
+  await view(page).focus();
+  await page.keyboard.press('Minus');
+  await expect(panel(page)).toHaveAttribute('data-state', 'waiting');
+  await expect(panel(page)).toContainText('33.0 M');
+  await page.keyboard.press('Equal');
+  await expect(panel(page)).toHaveAttribute('data-state', 'done');
+  await expect(panel(page)).toContainText('30.0 M');
+  expect((await stats(page)).distance).toBe(30);
+});
+
 test('nothing is measured while the panel is closed', async ({ page }) => {
   await openApp(page);
   const runs = (await stats(page)).validationRuns;

@@ -77,6 +77,28 @@ test('A toggles anti-aliasing', async ({ page }) => {
   expect(s.refineMs).toBe(0);
 });
 
+test('after Restart with the keyboard, focus moves to the new view', async ({ page }) => {
+  await openApp(page);
+  await page.evaluate(() => window.photonring!.debug.destroyDevice());
+  const restart = page.getByRole('button', { name: /restart/i });
+  await expect(restart).toBeFocused();
+  await page.keyboard.press('Enter');
+  await waitForFullImage(page);
+  await expect(view(page)).toBeFocused();
+});
+
+test('a change made just before Restart survives it', async ({ page }) => {
+  await openApp(page);
+  await page.getByRole('button', { name: 'Controls', exact: true }).click();
+  await page.evaluate(() => window.photonring!.debug.destroyDevice());
+  await expect(page.getByRole('alert')).toBeVisible();
+  // Within the URL's 300 ms debounce.
+  await page.getByRole('checkbox', { name: 'Anti-aliasing', exact: true }).click();
+  await page.getByRole('button', { name: /restart/i }).click();
+  await waitForFullImage(page);
+  expect((await stats(page)).antialias).toBe(false);
+});
+
 test('device loss shows a recoverable message', async ({ page }) => {
   await page.goto('/');
   await waitForFullImage(page);

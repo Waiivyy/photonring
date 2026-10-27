@@ -145,5 +145,7 @@ export function download(blob: Blob, name: string, life: Lifecycle): void {
   document.body.append(a);
   a.click();
   a.remove();
+  // Freed after a while, or at teardown (which cancels the timer); freeing twice is harmless.
   life.timeout(() => URL.revokeObjectURL(url), 10_000);
+  life.onDispose(() => URL.revokeObjectURL(url));
 }
