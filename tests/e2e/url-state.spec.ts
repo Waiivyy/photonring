@@ -1,7 +1,15 @@
 // The view state in the URL hash, in the real page (Stage 4 Playwright list: "URL state round
 // trip including hostile input"; spec section 5, "untrusted input").
 import type { Page } from '@playwright/test';
-import { expect, openApp, stats, test, view, waitForFullImage } from './fixtures.ts';
+import {
+  expect,
+  openApp,
+  stats,
+  test,
+  view,
+  waitForFullImage,
+  waitForSettled,
+} from './fixtures.ts';
 
 const NOTICE = 'Some settings in the link were invalid or out of range and have been adjusted.';
 const canonical = (patch: Record<string, string> = {}) => {
@@ -120,7 +128,7 @@ test('toggles driven by the hash share the brightness limit', async ({ page }) =
   const times = s.toggleApplyTimes.slice(-n);
   expect(n).toBeLessThanOrEqual(4);
   for (let i = 1; i < times.length; i++)
-    expect(times[i]! - times[i - 1]!).toBeGreaterThanOrEqual(499);
+    expect(times[i]! - times[i - 1]!).toBeGreaterThanOrEqual(500);
   for (const t of times)
     expect(times.filter((u) => u >= t && u <= t + 1000).length).toBeLessThanOrEqual(3);
   expect(s.disk).toBe(true);
@@ -147,6 +155,7 @@ for (const [input, expected, notice] of HOSTILE) {
   test(`hostile hash ${name}: rendered safely and canonicalised`, async ({ page, context }) => {
     const clean = await context.newPage();
     await openApp(clean, `/${expected}`);
+    await waitForSettled(clean);
     const cleanCount = await elementCount(clean);
     await clean.close();
 
@@ -157,6 +166,7 @@ for (const [input, expected, notice] of HOSTILE) {
     expect(s.distance).toBeGreaterThanOrEqual(5);
     expect(s.distance).toBeLessThanOrEqual(200);
     await expect.poll(() => hash(page)).toBe(expected);
+    await waitForSettled(page);
     expect(await elementCount(page)).toBe(cleanCount);
     if (notice) await expect(page.locator('#announcer')).toHaveText(NOTICE);
     await expect(page.locator('img[src="x"]')).toHaveCount(0);
@@ -166,7 +176,7 @@ for (const [input, expected, notice] of HOSTILE) {
     await expect.poll(async () => (await stats(page)).distance).toBe(77);
     await page.evaluate((h) => (location.hash = h), input);
     await expect.poll(() => hash(page)).toBe(expected);
-    await waitForFullImage(page);
+    await waitForSettled(page);
     s = await stats(page);
     expect(s.state).toBe('rendering');
     expect(await elementCount(page)).toBe(cleanCount);

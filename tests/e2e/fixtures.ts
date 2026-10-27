@@ -53,3 +53,9 @@ export async function openApp(page: Page, path = '/'): Promise<void> {
 }
 
 export const view = (page: Page) => page.getByRole('img', { name: /black hole/i });
+
+/** Waits for the full image and for any ring overlays to be drawn for it. */
+export async function waitForSettled(page: Page): Promise<void> {
+  await waitForFullImage(page);
+  await page.waitForFunction(() => window.photonring?.debug.stats().ringsState !== 'pending');
+}

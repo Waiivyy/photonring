@@ -45,6 +45,9 @@ describe('lifecycle', () => {
     let aborted = false;
     life.signal.addEventListener('abort', () => (aborted = true));
     life.dispose();
+    // Released by dispose itself, before any time passes.
+    expect(clock.pendingTimers).toBe(0);
+    expect(clock.pendingFrames).toBe(0);
     clock.advance(100);
     clock.runFrames();
     expect(ran).toEqual(['second', 'first']);
