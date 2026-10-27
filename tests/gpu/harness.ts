@@ -69,10 +69,10 @@ const harness: Harness = {
     const wallMs: number[] = [];
     for (let i = 0; i < repeats; i++) {
       const t0 = performance.now();
-      const ms = await r.renderAll();
+      const { traceMs, refineMs } = await r.renderAll();
       await r.device.queue.onSubmittedWorkDone();
       wallMs.push(performance.now() - t0);
-      gpuMs.push(info.timestampQuery ? ms : null);
+      gpuMs.push(info.timestampQuery ? traceMs + (refineMs ?? 0) : null);
     }
     return { gpuMs, wallMs };
   },

@@ -8,6 +8,7 @@ import {
   wgslStruct,
   type StructField,
 } from '../../src/gpu/host/layout.ts';
+import { halfToFloat } from '../../src/gpu/host/half.ts';
 import { BLACKBODY_LUT, buildBlackbodyLut, lutColour } from '../../src/gpu/host/lut.ts';
 import { blackbodyColour, luminance } from '../../src/physics/index.ts';
 
@@ -207,5 +208,18 @@ describe('blackbody lookup table for the GPU', () => {
       ];
       expect(lut.data[4 * i + 3]).toBeCloseTo(luminance(rgb), 5);
     }
+  });
+});
+
+describe('half-precision readback', () => {
+  it('decodes binary16 values, including subnormals and specials', () => {
+    expect(halfToFloat(0x0000)).toBe(0);
+    expect(halfToFloat(0x3c00)).toBe(1);
+    expect(halfToFloat(0x4880)).toBe(9);
+    expect(halfToFloat(0xc000)).toBe(-2);
+    expect(halfToFloat(0x7bff)).toBe(65504);
+    expect(halfToFloat(0x0001)).toBe(2 ** -24);
+    expect(halfToFloat(0x7c00)).toBe(Infinity);
+    expect(halfToFloat(0x7e00)).toBeNaN();
   });
 });

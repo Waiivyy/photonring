@@ -1,6 +1,6 @@
 // Generated WGSL: uniform structs and constants taken from the TypeScript sources of truth
 // (physics library, star layers, colour table), so CPU and GPU cannot disagree on them.
-import { STAR_LAYERS } from '../../physics/index.ts';
+import { luminance, STAR_LAYERS } from '../../physics/index.ts';
 import { wgslStruct, type StructField } from './layout.ts';
 
 /** Per-dispatch parameters of the compute shaders. */
@@ -29,6 +29,11 @@ export const FRAME_FIELDS: readonly StructField[] = [
   ['diskOuter', 'f32'],
   ['diskOpacity', 'f32'],
   ['diskTemperatureScale', 'f32'],
+  ['bandCosMin', 'f32'],
+  ['bandCosMax', 'f32'],
+  ['aaThreshold', 'f32'],
+  ['exposure', 'f32'],
+  ['toneMapping', 'u32'],
 ];
 
 /** Number of plane-crossing radii the parity entry point reports per ray. */
@@ -76,6 +81,7 @@ export function wgslHeader(lut: LutParams): string {
     `var<private> STAR_LAYERS: array<vec4f, ${STAR_LAYERS.length}> = array<vec4f, ${STAR_LAYERS.length}>(${layers.join(', ')});`,
     `var<private> STAR_SALTS: array<u32, ${STAR_LAYERS.length}> = array<u32, ${STAR_LAYERS.length}>(${salts.join(', ')});`,
     `const STAR_TAIL: f32 = ${f32(Math.exp(-8))};`,
+    `const LUMINANCE_WEIGHTS: vec3f = vec3f(${[luminance([1, 0, 0]), luminance([0, 1, 0]), luminance([0, 0, 1])].map(f32).join(', ')});`,
     `const LUT_SIZE: u32 = ${lut.size}u;`,
     `const LUT_TMIN: f32 = ${f32(lut.tMin)};`,
     `const LUT_TMAX: f32 = ${f32(lut.tMax)};`,

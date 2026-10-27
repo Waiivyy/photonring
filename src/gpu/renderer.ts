@@ -7,6 +7,8 @@ import {
   type CameraParams,
   type DiskSettings,
 } from '../physics/index.ts';
+import { AA_THRESHOLD, criticalBand } from './host/antialias.ts';
+import { halfToFloat } from './host/half.ts';
 import { layoutStruct, packStruct } from './host/layout.ts';
 import { BLACKBODY_LUT } from './host/lut.ts';
 import { planTiles, type Tile } from './host/tiles.ts';
@@ -65,7 +67,14 @@ async function compile(device: GPUDevice, code: string, label: string): Promise<
   return module;
 }
 
-type Layouts = Record<'common' | 'image' | 'empty' | 'rays' | 'sky' | 'blit', GPUBindGroupLayout>;
+type Layouts = Record<
+  'common' | 'image' | 'refine' | 'empty' | 'rays' | 'sky' | 'blit',
+  GPUBindGroupLayout
+>;
+type Pipelines = Record<'render' | 'refine' | 'rays' | 'sky', GPUComputePipeline>;
+
+/** Which compute pass a tile dispatch runs: one sample per pixel, or anti-aliasing. */
+export type TilePass = 'trace' | 'refine';
 
 export class GpuRenderer {
   readonly device: GPUDevice;
@@ -75,21 +84,25 @@ export class GpuRenderer {
   private readonly empty: GPUBindGroup;
   private readonly sampler: GPUSampler;
   private readonly blitPipelines = new Map<GPUTextureFormat, GPURenderPipeline>();
+  /** One sample per pixel (first pass). */
   private image: GPUTexture | null = null;
   private imageGroup: GPUBindGroup | null = null;
+  /** Anti-aliased pixels (alpha = samples) over the first pass; alpha 0 elsewhere. */
+  private refined: GPUTexture | null = null;
+  private refineGroup: GPUBindGroup | null = null;
   private scene: SceneParams | null = null;
   private querySet: GPUQuerySet | null = null;
   private queryResolve: GPUBuffer | null = null;
   private queryRead: GPUBuffer | null = null;
   private queryBusy = false;
   private readonly layouts: Layouts;
-  private readonly pipelines: Record<'render' | 'rays' | 'sky', GPUComputePipeline>;
+  private readonly pipelines: Pipelines;
   private readonly blitModule: GPUShaderModule;
 
   private constructor(
     device: GPUDevice,
     layouts: Layouts,
-    pipelines: Record<'render' | 'rays' | 'sky', GPUComputePipeline>,
+    pipelines: Pipelines,
     blitModule: GPUShaderModule,
     timestampQuery: boolean,
   ) {
@@ -155,6 +168,16 @@ export class GpuRenderer {
           },
         ],
       }),
+      refine: device.createBindGroupLayout({
+        entries: [
+          { binding: 1, visibility: C, texture: { sampleType: 'float' } },
+          {
+            binding: 2,
+            visibility: C,
+            storageTexture: { access: 'write-only', format: IMAGE_FORMAT },
+          },
+        ],
+      }),
       empty: device.createBindGroupLayout({ entries: [] }),
       rays: device.createBindGroupLayout({
         entries: [
@@ -173,6 +196,7 @@ export class GpuRenderer {
           { binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
           { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
           { binding: 2, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
+          { binding: 3, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
         ],
       }),
     };
@@ -188,6 +212,7 @@ export class GpuRenderer {
       });
     const pipelines = {
       render: await pipeline([layouts.common, layouts.image], 'renderTile'),
+      refine: await pipeline([layouts.common, layouts.refine], 'refineTile'),
       rays: await pipeline([layouts.common, layouts.empty, layouts.rays], 'traceRays', {
         LOG_CROSSINGS: 1,
       }),
@@ -204,23 +229,60 @@ export class GpuRenderer {
     return this.image?.height ?? 0;
   }
 
-  /** (Re)allocates the linear image. Callers clamp the size with chooseInternalResolution. */
+  /** (Re)allocates the images. Callers clamp the size with chooseInternalResolution. */
   resize(width: number, height: number): void {
     if (this.image && this.image.width === width && this.image.height === height) return;
     this.image?.destroy();
-    this.image = this.device.createTexture({
-      label: 'linear image',
-      size: { width, height },
-      format: IMAGE_FORMAT,
-      usage:
-        GPUTextureUsage.STORAGE_BINDING |
-        GPUTextureUsage.TEXTURE_BINDING |
-        GPUTextureUsage.COPY_SRC,
-    });
+    this.refined?.destroy();
+    const image = (label: string) =>
+      this.device.createTexture({
+        label,
+        size: { width, height },
+        format: IMAGE_FORMAT,
+        usage:
+          GPUTextureUsage.STORAGE_BINDING |
+          GPUTextureUsage.TEXTURE_BINDING |
+          GPUTextureUsage.RENDER_ATTACHMENT |
+          GPUTextureUsage.COPY_SRC,
+      });
+    this.image = image('linear image');
+    this.refined = image('anti-aliased pixels');
     this.imageGroup = this.device.createBindGroup({
       layout: this.layouts.image,
       entries: [{ binding: 0, resource: this.image.createView() }],
     });
+    this.refineGroup = this.device.createBindGroup({
+      layout: this.layouts.refine,
+      entries: [
+        { binding: 1, resource: this.image.createView() },
+        { binding: 2, resource: this.refined.createView() },
+      ],
+    });
+    this.clearRefined();
+  }
+
+  /** Forgets all anti-aliased pixels, so the blit shows the first pass everywhere. */
+  clearRefined(): void {
+    if (!this.refined) return;
+    const encoder = this.device.createCommandEncoder();
+    encoder
+      .beginRenderPass({
+        colorAttachments: [
+          {
+            view: this.refined.createView(),
+            loadOp: 'clear',
+            storeOp: 'store',
+            clearValue: [0, 0, 0, 0],
+          },
+        ],
+      })
+      .end();
+    this.device.queue.submit([encoder.finish()]);
+  }
+
+  /** True when the current scene asks for the anti-aliasing pass. */
+  get antialiasing(): boolean {
+    return this.scene !== null && this.scene.antialias && this.scene.mode === 'colour';
   }
 
   setScene(scene: SceneParams): void {
@@ -237,6 +299,7 @@ export class GpuRenderer {
     const f = cameraFrame(scene.camera, scene.M);
     const width = Math.max(1, this.width);
     const height = Math.max(1, this.height);
+    const band = criticalBand(scene.camera.distance, scene.M, f.tanHalfFovY, height);
     const data = packStruct(FRAME_FIELDS, {
       position: f.position,
       r0: scene.camera.distance,
@@ -262,6 +325,11 @@ export class GpuRenderer {
       diskOuter: scene.disk?.rOut ?? 0,
       diskOpacity: scene.disk?.opacity ?? 0,
       diskTemperatureScale: scene.disk ? diskTemperatureScale(scene.disk.peakTemperature) : 0,
+      bandCosMin: band.cosMin,
+      bandCosMax: band.cosMax,
+      aaThreshold: AA_THRESHOLD,
+      exposure: scene.exposure,
+      toneMapping: scene.toneMapping && scene.mode === 'colour' ? 1 : 0,
     });
     this.device.queue.writeBuffer(this.uniform, 0, data);
   }
@@ -272,8 +340,9 @@ export class GpuRenderer {
    * returned promise resolves to GPU milliseconds; otherwise to wall-clock milliseconds until the
    * queue drains, which overestimates.
    */
-  dispatchTiles(tiles: readonly Tile[]): Promise<number> {
-    if (!this.imageGroup) throw new Error('resize must be called before rendering');
+  dispatchTiles(tiles: readonly Tile[], pass: TilePass = 'trace'): Promise<number> {
+    const group = pass === 'trace' ? this.imageGroup : this.refineGroup;
+    if (!group) throw new Error('resize must be called before rendering');
     const timed = this.querySet !== null && !this.queryBusy && tiles.length > 0;
     const start = performance.now();
     tiles.forEach((tile, k) => {
@@ -288,12 +357,12 @@ export class GpuRenderer {
             }
           : undefined;
       const writesAny = timestampWrites && (k === 0 || k === tiles.length - 1);
-      const pass = encoder.beginComputePass(writesAny ? { timestampWrites } : {});
-      pass.setPipeline(this.pipelines.render);
-      pass.setBindGroup(0, this.common);
-      pass.setBindGroup(1, this.imageGroup);
-      pass.dispatchWorkgroups(Math.ceil(tile.width / 8), Math.ceil(tile.height / 8));
-      pass.end();
+      const compute = encoder.beginComputePass(writesAny ? { timestampWrites } : {});
+      compute.setPipeline(pass === 'trace' ? this.pipelines.render : this.pipelines.refine);
+      compute.setBindGroup(0, this.common);
+      compute.setBindGroup(1, group);
+      compute.dispatchWorkgroups(Math.ceil(tile.width / 8), Math.ceil(tile.height / 8));
+      compute.end();
       if (timed && k === tiles.length - 1 && this.querySet && this.queryResolve && this.queryRead) {
         encoder.resolveQuerySet(this.querySet, 0, 2, this.queryResolve, 0);
         encoder.copyBufferToBuffer(this.queryResolve, 0, this.queryRead, 0, 16);
@@ -314,9 +383,16 @@ export class GpuRenderer {
     return this.device.queue.onSubmittedWorkDone().then(() => performance.now() - start);
   }
 
-  /** Renders the whole image and waits for the GPU. */
-  async renderAll(): Promise<number> {
-    return this.dispatchTiles(planTiles(this.width, this.height, TILE_SIZE));
+  /**
+   * Renders the whole image (first pass, then anti-aliasing when the scene asks for it) and
+   * waits for the GPU. Returns the milliseconds of each pass, as dispatchTiles measures them.
+   */
+  async renderAll(): Promise<{ traceMs: number; refineMs: number | null }> {
+    const tiles = planTiles(this.width, this.height, TILE_SIZE);
+    this.clearRefined();
+    const traceMs = await this.dispatchTiles(tiles, 'trace');
+    const refineMs = this.antialiasing ? await this.dispatchTiles(tiles, 'refine') : null;
+    return { traceMs, refineMs };
   }
 
   private blitPipeline(format: GPUTextureFormat): GPURenderPipeline {
@@ -336,7 +412,7 @@ export class GpuRenderer {
 
   /** Tone maps (or clamps) the linear image into a render target. */
   blit(target: GPUTextureView, format: GPUTextureFormat): void {
-    if (!this.image || !this.scene) return;
+    if (!this.image || !this.refined || !this.scene) return;
     const tone = this.scene.toneMapping && this.scene.mode === 'colour';
     this.device.queue.writeBuffer(
       this.blitUniform,
@@ -349,6 +425,7 @@ export class GpuRenderer {
         { binding: 0, resource: { buffer: this.blitUniform } },
         { binding: 1, resource: this.image.createView() },
         { binding: 2, resource: this.sampler },
+        { binding: 3, resource: this.refined.createView() },
       ],
     });
     const encoder = this.device.createCommandEncoder();
@@ -365,8 +442,33 @@ export class GpuRenderer {
   }
 
   /** Samples behind each pixel of the presented image, row-major (for tests). */
-  readSampleCounts(): Promise<Uint8Array> {
-    return Promise.resolve(new Uint8Array(this.width * this.height).fill(1));
+  async readSampleCounts(): Promise<Uint8Array> {
+    if (!this.refined) throw new Error('resize must be called before reading');
+    const { width, height } = this;
+    const bytesPerRow = Math.ceil((width * 8) / 256) * 256;
+    const read = this.device.createBuffer({
+      size: bytesPerRow * height,
+      usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+    });
+    const encoder = this.device.createCommandEncoder();
+    encoder.copyTextureToBuffer(
+      { texture: this.refined },
+      { buffer: read, bytesPerRow },
+      { width, height },
+    );
+    this.device.queue.submit([encoder.finish()]);
+    await read.mapAsync(GPUMapMode.READ);
+    const halves = new Uint16Array(read.getMappedRange());
+    const counts = new Uint8Array(width * height);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const alpha = halfToFloat(halves[(y * bytesPerRow) / 2 + x * 4 + 3] as number);
+        counts[y * width + x] = alpha > 0 ? alpha : 1;
+      }
+    }
+    read.unmap();
+    read.destroy();
+    return counts;
   }
 
   /** The presented image as 8-bit RGB, through the same blit (for tests). */
@@ -515,6 +617,7 @@ export class GpuRenderer {
 
   destroy(): void {
     this.image?.destroy();
+    this.refined?.destroy();
     this.uniform.destroy();
     this.blitUniform.destroy();
     this.querySet?.destroy();

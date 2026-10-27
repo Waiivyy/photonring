@@ -1,9 +1,11 @@
 // Presents the linear image: tone mapping (or clamping, for validation and debug views) and the
-// sRGB transfer function, as in encodeImage (src/cpu-renderer/render.ts).
+// sRGB transfer function, as in encodeImage (src/cpu-renderer/render.ts). Anti-aliased pixels
+// (alpha > 0 in the refined image) replace the one-sample image.
 
 @group(0) @binding(0) var<uniform> blit: BlitParams;
 @group(0) @binding(1) var source: texture_2d<f32>;
 @group(0) @binding(2) var sourceSampler: sampler;
+@group(0) @binding(3) var refinedImage: texture_2d<f32>;
 
 struct VertexOut {
   @builtin(position) position: vec4f,
@@ -27,7 +29,13 @@ fn srgbEncode(c: f32) -> f32 {
 
 @fragment
 fn fragmentMain(in: VertexOut) -> @location(0) vec4f {
-  let c = max(textureSampleLevel(source, sourceSampler, in.uv, 0.0).rgb, vec3f(0.0));
+  let p = vec2i(in.position.xy);
+  let refined = textureLoad(refinedImage, p, 0);
+  var c = textureLoad(source, p, 0).rgb;
+  if (refined.a > 0.0) {
+    c = refined.rgb;
+  }
+  c = max(c, vec3f(0.0));
   var v = min(c, vec3f(1.0));
   if (blit.toneMapping == 1u) {
     v = 1.0 - exp(-blit.exposure * c);

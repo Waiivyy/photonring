@@ -3,12 +3,20 @@
 import blitSource from '../shaders/blit.wgsl?raw';
 import diskSource from '../shaders/disk.wgsl?raw';
 import geodesicSource from '../shaders/geodesic.wgsl?raw';
+import refineSource from '../shaders/refine.wgsl?raw';
 import renderSource from '../shaders/render.wgsl?raw';
 import starfieldSource from '../shaders/starfield.wgsl?raw';
 import { wgslHeader, type LutParams } from './host/wgsl.ts';
 
 export function computeShaderSource(lut: LutParams): string {
-  return [wgslHeader(lut), renderSource, geodesicSource, diskSource, starfieldSource].join('\n');
+  return [
+    wgslHeader(lut),
+    renderSource,
+    refineSource,
+    geodesicSource,
+    diskSource,
+    starfieldSource,
+  ].join('\n');
 }
 
 export function blitShaderSource(lut: LutParams): string {
