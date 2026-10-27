@@ -53,6 +53,35 @@ export function sweptAngleQuadrature(b: number, uA: number, uB: number, M: numbe
 }
 
 /**
+ * Swept angle of a plunging photon (0 <= b < b_c) over any interval 0 <= uA < uB, including
+ * through the photon sphere and past the horizon, where sweptAngleQuadrature stops. With
+ * v = u - 1/(3M) the orbit polynomial is exactly P = eps + v^2 (1 + 2Mv), eps = 1/b^2 - 1/b_c^2,
+ * and v = sqrt(eps) sinh(tau) turns the integrand into the smooth
+ * 1 / sqrt(1 + 2M sqrt(eps) sinh^3(tau) / cosh^2(tau)); 1 + 2Mv >= 1/3 for every u >= 0.
+ * Derivation: docs/PHYSICS.md, section 8a.
+ */
+export function sweptAnglePlunging(b: number, uA: number, uB: number, M: number): number {
+  if (!(b >= 0 && b < criticalImpactParameter(M))) {
+    throw new RangeError(`sweptAnglePlunging needs 0 <= b < b_c, got ${b}`);
+  }
+  if (!Number.isFinite(uB)) throw new RangeError(`uB must be finite, got ${uB}`);
+  checkInterval(uA, uB);
+  if (b === 0) return 0;
+  const bc = criticalImpactParameter(M);
+  const se = Math.sqrt(1 / (b * b) - 1 / (bc * bc));
+  const uc = 1 / (3 * M);
+  const tA = Math.asinh((uA - uc) / se);
+  const tB = Math.asinh((uB - uc) / se);
+  const k = 2 * M * se;
+  const f = (t: number) => {
+    const sh = Math.sinh(t);
+    const ch = Math.cosh(t);
+    return 1 / Math.sqrt(1 + (k * sh * sh * sh) / (ch * ch));
+  };
+  return integrate(f, tA, tB, Math.max(4, Math.ceil((tB - tA) / 0.5)));
+}
+
+/**
  * The same swept angle as a closed form in Carlson's R_F, for b > b_c and 0 <= uA < uB <= u2.
  * Uses the reduction of a cubic elliptic integral to R_F (DLMF 19.29.4 with a4 = 1, b4 = 0).
  */

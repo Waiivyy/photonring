@@ -9,5 +9,6 @@ export * from './redshift.ts';
 export * from './integrators.ts';
 export * from './camera.ts';
 export * from './raytrace.ts';
+export * from './lensing.ts';
 export * from './colour.ts';
 export * from './starfield.ts';

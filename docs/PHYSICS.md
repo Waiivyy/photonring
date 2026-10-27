@@ -102,11 +102,16 @@ Written naively this loses all precision in both limits (roots merge at $b_c$; $
 large $b$). With $k = 1/(3M)$ and $\vartheta = \pi/3 - \eta =
 \tfrac43\arcsin\sqrt{(b-b_c)/(2b)}$, the roots and their differences become
 
-$$ u_{1,2} = k\sin^2\tfrac{\eta}{2} \mp \tfrac{\sqrt3}{2}k\sin\eta,\quad
-u_3 = k(\tfrac12 + \cos\eta),$$
-$$u_3-u_2 = \sqrt3\,k\sin\vartheta,\quad u_2-u_1 = \sqrt3\,k\sin\eta,\quad
+$$
+u_{1,2} = k\sin^2\tfrac{\eta}{2} \mp \tfrac{\sqrt3}{2}k\sin\eta,\quad
+u_3 = k(\tfrac12 + \cos\eta),
+$$
+
+$$
+u_3-u_2 = \sqrt3\,k\sin\vartheta,\quad u_2-u_1 = \sqrt3\,k\sin\eta,\quad
 u_3-u_1 = \sqrt3\,k\cos(\eta-\tfrac{\pi}{6}),\quad \tfrac{1}{3M}-u_2 = k(\sin^2\tfrac{\vartheta}{2} +
-\tfrac{\sqrt3}{2}\sin\vartheta).$$
+\tfrac{\sqrt3}{2}\sin\vartheta).
+$$
 
 `orbitRoots` computes whichever of $\eta$ or $\vartheta$ is small directly. Tests check the Vieta
 relations ($\sum u_i = 1/(2M)$, $\prod u_i = -1/(2Mb^2)$, pairwise sum $= 0$) for
@@ -124,8 +129,10 @@ $$\sin\psi = \frac{b}{r}\sqrt{1-\frac{2M}{r}} .$$
 
 **Shadow.** Rays with $b < b_c$ traced backwards are captured, so the shadow edge is at
 
-$$\sin\psi_{sh} = \frac{3\sqrt3\,M}{r_o}\sqrt{1-\frac{2M}{r_o}}, \qquad
-\cos\psi_{sh} = \frac{(r_o-3M)\sqrt{r_o+6M}}{r_o^{3/2}},$$
+$$
+\sin\psi_{sh} = \frac{3\sqrt3\,M}{r_o}\sqrt{1-\frac{2M}{r_o}}, \qquad
+\cos\psi_{sh} = \frac{(r_o-3M)\sqrt{r_o+6M}}{r_o^{3/2}},
+$$
 
 measured from the direction to the black hole. The cosine follows from the factorisation
 $r^3 - 27M^2r + 54M^3 = (r-3M)^2(r+6M)$; its sign selects $\psi_{sh} > \pi/2$ inside the photon
@@ -145,6 +152,89 @@ that is, the radial component shrinks by $\sqrt{1-2M/r}$ and tangential componen
 $|\mathbf{x}'|^2 = (1-2M/r)\cos^2\psi + \sin^2\psi$, and the energy integral gives
 $1/b^2 = (1-2M/r)/(r^2\sin^2\psi)$, the same $b$ as above. A test checks that the shadow-edge
 direction maps to exactly $b_c$ by this route.
+
+## 6a. Lensed outlines and ring images (overlays)
+
+**The shadow edge is the outline of the horizon and of the photon sphere.** Take a static
+observer at $r_o > 3M$. With $P(u) = 1/b^2 - u^2(1-2Mu)$, the term $u^2(1-2Mu)$ has its maximum
+on $(0, 1/(2M)]$ at $u = 1/(3M)$, where it equals $1/(27M^2) = 1/b_c^2$. So for $b < b_c$,
+$P > 0$ everywhere and an inward ray runs through every radius $R \le 3M$; for $b > b_c$ the
+turning point satisfies $u_2 < 1/(3M) \le 1/R$, so the ray never reaches $R$; $b = b_c$ only
+approaches $3M$. Outward rays from $r_o > 3M$ never come back. Hence the view directions whose
+backward rays reach a sphere $R \le 3M$ are exactly the open cone $\alpha < \psi_{sh}$ around
+the direction to the hole, at every image order. A drawn "lensed horizon" or "lensed photon
+sphere" would be the shadow-edge circle again, so the overlays draw the shadow edge once and say
+so in its legend. A test traces rays half a pixel either side of the edge at five distances, with
+capture at $3M$ and at $2.001M$ (`tests/unit/camera.test.ts`).
+
+**What is drawn instead: images of circles in the disk plane.** For the horizon, photon sphere
+and ISCO toggles the overlays draw where the circles $r = 2M$, $3M$ and $6M$ in the equatorial
+plane appear through the bent light. The ISCO circle is the inner edge of the default disk. The
+direct image of $r = 2M$ is the edge of the "inner shadow" for a disk that emits down to the
+horizon (Chael, Johnson and Lupsasca 2021); photonring's disk stops at the ISCO, so no brightness
+edge appears there in this render.
+
+**Image order.** The order-$n$ image of a ring point is reached at the $(n+1)$-th crossing of
+the disk plane along the backward ray, not counting the observer's own position: the same order
+in which `traceRay` and the WGSL crossing log record crossings. For the image direction
+$\theta$, measured from image right towards image up, the ray plane is spanned by $e_1$, the
+direction from the hole to the observer (minus forward), and
+$e_2 = \cos\theta\, r + \sin\theta\, u$, where $r$ and $u$ are the camera's right and up
+vectors. The camera frame has a horizontal right vector and an up vector with $z$ component
+$\cos\epsilon$ at elevation $\epsilon$, so the $z$ components are $\sin\epsilon$ for $e_1$
+and $\sin\theta\cos\epsilon$ for $e_2$. The crossings are at $\phi_0 + n\pi$, where
+`firstPlaneCrossingAngle` (shared with `traceRay`) gives $\phi_0$ from those two components.
+The curves do not depend on the azimuth: a rotation about the disk axis turns the ring and the
+camera together.
+
+**The view angle of a ring point.** `ringImageAngle(r_o, R, sweep)` returns the angle $\alpha$
+from the direction to the hole at which the observer sees the point of radius $R$ that the
+backward ray reaches after sweeping the orbital angle `sweep`. With
+$k = \sqrt{1-2M/r_o}/r_o$, $\sin\alpha = k\,b$. Writing $\Phi(b; u_A, u_B)$ for the swept angle
+over $[u_A, u_B]$ (section 8a below $b_c$, the Carlson form of section 8 above), the branches are:
+
+- $R < r_o$, $R \le 3M$: only plunging rays reach $R$, and the inbound sweep
+  $\Phi(b; u_o, u_R)$ grows from $0$ at $\alpha \to 0$ to infinity at $\alpha \to \psi_{sh}$,
+  because $\partial_b P^{-1/2} = P^{-3/2}/b^3 > 0$ under the integral. Root in
+  $x = \ln(\psi_{sh} - \alpha)$.
+- $R < r_o$, $R > 3M$: let $b_t = R/\sqrt{1-2M/R}$ be the ray that turns exactly at $R$, and
+  $\Phi_t = \Phi(b_t; u_o, u_R)$. For sweep $\le \Phi_t$ the root is on the inbound branch,
+  $\alpha \in (0, \alpha_t]$ (plunging below $b_c$, scattering above; continuous at $b_c$ because
+  the ray stays outside $3M$). Otherwise it is on the outbound branch,
+  $\psi_{sh} < \alpha < \alpha_t$, with sweep $\Phi(b; u_o, u_2) + \Phi(b; u_R, u_2)$, from
+  $\Phi_t$ to infinity; root in $x = \ln(\alpha - \psi_{sh})$.
+- $R > r_o$ (the ISCO seen from $5M \le r_o < 6M$): outward rays ($\alpha \ge \pi/2$) sweep
+  $\Phi(b; u_R, u_o)$; inward rays with $b > b_c$ turn and sweep
+  $\Phi(b; u_o, u_2) + \Phi(b; u_R, u_2)$. The sweep falls from infinity at $\psi_{sh}$ to $0$ at
+  $\pi$; root in $x = \ln(\alpha - \psi_{sh})$.
+- $R = r_o$ (to $10^{-12}$ relative): outward rays never return, so
+  $\psi_{sh} < \alpha \le \pi/2$ and the sweep is $2\,\Phi(b; u_o, u_2)$.
+
+The logarithmic variables resolve the divergence at the shadow edge. Each branch is monotone in
+its variable, so every sweep has one root; the plunging branch is proved above, and the other
+branches are checked numerically: a scan over 2000 view angles in six cases finds exactly one
+sign change of $r(\text{sweep}) - R$. The solver is Brent's method (tolerance $10^{-15}$ in the
+variable, at most 100 iterations), brackets start $10^{-13}\psi_{sh}$ from the edge, an impact
+parameter that rounds onto $b_c$ is moved one ulp to the side of its branch, and the second
+interval is clamped to zero length when rounding puts $u_2$ just below $1/R$ at the fold.
+
+**Checks** (`tests/unit/lensing.test.ts`). The radius reached at the target sweep agrees with
+the Binet integrator (f64, $d\phi = 5\times10^{-4}$) within $10^{-9}$ relative for
+$r_o \in \{5, 5.5, 6, 6.5, 10, 30, 200\}$, $R \in \{2, 3, 6\}$ and eight sweeps up to $2\pi$, and
+with the exact elliptic-integral reference for $R = 6$. Images of $R \le 3M$ lie inside the edge,
+and at a sweep of $4\pi$ every image is within $10^{-3}\psi_{sh}$ of it.
+
+**Which orders are drawn.** Face-on at $30M$ (measured with `ringImageAngle`; the edge is at
+$9.6327°$):
+
+| Ring     | $n = 0$    | $n = 1$                                           |
+| -------- | ---------- | ------------------------------------------------- |
+| $r = 2M$ | $5.5291°$  | $9.3441°$                                         |
+| $r = 3M$ | $7.5649°$  | $9.6244°$, $0.14$ px inside the edge at 1080 rows |
+| $r = 6M$ | $13.4888°$ | $10.0728°$, the visible secondary disk edge       |
+
+The overlays draw $n = 0$ for $2M$ and $3M$ (the $n = 1$ image of $3M$ would sit on the edge
+line) and $n = 0$ and $n = 1$ for the ISCO.
 
 ## 7. The Binet form used for integration
 
@@ -226,8 +316,10 @@ ray from infinity is $\alpha(b) = 2\int_0^{u_2} du/\sqrt{P(u)} - \pi$, as in the
 **Method 1: quadrature after two changes of variables** (`sweptAngleQuadrature`). With
 $u = u_2 - s^2$, $P(u) = s^2 Q(u_2 - s^2)$ where, exactly (Q is quadratic in u),
 
-$$Q(u_2 - s^2) = Q_0 + \kappa s^2 - 2Ms^4,\qquad Q_0 = 6Mu_2\left(\tfrac{1}{3M}-u_2\right),\quad
-\kappa = 6Mu_2 - 1,$$
+$$
+Q(u_2 - s^2) = Q_0 + \kappa s^2 - 2Ms^4,\qquad Q_0 = 6Mu_2\left(\tfrac{1}{3M}-u_2\right),\quad
+\kappa = 6Mu_2 - 1,
+$$
 
 and the integral becomes $\int 2\,ds/\sqrt{Q_0 + \kappa s^2 - 2Ms^4}$: the turning-point
 singularity is gone. Near $b_c$, $Q_0 \to 0$ and the integrand develops a peak of width
@@ -240,10 +332,15 @@ precision. $Q_0$ is computed from the cancellation-free $1/(3M) - u_2$ of sectio
 **Method 2: elliptic integrals** (`sweptAngleElliptic`). With $X_i, Y_i$ the square roots of the
 three factors $(u-u_1), (u_2-u), (u_3-u)$ at $x = u_B$ and $y = u_A$,
 
-$$\int_y^x \frac{du}{\sqrt{2M(u-u_1)(u_2-u)(u_3-u)}} = \frac{2}{\sqrt{2M}}\,
-R_F(U_{12}^2, U_{13}^2, U_{14}^2),$$
-$$U_{12} = \frac{X_1X_2Y_3 + Y_1Y_2X_3}{x-y},\quad U_{13} = \frac{X_1X_3Y_2 + Y_1Y_3X_2}{x-y},\quad
-U_{14} = \frac{X_1Y_2Y_3 + Y_1X_2X_3}{x-y},$$
+$$
+\int_y^x \frac{du}{\sqrt{2M(u-u_1)(u_2-u)(u_3-u)}} = \frac{2}{\sqrt{2M}}\,
+R_F(U_{12}^2, U_{13}^2, U_{14}^2),
+$$
+
+$$
+U_{12} = \frac{X_1X_2Y_3 + Y_1Y_2X_3}{x-y},\quad U_{13} = \frac{X_1X_3Y_2 + Y_1Y_3X_2}{x-y},\quad
+U_{14} = \frac{X_1Y_2Y_3 + Y_1X_2X_3}{x-y},
+$$
 
 which is DLMF 19.29.4 with the fourth factor set to 1. $R_F$ uses Carlson's duplication algorithm
 (Carlson 1995, with his check values as tests). Sanity check: as $b \to \infty$ the formula
@@ -268,12 +365,37 @@ from $A_5/A_4$).
 $\bar b = \ln[216(7-4\sqrt3)] - \pi \approx -0.4002$ (his eqs. 47 and 48; the paper uses units
 $2M = 1$ and $u_m = 3\sqrt3/2$ there), written in the impact parameter:
 
-$$\alpha(b) = -\ln\left(\frac{b}{b_c} - 1\right) + \ln[216(7-4\sqrt3)] - \pi +
-O\big((b-b_c)\ln(b-b_c)\big).$$
+$$
+\alpha(b) = -\ln\left(\frac{b}{b_c} - 1\right) + \ln[216(7-4\sqrt3)] - \pi +
+O\big((b-b_c)\ln(b-b_c)\big).
+$$
 
 The brief's "logarithmic divergence, coefficients from Bozza 2002" is confirmed. Measured: the
 difference from the exact value is $\varepsilon(0.28\ln(1/\varepsilon) + 1.2)$ for
 $\varepsilon = b/b_c - 1$ from $10^{-2}$ to $10^{-8}$.
+
+## 8a. Swept angle of plunging photons
+
+For $b < b_c$ the reference quadrature of section 8 stops at $u = 1/(4M)$, but the ring images of
+section 6a need the swept angle through the photon sphere and past the horizon. With
+$v = u - 1/(3M)$ the orbit polynomial is exactly
+
+$$P = \varepsilon + v^2(1 + 2Mv), \qquad \varepsilon = \frac{1}{b^2} - \frac{1}{b_c^2} > 0,$$
+
+because the linear terms cancel at $u = 1/(3M)$ and $1/b^2 - u^2(1-2Mu)$ there equals
+$\varepsilon$. Since $1 + 2Mv \ge 1/3$ for every $u \ge 0$, the substitution
+$v = \sqrt\varepsilon\sinh\tau$ gives
+
+$$
+\int \frac{du}{\sqrt{P}} = \int \frac{d\tau}{\sqrt{1 + 2M\sqrt\varepsilon\,
+\sinh^3\tau/\cosh^2\tau}},
+$$
+
+a smooth, bounded integrand for any interval, evaluated by composite Gauss-Legendre with panels
+of width $0.5$ in $\tau$ (at least four): `sweptAnglePlunging`. Checks: agreement with an
+independent adaptive Simpson quadrature in $\ln|v|$ to $10^{-10}$ relative for
+$b/b_c$ from $0.3$ to $0.999999$, with the section 8 quadrature where both apply, and continuity
+with the Carlson form across $b_c$.
 
 ## 9. Redshift
 
@@ -431,6 +553,9 @@ All entries were confirmed from the source text or publisher metadata.
   Algorithms 10, 13-26. doi:10.1007/BF02198293, arXiv:math/9409227
 - Cunningham, C. T. (1975). The effects of redshifts and focusing on the spectrum of an accretion
   disk around a Kerr black hole. ApJ 202, 788-802. doi:10.1086/154033
+- Chael, A., Johnson, M. D. and Lupsasca, A. (2021). Observing the inner shadow of a black hole:
+  a direct view of the event horizon. ApJ 918, 6. doi:10.3847/1538-4357/ac09ee,
+  arXiv:2106.00683 (metadata confirmed via Crossref)
 - Darwin, C. G. (1959). The gravity field of a particle. Proc. R. Soc. Lond. A 249, 180-194.
   doi:10.1098/rspa.1959.0015 (citation and abstract confirmed; full text not read)
 - DLMF: NIST Digital Library of Mathematical Functions, section 19.29 (reduction of general
@@ -465,4 +590,3 @@ All entries were confirmed from the source text or publisher metadata.
   https://jcgt.org/published/0002/02/01/ (multi-lobe fit, eq. 4 and table 1)
 - WGSL: WebGPU Shading Language, W3C draft, section "Floating Point Accuracy",
   https://www.w3.org/TR/WGSL/
-$$

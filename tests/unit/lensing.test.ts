@@ -22,11 +22,29 @@ const M = 1;
 const BC = criticalImpactParameter(M);
 const UC = 1 / (3 * M);
 
-/** 1/sqrt(P) integrated by adaptive Simpson, split at u = 1/(3M) where P is smallest. */
+/**
+ * 1/sqrt(P) integrated by adaptive Simpson in y = ln|v|, v = u - 1/(3M), on each side of the
+ * minimum of P at v = 0: the integrand |v| / sqrt(P) is then smooth. P is evaluated as
+ * eps + v^2 (1 + 2Mv), which equals orbitPolynomial exactly (checked below) but has no
+ * cancellation near v = 0. The piece |v| < 1e-6 sqrt(eps), where P is constant to 1e-12, is added
+ * in closed form.
+ */
 function simpsonSwept(b: number, uA: number, uB: number): number {
-  const f = (u: number) => 1 / Math.sqrt(orbitPolynomial(u, b, M));
-  if (uA < UC && UC < uB) return adaptiveSimpson(f, uA, UC) + adaptiveSimpson(f, UC, uB);
-  return adaptiveSimpson(f, uA, uB);
+  const eps = 1 / (b * b) - 1 / (BC * BC);
+  const p = (v: number) => eps + v * v * (1 + 2 * M * v);
+  const delta = 1e-6 * Math.sqrt(eps);
+  const side = (lo: number, hi: number, sign: number): number => {
+    // Integral of dv / sqrt(P) over v = sign * |v|, |v| in [lo, hi].
+    if (!(hi > lo)) return 0;
+    const g = (y: number) => {
+      const v = Math.exp(y);
+      return v / Math.sqrt(p(sign * v));
+    };
+    const near = Math.max(lo, delta);
+    const tail = near > lo ? (near - lo) / Math.sqrt(eps) : 0;
+    return tail + (hi > near ? adaptiveSimpson(g, Math.log(near), Math.log(hi), 1e-12) : 0);
+  };
+  return side(Math.max(0, UC - uB), UC - uA, -1) + side(Math.max(0, uA - UC), uB - UC, 1);
 }
 
 describe('swept angle of plunging photons (b < b_c), any interval', () => {
@@ -45,6 +63,17 @@ describe('swept angle of plunging photons (b < b_c), any interval', () => {
       }
     });
   }
+
+  it('the factored orbit polynomial used by the reference equals P(u)', () => {
+    for (const ratio of [0.3, 0.99]) {
+      const b = ratio * BC;
+      const eps = 1 / (b * b) - 1 / (BC * BC);
+      for (const u of [0, 0.1, UC, 0.4, 0.5]) {
+        const v = u - UC;
+        expect(eps + v * v * (1 + 2 * M * v)).toBeCloseTo(orbitPolynomial(u, b, M), 15);
+      }
+    }
+  });
 
   it('agrees with the existing quadrature where both apply (u <= 1/(4M))', () => {
     for (const ratio of [0.2, 0.7, 0.99]) {
