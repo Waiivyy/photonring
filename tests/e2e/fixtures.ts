@@ -15,7 +15,12 @@ export const test = base.extend<{ allowConsole: RegExp[]; guard: void }>({
       page.on('console', (m) => {
         if (m.type() !== 'error') return;
         const text = m.text();
+        // Reported with its URL by the response handler below.
+        if (text.startsWith('Failed to load resource')) return;
         if (!allowConsole.some((r) => r.test(text))) problems.push(`console error: ${text}`);
+      });
+      page.on('response', (r) => {
+        if (r.status() >= 400) problems.push(`HTTP ${r.status()} for ${r.url()}`);
       });
       const origin = new URL(baseURL ?? 'http://localhost:5179').origin;
       page.on('request', (r) => {

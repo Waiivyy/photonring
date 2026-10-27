@@ -7,13 +7,26 @@ import { ProgressiveRenderer, type FrameAction } from '../gpu/host/progressive.t
 import { chooseInternalResolution, type Resolution } from '../gpu/host/resolution.ts';
 import { GpuRenderer, TILE_SIZE } from '../gpu/renderer.ts';
 import { DEFAULT_DISK, type CameraParams } from '../physics/index.ts';
+import { createAnnouncer, type Announcer } from './announcer.ts';
+import { createControlsPanel, type ControlsPanel, type SceneToggle } from './controls-panel.ts';
+import { cameraSentence, sceneSummary } from './describe.ts';
 import { el } from './dom.ts';
 import { bindCanvasInput } from './input.ts';
+import { KEYMAP, ariaKeyshortcuts, keyAction, type Action } from './keymap.ts';
 import { createLifecycle, type Lifecycle } from './lifecycle.ts';
-import { orbitBy, viewCamera, zoomBy, type OrbitState } from './orbit.ts';
+import { orbitBy, resetOrbit, viewCamera, zoomBy, type OrbitState } from './orbit.ts';
+import { OVERLAY_STYLES, type OverlayId } from './overlay-style.ts';
+import { closePanel, openPanel, topPanel } from './panel-stack.ts';
+import { formatNumber } from './quantise.ts';
+import {
+  createBrightnessLimiter,
+  type BrightnessLimiter,
+  type BrightnessPair,
+} from './rate-limit.ts';
 import type { AppStats } from './stats.ts';
+import { createToolbar } from './toolbar.ts';
 import { showUnsupported } from './unsupported.ts';
-import { DEFAULT_VIEW, type ViewMode, type ViewState } from './view-state.ts';
+import { DEFAULT_VIEW, toggleOverlay, type ViewMode, type ViewState } from './view-state.ts';
 
 /** GPU time per animation frame the renderer aims for. */
 const FRAME_BUDGET_MS = 12;
@@ -21,6 +34,11 @@ const FRAME_BUDGET_MS = 12;
 const SETTLE_MS = 120;
 /** Pixel cap for the internal resolution (4K UHD). */
 const MAX_PIXELS = 3840 * 2160;
+
+type PanelId = 'controls';
+
+/** Panels become bottom sheets, one at a time, below this width (CSS px). */
+const NARROW = '(max-width: 640px)';
 
 /** A camera and the scene settings drawn with it. */
 interface SceneView {
@@ -54,9 +72,22 @@ export async function startApp(root: HTMLElement): Promise<void> {
 }
 
 class App {
-  private readonly canvas = el('canvas', { class: 'view', tabindex: 0, role: 'img' });
-  private readonly hud = el('p', { class: 'hud' });
+  private readonly canvas = el('canvas', {
+    class: 'view',
+    tabindex: 0,
+    role: 'img',
+    'aria-describedby': 'help',
+  });
+  private readonly hudCamera = el('span');
+  private readonly hudTiming = el('span', { class: 'timing' });
+  private readonly hud = el('p', { class: 'hud' }, this.hudCamera, this.hudTiming);
   private readonly alert = el('div', { class: 'alert', role: 'alert', hidden: true });
+  private readonly announcerRegion = el('p', {
+    id: 'announcer',
+    class: 'sr-only',
+    role: 'status',
+    'aria-live': 'polite',
+  });
   private readonly context: GPUCanvasContext;
   private readonly format = navigator.gpu.getPreferredCanvasFormat();
   private readonly plan = new ProgressiveRenderer(1, 1, {
@@ -70,8 +101,17 @@ class App {
     requestFrame: (fn) => window.requestAnimationFrame(fn),
     cancelFrame: (id) => window.cancelAnimationFrame(id),
   });
+  private readonly announcer: Announcer = createAnnouncer(this.announcerRegion, this.life);
   /** The view the controls ask for; the camera is always at the URL's precision. */
   private view: ViewState = DEFAULT_VIEW;
+  /** Disk and termination view as drawn: they follow `view` through the brightness limiter. */
+  private applied: BrightnessPair = { disk: DEFAULT_VIEW.disk, view: DEFAULT_VIEW.view };
+  private readonly limiter: BrightnessLimiter;
+  private readonly toolbar: ReturnType<typeof createToolbar>;
+  private readonly controls: ControlsPanel;
+  private panels: PanelId[] = [];
+  /** Announce the camera once the view settles (after keyboard or camera-button input). */
+  private announceCamera = false;
   private state: AppStats['state'] = 'starting';
   private resolution: Resolution = { width: 0, height: 0, limitedBy: 'none' };
   private cssKey = '';
@@ -100,19 +140,62 @@ class App {
     const context = this.canvas.getContext('webgpu');
     if (!context) throw new Error('WebGPU canvas context unavailable');
     this.context = context;
+    this.limiter = createBrightnessLimiter(
+      this.applied,
+      (pair) => {
+        this.applied = pair;
+        this.applyScene();
+      },
+      {
+        now: () => performance.now(),
+        setTimer: (fn, ms) => this.life.timeout(fn, ms),
+        clearTimer: (id) => this.life.cancel(id),
+      },
+    );
+    this.toolbar = createToolbar([
+      {
+        id: 'btn-controls',
+        label: 'Controls',
+        key: 'C',
+        controls: 'controls-panel',
+        onClick: () => this.togglePanel('controls'),
+      },
+    ]);
+    this.controls = createControlsPanel({
+      action: (a) => this.dispatch(a, 'button'),
+      scene: (toggle, on) => this.setSceneToggle(toggle, on, false),
+      overlay: (id, on) => this.setOverlay(id, on, false),
+      close: () => this.closePanel('controls', true),
+    });
   }
 
   start(): void {
+    this.canvas.setAttribute('aria-label', this.summary());
     this.canvas.setAttribute(
-      'aria-label',
-      'Rendered view of a black hole and its accretion disk bending the light of the stars behind it',
+      'aria-keyshortcuts',
+      ariaKeyshortcuts(KEYMAP.filter((b) => this.supports(b.action))),
     );
     const help = el(
       'p',
-      { class: 'help' },
-      'Drag or arrow keys: orbit. Scroll, pinch or +/-: zoom. D: disk. A: anti-aliasing. T: termination view.',
+      { class: 'help', id: 'help' },
+      el(
+        'span',
+        { class: 'fine' },
+        'Drag or arrow keys: orbit. Scroll or +/-: zoom. Shortcuts work while the view has focus; C opens the controls.',
+      ),
+      el('span', { class: 'coarse' }, 'Drag to orbit, pinch to zoom, or use Controls.'),
     );
-    this.root.replaceChildren(this.canvas, this.hud, help, this.alert);
+    this.root.replaceChildren(
+      el('h1', { class: 'sr-only' }, 'photonring'),
+      this.canvas,
+      this.toolbar.element,
+      this.controls.element,
+      this.hud,
+      help,
+      this.announcerRegion,
+      this.alert,
+    );
+    this.syncControls();
 
     this.context.configure({ device: this.device, format: this.format, alphaMode: 'opaque' });
     bindCanvasInput(
@@ -120,7 +203,7 @@ class App {
       {
         orbit: () => this.view.orbit,
         setOrbit: (next) => this.setOrbit(next),
-        key: (e) => this.handleKey(e.key),
+        key: (e) => this.onKey(e),
       },
       this.life,
     );
@@ -143,8 +226,8 @@ class App {
       internalWidth: this.resolution.width,
       internalHeight: this.resolution.height,
       limitedBy: this.resolution.limitedBy,
-      mode: this.view.view,
-      disk: this.view.disk,
+      mode: this.applied.view,
+      disk: this.applied.disk,
       antialias: this.view.antialias,
       distance: camera.distance,
       azimuthDeg: camera.azimuthDeg,
@@ -158,17 +241,29 @@ class App {
       traceMs: this.traceMs,
       refineMs: this.refineMs,
       timing: this.timestampQuery ? 'timestamp-query' : 'wall-clock',
+      overlays: [...this.view.overlays],
+      controlsOpen: this.panels.includes('controls'),
+      requestedDisk: this.view.disk,
+      requestedMode: this.view.view,
+      brightnessPending: !this.limiter.isIdle(),
+      toggleApplies: this.limiter.applies,
+      toggleApplyTimes: [...this.limiter.applyTimes],
     };
   }
 
-  /** The scene the renderer draws. */
+  /** The scene the renderer draws: the requested camera and settings, the applied brightness. */
   private sceneNow(): SceneView {
     return {
       camera: viewCamera(this.view.orbit),
-      disk: this.view.disk,
-      view: this.view.view,
+      disk: this.applied.disk,
+      view: this.applied.view,
       antialias: this.view.antialias,
     };
+  }
+
+  private summary(): string {
+    const s = this.sceneNow();
+    return sceneSummary({ ...s.camera, disk: s.disk, view: s.view, overlays: this.view.overlays });
   }
 
   private applyScene(): void {
@@ -211,9 +306,21 @@ class App {
     this.resizeIfNeeded();
     const action = this.plan.next(now);
     if (action.kind !== 'idle') this.run(action);
+    if (this.plan.done) this.settled();
     this.updateHud();
     this.life.frame(this.frame);
   };
+
+  /** Once the image is complete: the canvas name follows, and the camera is announced if asked. */
+  private settled(): void {
+    const label = this.summary();
+    if (this.canvas.getAttribute('aria-label') !== label)
+      this.canvas.setAttribute('aria-label', label);
+    if (this.announceCamera) {
+      this.announceCamera = false;
+      this.announcer.announce(cameraSentence(this.sceneNow().camera));
+    }
+  }
 
   private run(action: Exclude<FrameAction, { kind: 'idle' }>): void {
     if (action.reset) {
@@ -263,59 +370,162 @@ class App {
     } else {
       status = `anti-aliasing, ${refine} tiles left`;
     }
-    const view = this.view.view === 'termination' ? ', termination view' : '';
-    this.hud.textContent = `${width} x ${height}, ${timing} time: ${status}${view}`;
+    const o = this.view.orbit;
+    const camera =
+      `${o.distance.toFixed(1)} M, elevation ${formatNumber(o.elevationDeg, 2)} degrees, ` +
+      `azimuth ${formatNumber(o.azimuthDeg, 2)} degrees`;
+    const view = this.applied.view === 'termination' ? ', termination view' : '';
+    this.hudCamera.textContent = `${camera}${view}.`;
+    this.hudTiming.textContent = ` ${width} x ${height}, ${timing} time: ${status}`;
   }
+
+  // ---- State changes ------------------------------------------------------------------------
 
   private setOrbit(next: OrbitState): void {
     if (next === this.view.orbit) return;
+    const o = this.view.orbit;
+    if (
+      next.distance === o.distance &&
+      next.azimuthDeg === o.azimuthDeg &&
+      next.elevationDeg === o.elevationDeg
+    ) {
+      return;
+    }
     this.view = { ...this.view, orbit: next };
     this.applyScene();
   }
 
-  private setView(next: ViewState): void {
-    this.view = next;
-    this.applyScene();
+  private requestBrightness(): void {
+    this.limiter.request({ disk: this.view.disk, view: this.view.view });
   }
 
-  private handleKey(key: string): boolean {
-    const v = this.view;
-    switch (key) {
-      case 'ArrowLeft':
-        this.setOrbit(orbitBy(v.orbit, 5, 0));
-        return true;
-      case 'ArrowRight':
-        this.setOrbit(orbitBy(v.orbit, -5, 0));
-        return true;
-      case 'ArrowUp':
-        this.setOrbit(orbitBy(v.orbit, 0, 5));
-        return true;
-      case 'ArrowDown':
-        this.setOrbit(orbitBy(v.orbit, 0, -5));
-        return true;
-      case '+':
-      case '=':
-        this.setOrbit(zoomBy(v.orbit, 1 / 1.1));
-        return true;
-      case '-':
-        this.setOrbit(zoomBy(v.orbit, 1.1));
-        return true;
-      case 'd':
-      case 'D':
-        this.setView({ ...v, disk: !v.disk });
-        return true;
-      case 'a':
-      case 'A':
-        this.setView({ ...v, antialias: !v.antialias });
-        return true;
-      case 't':
-      case 'T':
-        this.setView({ ...v, view: v.view === 'colour' ? 'termination' : 'colour' });
-        return true;
-      default:
-        return false;
+  private setSceneToggle(toggle: SceneToggle, on: boolean, announce: boolean): void {
+    if (toggle === 'disk') {
+      this.view = { ...this.view, disk: on };
+      this.requestBrightness();
+    } else if (toggle === 'termination') {
+      this.view = { ...this.view, view: on ? 'termination' : 'colour' };
+      this.requestBrightness();
+    } else {
+      this.view = { ...this.view, antialias: on };
+      this.applyScene();
+    }
+    this.syncControls();
+    if (announce) {
+      const name = { disk: 'Disk', antialias: 'Anti-aliasing', termination: 'Termination view' }[
+        toggle
+      ];
+      this.announcer.announce(`${name} ${on ? 'on' : 'off'}`);
     }
   }
+
+  private setOverlay(id: OverlayId, on: boolean, announce: boolean): void {
+    if (this.view.overlays.includes(id) !== on) this.view = toggleOverlay(this.view, id);
+    this.syncControls();
+    if (announce) this.announcer.announce(`${OVERLAY_STYLES[id].label} ${on ? 'on' : 'off'}`);
+  }
+
+  private syncControls(): void {
+    this.controls.sync({
+      disk: this.view.disk,
+      antialias: this.view.antialias,
+      termination: this.view.view === 'termination',
+      overlays: this.view.overlays,
+    });
+  }
+
+  // ---- Input -------------------------------------------------------------------------------
+
+  /** Actions this build of the page can perform (the rest arrive with later features). */
+  private supports(a: Action): boolean {
+    return (
+      a.type !== 'save' && a.type !== 'about' && !(a.type === 'panel' && a.panel !== 'controls')
+    );
+  }
+
+  private onKey(e: KeyboardEvent): boolean {
+    const a = keyAction(e);
+    if (!a || !this.supports(a)) return false;
+    if (a.type === 'escape' && this.panels.length === 0) return false;
+    this.dispatch(a, 'key');
+    return true;
+  }
+
+  /** One code path for keys and buttons. */
+  private dispatch(a: Action, source: 'key' | 'button'): void {
+    const v = this.view;
+    switch (a.type) {
+      case 'orbit':
+        this.setOrbit(orbitBy(v.orbit, a.dAzimuthDeg, a.dElevationDeg));
+        this.announceCamera = true;
+        return;
+      case 'zoom':
+        this.setOrbit(zoomBy(v.orbit, a.factor));
+        this.announceCamera = true;
+        return;
+      case 'reset':
+        this.setOrbit(resetOrbit(v.orbit));
+        this.announceCamera = false;
+        this.announcer.announce('View reset');
+        return;
+      case 'toggle': {
+        const on =
+          a.target === 'disk'
+            ? !v.disk
+            : a.target === 'antialias'
+              ? !v.antialias
+              : v.view !== 'termination';
+        this.setSceneToggle(a.target, on, source === 'key');
+        return;
+      }
+      case 'overlay':
+        this.setOverlay(a.id, !v.overlays.includes(a.id), source === 'key');
+        return;
+      case 'panel':
+        this.togglePanel(a.panel as PanelId);
+        return;
+      case 'escape': {
+        const top = topPanel(this.panels);
+        if (top) this.closePanel(top, false);
+        return;
+      }
+      case 'save':
+      case 'about':
+        return;
+    }
+  }
+
+  // ---- Panels ------------------------------------------------------------------------------
+
+  private panelParts(id: PanelId): { panel: HTMLElement; button: HTMLButtonElement } {
+    return { panel: this.controls.element, button: this.toolbar.buttons.get(`btn-${id}`)! };
+  }
+
+  private togglePanel(id: PanelId): void {
+    if (this.panels.includes(id)) this.closePanel(id, false);
+    else this.openPanel(id);
+  }
+
+  private openPanel(id: PanelId): void {
+    const single = window.matchMedia(NARROW).matches;
+    for (const other of this.panels) if (single && other !== id) this.closePanel(other, false);
+    this.panels = openPanel(this.panels, id, { single });
+    const { panel, button } = this.panelParts(id);
+    panel.hidden = false;
+    button.setAttribute('aria-expanded', 'true');
+    this.root.classList.toggle('panel-open', this.panels.length > 0);
+  }
+
+  private closePanel(id: PanelId, focusButton: boolean): void {
+    this.panels = closePanel(this.panels, id);
+    const { panel, button } = this.panelParts(id);
+    panel.hidden = true;
+    button.setAttribute('aria-expanded', 'false');
+    this.root.classList.toggle('panel-open', this.panels.length > 0);
+    if (focusButton) button.focus();
+  }
+
+  // ---- Device loss -------------------------------------------------------------------------
 
   private showLost(reason: string, message: string): void {
     this.state = 'lost';
