@@ -1,6 +1,13 @@
 // Orbit camera state: pure updates with clamping (pointer, wheel, pinch and keyboard all use these).
 import { describe, expect, it } from 'vitest';
-import { ORBIT_LIMITS, initialOrbit, orbitBy, viewCamera, zoomBy } from '../../src/ui/orbit.ts';
+import {
+  ORBIT_LIMITS,
+  initialOrbit,
+  orbitBy,
+  resetOrbit,
+  viewCamera,
+  zoomBy,
+} from '../../src/ui/orbit.ts';
 
 describe('orbit camera state', () => {
   it('starts at the default view: 30 M, slightly above the disk plane', () => {
@@ -30,5 +37,18 @@ describe('orbit camera state', () => {
   it('widens the field of view automatically close to the hole', () => {
     expect(viewCamera(initialOrbit).fovYDeg).toBe(60);
     expect(viewCamera({ ...initialOrbit, distance: 5 }).fovYDeg).toBe(120);
+  });
+
+  it('returns states rounded to the precision of the URL', () => {
+    expect(zoomBy(initialOrbit, 1 / 1.1).distance).toBe(27.273);
+    expect(orbitBy(initialOrbit, 0.004, 0.006).azimuthDeg).toBe(0);
+    expect(orbitBy(initialOrbit, 0.004, 0.006).elevationDeg).toBe(12.01);
+    expect(orbitBy({ ...initialOrbit, azimuthDeg: 359.99 }, 0.006, 0).azimuthDeg).toBe(0);
+  });
+
+  it('reset returns the default camera', () => {
+    expect(
+      resetOrbit({ ...initialOrbit, distance: 77, azimuthDeg: 123, elevationDeg: -40 }),
+    ).toEqual(initialOrbit);
   });
 });

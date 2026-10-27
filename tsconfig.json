@@ -27,6 +27,7 @@
     "src/gpu/host",
     "tests/unit",
     "tests/golden",
+    "tests/property",
     "tests/helpers",
     "tools",
     "*.config.ts"
