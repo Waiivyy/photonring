@@ -309,9 +309,16 @@ export class GpuRenderer {
     this.scene = scene;
   }
 
-  /** Frame parameters for one tile of a width x height image (the full image by default). */
-  private writeFrame(tile: Tile, imageWidth = this.width, imageHeight = this.height): void {
-    const scene = this.scene;
+  /**
+   * Frame parameters for one tile of a width x height image (the full image and the current
+   * scene by default).
+   */
+  private writeFrame(
+    tile: Tile,
+    imageWidth = this.width,
+    imageHeight = this.height,
+    scene: SceneParams | null = this.scene,
+  ): void {
     if (!scene) throw new Error('setScene must be called before rendering');
     const f = cameraFrame(scene.camera, scene.M);
     const width = Math.max(1, imageWidth);
@@ -378,17 +385,25 @@ export class GpuRenderer {
     return this.submitTiles(tiles, this.pipelines.render, this.previewGroup, width, height);
   }
 
+  /**
+   * Submits the tiles of a width x height image. `scene` overrides the current scene (offscreen
+   * renders); `timed: false` leaves the single timestamp query set to the interactive frames and
+   * measures wall-clock time instead.
+   */
   private submitTiles(
     tiles: readonly Tile[],
     pipeline: GPUComputePipeline,
     group: GPUBindGroup,
     width: number,
     height: number,
+    opts: { readonly scene?: SceneParams; readonly timed?: boolean } = {},
   ): Promise<number> {
-    const timed = this.querySet !== null && !this.queryBusy && tiles.length > 0;
+    const scene = opts.scene ?? this.scene;
+    const timed =
+      (opts.timed ?? true) && this.querySet !== null && !this.queryBusy && tiles.length > 0;
     const start = performance.now();
     tiles.forEach((tile, k) => {
-      this.writeFrame(tile, width, height);
+      this.writeFrame(tile, width, height, scene);
       const encoder = this.device.createCommandEncoder();
       const timestampWrites: GPUComputePassTimestampWrites | undefined =
         timed && this.querySet
@@ -529,8 +544,11 @@ export class GpuRenderer {
     return counts;
   }
 
-  /** The presented image (or the upscaled preview) as 8-bit RGB, through the same blit. */
-  async readImageRGB8(source: 'full' | 'preview' = 'full'): Promise<Uint8Array> {
+  /**
+   * The presented image (or the upscaled preview) as 8-bit RGBA, row-major, through the same
+   * blit the canvas gets.
+   */
+  async readImageRGBA(source: 'full' | 'preview' = 'full'): Promise<Uint8Array> {
     const width = this.width;
     const height = this.height;
     const target = this.device.createTexture({
@@ -551,21 +569,30 @@ export class GpuRenderer {
       { width, height },
     );
     this.device.queue.submit([encoder.finish()]);
-    await read.mapAsync(GPUMapMode.READ);
-    const src = new Uint8Array(read.getMappedRange());
-    const rgb = new Uint8Array(width * height * 3);
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const s = y * bytesPerRow + x * 4;
-        rgb.set(
-          [src[s] as number, src[s + 1] as number, src[s + 2] as number],
-          (y * width + x) * 3,
-        );
+    try {
+      await read.mapAsync(GPUMapMode.READ);
+      const src = new Uint8Array(read.getMappedRange());
+      const rgba = new Uint8Array(width * height * 4);
+      for (let y = 0; y < height; y++) {
+        rgba.set(src.subarray(y * bytesPerRow, y * bytesPerRow + width * 4), y * width * 4);
       }
+      read.unmap();
+      return rgba;
+    } finally {
+      read.destroy();
+      target.destroy();
     }
-    read.unmap();
-    read.destroy();
-    target.destroy();
+  }
+
+  /** The presented image (or the upscaled preview) as 8-bit RGB, through the same blit. */
+  async readImageRGB8(source: 'full' | 'preview' = 'full'): Promise<Uint8Array> {
+    const rgba = await this.readImageRGBA(source);
+    const rgb = new Uint8Array((rgba.length / 4) * 3);
+    for (let i = 0, j = 0; i < rgba.length; i += 4, j += 3) {
+      rgb[j] = rgba[i] as number;
+      rgb[j + 1] = rgba[i + 1] as number;
+      rgb[j + 2] = rgba[i + 2] as number;
+    }
     return rgb;
   }
 
