@@ -12,15 +12,26 @@ export const test = base.extend<{ allowConsole: RegExp[]; guard: void }>({
     async ({ page, allowConsole, baseURL }, use) => {
       const problems: string[] = [];
       page.on('pageerror', (e) => problems.push(`page error: ${e.message}`));
+      const failedUrls = new Set<string>();
+      page.on('response', (r) => {
+        if (r.status() >= 400) {
+          failedUrls.add(r.url());
+          problems.push(`HTTP ${r.status()} for ${r.url()}`);
+        }
+      });
+      page.on('requestfailed', (r) => {
+        failedUrls.add(r.url());
+        problems.push(`request failed: ${r.url()} (${r.failure()?.errorText ?? 'unknown'})`);
+      });
       page.on('console', (m) => {
         if (m.type() !== 'error') return;
         const text = m.text();
-        // Reported with its URL by the response handler below.
-        if (text.startsWith('Failed to load resource')) return;
-        if (!allowConsole.some((r) => r.test(text))) problems.push(`console error: ${text}`);
-      });
-      page.on('response', (r) => {
-        if (r.status() >= 400) problems.push(`HTTP ${r.status()} for ${r.url()}`);
+        // Already reported, with its URL, by the handlers above; anything else (such as a load
+        // the browser makes on its own) is reported here.
+        if (text.startsWith('Failed to load resource') && failedUrls.has(m.location().url)) return;
+        if (!allowConsole.some((r) => r.test(text))) {
+          problems.push(`console error: ${text} (${m.location().url})`);
+        }
       });
       const origin = new URL(baseURL ?? 'http://localhost:5179').origin;
       page.on('request', (r) => {
