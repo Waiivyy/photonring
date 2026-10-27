@@ -178,6 +178,18 @@ from $P(u_0) = u_0^2(1-2Mu_0)\cot^2\psi$, with the sign chosen so that an outwar
   radius at the crossing comes from the Hermite interpolant of the step that contains it. If the
   ray plane is the equatorial plane itself ($|(e_{1z}, e_{2z})| < 10^{-14}$) the ray sees a
   zero-thickness disk edge-on and gets no crossing.
+- **Disk crossings on the GPU** (`src/shaders/geodesic.wgsl`). WGSL allows `atan2` a large
+  error, so the shader never computes $\phi_0$. It evaluates
+  $\zeta = z/r = e_{1z}\cos\phi + e_{2z}\sin\phi$ at every step boundary, with the
+  $(\cos, \sin)$ pair from the rotation recurrence that also gives the escape direction, and
+  records a crossing where $\zeta$ goes from nonzero to zero or to the opposite sign. Each
+  boundary value is computed once and shared by the two steps it bounds, so no crossing is
+  missed or counted twice, and $\zeta = 0$ at the observer is not a crossing, as on the CPU.
+  Inside the step, $\zeta(\tau) = \zeta_0\cos\tau + \dot\zeta_0\sin\tau$ with
+  $\dot\zeta_0 = e_{2z}\cos\phi - e_{1z}\sin\phi$ vanishes at
+  $\tau = \arctan(-\zeta_0/\dot\zeta_0)$, $0 < \tau \le d\phi$, from a Taylor series to
+  $x^7$ (truncation error below $10^{-11}$ for $|x| \le 0.06$). In the last step a crossing
+  counts only if it comes before the escape or capture point.
 - **Physical angular momentum.** The traced ray's plane normal is $n = e_1 \times e_2$. The
   physical photon travels the other way, so its conserved $L_z/E = -b\,n_z$ with
   $b = r_o\sin\psi/\sqrt{1-2M/r_o}$; positive values co-rotate with the disk.
@@ -358,6 +370,35 @@ $g = g_\infty(r, L_z/E)/\sqrt{1 - 2M/r_o}$; finally an escaped ray adds $\tau$ t
 radiance in its escape direction. Supersampling averages an $n \times n$ grid of samples per
 pixel. Validation renders use one sample at each pixel centre, no disk, a sky of radiance 1 and
 no tone mapping, so captured pixels are exactly 0 and escaped pixels exactly 1.
+
+**On the GPU** (`src/shaders/render.wgsl` and `disk.wgsl`) the same compositing runs at each
+crossing. $T$ and $g$ use only square roots and divisions, because WGSL's `pow` inherits the
+loose error bounds of `exp2` and `log2`: $T = k\,s^{3/2}(1-s)^{1/4}$ with $s = \sqrt{r_{in}/r}$,
+and $g = g_{obs}\sqrt{1-3M/r}\,/\,(1 - \Omega L_z/E)$ with $\Omega = \sqrt{M/r}/r$. Once the
+transmittance is zero (an opaque disk) tracing stops, since nothing behind can be seen.
+
+**Anti-aliasing** (`src/shaders/refine.wgsl`, `src/gpu/host/antialias.ts`). A second pass gives a
+pixel the CPU renderer's $3 \times 3$ grid of samples (the centre one is the first pass's) when
+either test holds:
+
+- **Critical band.** Its footprint may contain an inward ray with $b_c \le b \le 1.02\,b_c$, or
+  the shadow edge. The footprint's angular radius is at most the pixel's half-diagonal in the
+  image plane at unit distance, $\delta = \sqrt2\tan(f/2)/H$, because the inverse gnomonic
+  projection shrinks lengths (its local scale factors are $\cos\theta$ and $\cos^2\theta$). The
+  test is therefore a range of the cosine of the angle between the pixel centre's direction and
+  the direction to the hole, $[\cos(\psi_{out} + \delta), \cos(\psi_{sh} - \delta)]$, with
+  $\sin\psi_{out} = 1.02\,b_c\sqrt{1-2M/r_o}/r_o$. In Bozza's strong-field limit ($\bar a = 1$),
+  $b/b_c - 1 \approx e^{\bar b - \alpha}$, so images half a turn apart differ by a factor
+  $e^{-\pi} \approx 1/23$ in $b/b_c - 1$: the photon ring and the higher-order images of the disk
+  soon become thinner than a pixel, and a one-sample image can miss them entirely. The band
+  holds every ray deflected by more than 3.56 rad, or 204 degrees (`deflectionAngleElliptic` at
+  $1.02\,b_c$; the strong-field formula gives 3.51).
+- **Contrast.** Its one-sample value differs from one of its 8 neighbours by more than 0.05 in
+  sRGB-encoded, tone-mapped luminance (about 13 of 255 levels): disk edges, star images and other
+  sharp features.
+
+A refined pixel is then the CPU's $3 \times 3$ supersampled value up to f32 and f16 rounding,
+which the GPU tests check.
 
 ## 11. Floating point
 

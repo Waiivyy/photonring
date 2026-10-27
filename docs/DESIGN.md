@@ -226,8 +226,10 @@ and the vendors' release notes):
 | Firefox, macOS                            | Since 147 on Apple Silicon; not on Intel Macs                                         |
 | Firefox, Linux and Android                | Not shipped (Nightly or flags only)                                                   |
 
-`timestamp-query` is available in Chrome (quantised to 100 microseconds by default); Safari and
-Firefox support is unconfirmed, so frame timing must work without it.
+`timestamp-query` is available in Chrome, quantised by default; Safari and Firefox support is
+unconfirmed, so frame timing must work without it. (Stage 0 noted a 100 microsecond step from
+secondary sources; in Chrome 156 on the Apple M5 every measured value is a multiple of
+65.536 microseconds, that is $2^{16}$ ns, Stage 3.)
 
 **Fallback: no WebGL2 renderer in the MVP** (stretch goal, as proposed). Desktop Chrome, Edge,
 current Safari and Firefox on Windows and Apple Silicon cover most visitors. A WebGL2 port would be
@@ -393,3 +395,61 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
   Chrome.
 - **Production build** already works (35 KB of JavaScript, 13 KB gzipped, hashed assets, relative
   paths); the CSP and deployment come in Stage 5.
+
+## 12. Stage 3 decisions
+
+- **Disk on the GPU.** Crossings are found from sign changes of the height above the disk plane
+  at step boundaries, placed inside the step with a short `atan` series, and their radius comes
+  from the step's Hermite cubic (`docs/PHYSICS.md`, section 7). This avoids WGSL's `atan2`, which
+  the specification allows a large error, and needs no angle bookkeeping. The emission uses only
+  square roots and divisions (section 10c there). Measured against the f64 library over 13,824
+  camera rays in six views, including an observer exactly in the disk plane: crossing counts
+  identical, radii up to $2r_{out}$ within $3.4\times10^{-5}$ relative, disk light within
+  $3\times10^{-3}$. Farther crossings (up to $10^4M$) lose relative precision as $u = 1/r$
+  approaches 0 near escape, at worst $3\times10^{-4}$; they never touch the disk, so the test
+  logs them without asserting.
+- **Early stop.** The image pass stops a ray at the first crossing that leaves no transmittance.
+  With the default opaque disk, a 1920 x 1080 first pass takes 5.3 ms with the disk against
+  6.4 ms without it.
+- **A harness bug found by the disk tests:** the parity entry point took the observer's
+  frequency factor $g_{obs}$ from the harness's fixed 30 M scene, while the rays started at 5 M
+  (1.29 against 1.035, an 8 times brightness error at 2700 K). The harness now takes the observer
+  distance from the rays, and one call must use one distance.
+- **Anti-aliasing is adaptive.** A second pass supersamples a pixel 3 x 3 when its footprint
+  can reach the critical band ($b_c$ to $1.02\,b_c$: shadow edge, photon ring and higher-order
+  images, which a one-sample image can miss) or when it differs visibly from a neighbour
+  (0.05 in sRGB-encoded, tone-mapped luminance). The grid is the CPU renderer's, so refined
+  pixels can be checked against the CPU 3 x 3 render; the tests also check that the band and every
+  clear step are refined and flat areas are not. Results go to a second `rgba16float` image
+  (alpha = samples) that the blit lays over the first pass, so the pass can run tile by tile.
+  At 1920 x 1080 with the disk it refines 6 % of the pixels in the default view and 12 % at 5 M.
+  In the default view the pass takes 7.5 ms, where uniform 3 x 3 supersampling takes 40.4 ms.
+- **Workgroup compaction.** Refined pixels are sparse (stars, edges), so a pixel tracing its own
+  8 extra samples kept almost every SIMD group busy for 8 rays. Each 8 x 8 workgroup now lists
+  its refined pixels in workgroup memory and spreads their samples over its 64 threads:
+  7.5 ms instead of 13.6 ms at 1920 x 1080, 14.4 ms instead of 25.2 ms at 5 M, with identical
+  images. The pass still costs more per extra ray than the first pass, because refined rays are
+  the long ones: they miss the opaque disk, graze the photon ring or end on stars.
+- **Progressive refinement** (`src/gpu/host/progressive.ts`). On every change the page renders a
+  complete frame that fits the 12 ms budget: at full resolution (one sample per pixel) when the
+  measured cost allows it, otherwise a preview at 1/4 to 1/2 scale in steps of 1/8, upscaled
+  bilinearly. After 120 ms without changes the full-resolution first pass runs tile by tile,
+  then the anti-aliasing tiles. The canvas only receives complete images, so tiles from an
+  older view never mix with newer ones; while the full pass is still running, the preview stays
+  on screen. On the Apple M5 at 1920 x 1080 the full-resolution frame fits the budget, so
+  previews only appear at larger sizes (half scale at 3840 x 2160).
+- **Memory.** Two full-size `rgba16float` images and a half-size preview take 18 bytes per
+  pixel, 149 MB at the 3840 x 2160 cap.
+- **Controls:** D toggles the disk, A anti-aliasing and T the termination view (D was the
+  termination view in Stage 2). Anti-aliasing is off in the termination view and in validation
+  renders, which must show single samples.
+- **Lookup-table experiment: not run.** The brief makes it optional and asks for it only if it
+  could show a measured benefit. Direct integration already meets the frame-rate target with a
+  wide margin: the 1920 x 1080 first pass with the disk takes 5.3 ms of GPU time against 33 ms for
+  30 frames per second, and the anti-aliased image is complete after 12.8 ms. A table of
+  $r(\psi; b)$ curves would add an interpolation error that needs its own validation, most of it
+  near $b_c$, where the curves are steepest. It can still be run if wanted.
+- **Measured** (`docs/VALIDATION.md` items 7 and 11, `docs/PERFORMANCE.md`): GPU images with the
+  disk within 1 level of the CPU reference (6 levels in 3 of 43,200 channels at 5 M), anti-aliased
+  images within 2 levels in all but at most 8 of 43,200 channels; GPU time for the anti-aliased
+  1920 x 1080 frame with the disk 12.8 ms (5.3 ms first pass, 7.5 ms anti-aliasing).
