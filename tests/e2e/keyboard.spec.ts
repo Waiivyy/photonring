@@ -19,17 +19,18 @@ test.beforeEach(async ({ page }) => {
   await openApp(page);
 });
 
+const TOOLBAR = ['Controls', 'Validation', 'About'];
+
 test('Tab order: the view, then the toolbar, then the open panel', async ({ page }) => {
   await page.keyboard.press('Tab');
   await expect(view(page)).toBeFocused();
-  await page.keyboard.press('Tab');
-  await expect(page.getByRole('button', { name: 'Controls', exact: true })).toBeFocused();
-  await page.keyboard.press('Tab');
-  await expect(page.getByRole('button', { name: 'Validation', exact: true })).toBeFocused();
-  await page.keyboard.press('Shift+Tab');
+  for (const name of TOOLBAR) {
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('button', { name, exact: true })).toBeFocused();
+  }
+  await page.getByRole('button', { name: 'Controls', exact: true }).focus();
   await page.keyboard.press('Enter');
-  await page.keyboard.press('Tab');
-  await page.keyboard.press('Tab');
+  for (let i = 0; i < TOOLBAR.length; i++) await page.keyboard.press('Tab');
   await expect(page.getByRole('button', { name: 'Orbit left' })).toBeFocused();
 });
 

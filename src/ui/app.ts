@@ -7,6 +7,7 @@ import { ProgressiveRenderer, type FrameAction } from '../gpu/host/progressive.t
 import { chooseInternalResolution, type Resolution } from '../gpu/host/resolution.ts';
 import { GpuRenderer, TILE_SIZE } from '../gpu/renderer.ts';
 import { DEFAULT_DISK, shadowAngularRadius, type CameraParams } from '../physics/index.ts';
+import { createAbout, type About } from './about.ts';
 import { createAnnouncer, type Announcer } from './announcer.ts';
 import { createControlsPanel, type ControlsPanel, type SceneToggle } from './controls-panel.ts';
 import { cameraSentence, sceneSummary } from './describe.ts';
@@ -126,6 +127,7 @@ class App {
   private readonly toolbar: ReturnType<typeof createToolbar>;
   private readonly controls: ControlsPanel;
   private readonly validation: ValidationPanel;
+  private readonly about: About = createAbout();
   /** Validation: the camera its rows show, the camera of its result, and the measurement state. */
   private validationShown = '';
   private validationDone = '';
@@ -205,6 +207,13 @@ class App {
         controls: 'validation-panel',
         onClick: () => this.togglePanel('validation'),
       },
+      {
+        id: 'btn-about',
+        label: 'About',
+        key: '?',
+        dialog: true,
+        onClick: () => this.about.open(this.toolbar.buttons.get('btn-about')!),
+      },
     ]);
     this.validation = createValidationPanel({ close: () => this.closePanel('validation', true) });
     this.controls = createControlsPanel({
@@ -228,7 +237,7 @@ class App {
       el(
         'span',
         { class: 'fine' },
-        'Drag or arrow keys: orbit. Scroll or +/-: zoom. Shortcuts work while the view has focus; C opens the controls.',
+        'Drag or arrow keys: orbit. Scroll or +/-: zoom. Shortcuts work while the view has focus. ? for all keys.',
       ),
       el('span', { class: 'coarse' }, 'Drag to orbit, pinch to zoom, or use Controls.'),
     );
@@ -244,6 +253,7 @@ class App {
       help,
       this.announcerRegion,
       this.alert,
+      this.about.dialog,
     );
     this.syncControls();
     this.syncValidationPanel();
@@ -570,7 +580,7 @@ class App {
 
   /** Actions this build of the page can perform (the rest arrive with later features). */
   private supports(a: Action): boolean {
-    return a.type !== 'save' && a.type !== 'about';
+    return a.type !== 'save';
   }
 
   private onKey(e: KeyboardEvent): boolean {
@@ -619,8 +629,10 @@ class App {
         if (top) this.closePanel(top, false);
         return;
       }
-      case 'save':
       case 'about':
+        this.about.open(source === 'key' ? this.canvas : this.toolbar.buttons.get('btn-about')!);
+        return;
+      case 'save':
         return;
     }
   }
@@ -737,6 +749,8 @@ class App {
     this.state = 'lost';
     // The restarted page reads the hash, so it must hold the latest view.
     this.urlSync.flush();
+    // A modal dialog would make the alert and its Restart button inert.
+    this.about.close(false);
     const button = el('button', { type: 'button' }, 'Restart the renderer');
     button.addEventListener(
       'click',

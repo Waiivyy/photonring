@@ -407,3 +407,59 @@ dialog :focus-visible {
     forced-color-adjust: none;
   }
 }
+
+dialog#about {
+  max-width: min(42rem, calc(100% - 2rem));
+  max-height: calc(100% - 2rem);
+  box-sizing: border-box;
+  padding: 1rem 1.25rem;
+  border: 1px solid #555;
+  border-radius: 0.5rem;
+  background: var(--panel-solid);
+  color: var(--fg);
+  line-height: 1.5;
+  font-size: 0.9rem;
+}
+
+dialog#about::backdrop {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+dialog#about h2 {
+  margin-top: 0;
+}
+
+dialog#about h3 {
+  margin: 1rem 0 0.25rem;
+  font-size: 0.95rem;
+}
+
+dialog#about .honesty {
+  font-weight: 600;
+}
+
+dialog#about a {
+  color: var(--accent);
+}
+
+dialog#about button {
+  min-width: 44px;
+  min-height: 44px;
+  margin-top: 1rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 0.3rem;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+table.keys {
+  border-collapse: collapse;
+}
+
+table.keys th,
+table.keys td {
+  padding: 0.15rem 0.75rem 0.15rem 0;
+  text-align: left;
+}
