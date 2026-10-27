@@ -28,6 +28,8 @@ export interface SceneParams {
   readonly toneMapping: boolean;
   /** Thin disk, or null for none. Inner edge outside the photon sphere (3M). */
   readonly disk: DiskSettings | null;
+  /** Adaptive 3 x 3 supersampling after the one-sample pass (colour mode only). */
+  readonly antialias: boolean;
 }
 
 export interface RayInput {
@@ -360,6 +362,11 @@ export class GpuRenderer {
     pass.draw(3);
     pass.end();
     this.device.queue.submit([encoder.finish()]);
+  }
+
+  /** Samples behind each pixel of the presented image, row-major (for tests). */
+  readSampleCounts(): Promise<Uint8Array> {
+    return Promise.resolve(new Uint8Array(this.width * this.height).fill(1));
   }
 
   /** The presented image as 8-bit RGB, through the same blit (for tests). */

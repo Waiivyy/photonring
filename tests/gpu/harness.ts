@@ -11,6 +11,7 @@ const parityScene: SceneParams = {
   exposure: 1,
   toneMapping: true,
   disk: null,
+  antialias: false,
 };
 
 let renderer: GpuRenderer | null = null;
@@ -56,7 +57,7 @@ const harness: Harness = {
     r.resize(request.width, request.height);
     r.setScene({ ...parityScene, ...request });
     await r.renderAll();
-    return [...(await r.readImageRGB8())];
+    return { rgb: [...(await r.readImageRGB8())], samples: [...(await r.readSampleCounts())] };
   },
   async benchmark(request, repeats) {
     const r = await get();

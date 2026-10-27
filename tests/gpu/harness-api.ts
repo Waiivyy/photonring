@@ -36,6 +36,14 @@ export interface HarnessImageRequest {
   readonly exposure: number;
   readonly toneMapping: boolean;
   readonly disk: DiskSettings | null;
+  readonly antialias: boolean;
+}
+
+export interface HarnessImage {
+  /** 8-bit RGB after the tone-mapping blit, row-major. */
+  readonly rgb: number[];
+  /** Samples behind each pixel: 1, or 9 where anti-aliasing refined it. */
+  readonly samples: number[];
 }
 
 export interface Harness {
@@ -50,8 +58,8 @@ export interface Harness {
     directions: readonly (readonly [number, number, number])[],
     g: number,
   ): Promise<number[][]>;
-  /** Full GPU path (compute, then the tone-mapping blit) into an 8-bit RGBA texture, read back as RGB. */
-  renderImage(request: HarnessImageRequest): Promise<number[]>;
+  /** Full GPU path (compute, then the tone-mapping blit) into an 8-bit RGBA texture, read back. */
+  renderImage(request: HarnessImageRequest): Promise<HarnessImage>;
   /**
    * Renders the full image `repeats` times. Returns, per run, the GPU time between the start of
    * the first tile pass and the end of the last (timestamp queries; null without them) and the

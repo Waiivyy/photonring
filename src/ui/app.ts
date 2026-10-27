@@ -148,6 +148,7 @@ class App {
       exposure: 1,
       toneMapping: true,
       disk: this.disk ? DEFAULT_DISK : null,
+      antialias: false,
     });
     this.dirty = true;
   }

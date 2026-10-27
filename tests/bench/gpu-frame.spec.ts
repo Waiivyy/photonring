@@ -51,6 +51,7 @@ test('GPU frame time by view and resolution', async ({ page }) => {
         exposure: 1,
         toneMapping: true,
         disk: null,
+        antialias: false,
       };
       const r = await page.evaluate(([req, n]) => window.harness!.benchmark(req, n), [
         request,
