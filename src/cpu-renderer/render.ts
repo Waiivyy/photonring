@@ -1,30 +1,20 @@
 // CPU reference renderer: traces every sample with the f64 physics library. Pure computation;
 // writing files is left to the callers (tools/ and tests/).
 import {
-  blackbodyColour,
   cameraFrame,
-  circularOrbitEmitter,
-  diskTemperature,
+  compositeDisk,
   pixelDirection,
-  redshiftFactor,
   skyRadiance,
   srgbEncode,
   staticObserverFactor,
   toneMap,
   traceRay,
   type CameraParams,
+  type DiskSettings,
   type Vec3,
 } from '../physics/index.ts';
 
-export interface DiskSettings {
-  /** Inner edge; must lie outside the photon sphere (3M), normally the ISCO (6M). */
-  readonly rIn: number;
-  readonly rOut: number;
-  /** Fraction of light absorbed and replaced by emission at each crossing, 0 to 1. */
-  readonly opacity: number;
-  /** Emitted temperature at the hottest radius, (49/36) r_in, in kelvin. */
-  readonly peakTemperature: number;
-}
+export type { DiskSettings };
 
 export interface RenderSettings {
   readonly width: number;
@@ -138,31 +128,21 @@ export function renderImage(s: RenderSettings): RenderOutput {
 }
 
 /**
- * Front-to-back compositing along the traced path: each disk crossing inside [rIn, rOut] adds
- * opacity x blackbody(g T) and dims what lies behind by (1 - opacity); the sky (or the shadow)
- * is last.
+ * Front-to-back compositing along the traced path (compositeDisk), then the sky (or the shadow)
+ * behind whatever light the disk lets through.
  */
 function shade(s: RenderSettings, ray: ReturnType<typeof traceRay>, gObserver: number): Vec3 {
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  let transmittance = 1;
-  if (s.disk) {
-    const { rIn, rOut, opacity, peakTemperature } = s.disk;
-    for (const crossing of ray.crossings) {
-      if (crossing.radius < rIn || crossing.radius > rOut) continue;
-      const emitter = circularOrbitEmitter(crossing.radius, s.M);
-      const shift = redshiftFactor(emitter, ray.lzOverE) * gObserver;
-      const temperature = peakTemperature * diskTemperature(crossing.radius, rIn);
-      const e = blackbodyColour(shift * temperature);
-      const k = transmittance * opacity;
-      r += k * Math.max(0, e[0]);
-      g += k * Math.max(0, e[1]);
-      b += k * Math.max(0, e[2]);
-      transmittance *= 1 - opacity;
-      if (transmittance === 0) break;
-    }
-  }
+  const disk = s.disk
+    ? compositeDisk(
+        s.disk,
+        ray.crossings.map((c) => c.radius),
+        ray.lzOverE,
+        s.M,
+        gObserver,
+      )
+    : { emission: [0, 0, 0] as const, transmittance: 1 };
+  let [r, g, b] = disk.emission;
+  const transmittance = disk.transmittance;
   if (ray.termination === 'escaped' && ray.direction && transmittance > 0) {
     const sky: Vec3 = s.sky === 'uniform' ? [1, 1, 1] : skyRadiance(ray.direction, gObserver);
     r += transmittance * sky[0];

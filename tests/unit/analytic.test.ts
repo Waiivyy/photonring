@@ -3,12 +3,15 @@
 // formulas that only work when M happens to be 1.
 import { describe, expect, it } from 'vitest';
 import {
+  blackbodyColour,
   circularOrbitAngularMomentumSq,
   circularOrbitEmitter,
+  compositeDisk,
   criticalImpactParameter,
   deflectionAngleElliptic,
   deflectionAngleQuadrature,
   diskTemperature,
+  diskTemperatureScale,
   horizonRadius,
   impactParameterFromLocalAngle,
   iscoRadius,
@@ -314,5 +317,45 @@ describe('disk temperature profile (toy model)', () => {
 
   it('is zero inside the inner edge', () => {
     expect(diskTemperature(5, 6)).toBe(0);
+  });
+
+  it('has the closed form the shader evaluates', () => {
+    const k = diskTemperatureScale(6500);
+    for (const r of [6.001, 7, 8.1667, 12, 20, 400]) {
+      const x = r / 6;
+      const shaderForm = k * x ** -0.75 * (1 - 1 / Math.sqrt(x)) ** 0.25;
+      // 1 - x^(-1/2) cancels near r_in (8e-5 at r = 6.001), which amplifies rounding.
+      expect(relErr(shaderForm, 6500 * diskTemperature(r, 6))).toBeLessThan(1e-11);
+    }
+  });
+});
+
+describe('disk compositing along a path', () => {
+  const disk = { rIn: 6, rOut: 20, opacity: 1, peakTemperature: 6500 };
+  const emitted = (r: number, lz: number, gObs: number) =>
+    blackbodyColour(
+      redshiftFactor(circularOrbitEmitter(r, 1), lz) * gObs * 6500 * diskTemperature(r, 6),
+    ).map((c) => Math.max(0, c));
+
+  it('an opaque disk shows only the first crossing inside [rIn, rOut]', () => {
+    const out = compositeDisk(disk, [30, 4, 10, 12], 2, 1, 1.1);
+    expect(out.transmittance).toBe(0);
+    expect(out.emission).toEqual(emitted(10, 2, 1.1));
+  });
+
+  it('a translucent disk adds each crossing dimmed by the ones in front', () => {
+    const half = { ...disk, opacity: 0.5 };
+    const out = compositeDisk(half, [10, 25, 12], -1, 1, 1);
+    const a = emitted(10, -1, 1);
+    const b = emitted(12, -1, 1);
+    expect(out.transmittance).toBe(0.25);
+    out.emission.forEach((c, i) => {
+      expect(c).toBeCloseTo(0.5 * a[i]! + 0.25 * b[i]!, 14);
+    });
+  });
+
+  it('misses leave the light behind untouched', () => {
+    expect(compositeDisk(disk, [], 0, 1, 1)).toEqual({ emission: [0, 0, 0], transmittance: 1 });
+    expect(compositeDisk(disk, [5.9, 20.1], 0, 1, 1).transmittance).toBe(1);
   });
 });
