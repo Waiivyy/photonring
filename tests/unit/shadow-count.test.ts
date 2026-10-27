@@ -111,7 +111,7 @@ describe('validation readback classification', () => {
 
   it('finds disagreements with the analytic edge that would cancel in the area', () => {
     // One captured pixel outside the cone and one escaped pixel inside: the area is unchanged.
-    const outsidePx: [number, number] = [SIDE / 2 + 9, SIDE / 2];
+    const outsidePx: [number, number] = [SIDE / 2 + 14, SIDE / 2];
     const insidePx: [number, number] = [SIDE / 2, SIDE / 2 + 3];
     const c = classifyValidation(
       readback(SIDE, (i, j) => {

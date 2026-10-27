@@ -97,6 +97,15 @@ export class GpuRenderer {
   private previewGroup: GPUBindGroup | null = null;
   private previewSize: readonly [number, number] = [1, 1];
   private scene: SceneParams | null = null;
+  /** Offscreen validation render and its readback buffer, allocated on first use. */
+  private validation: {
+    readonly side: number;
+    readonly texture: GPUTexture;
+    readonly group: GPUBindGroup;
+    readonly read: GPUBuffer;
+    readonly bytesPerRow: number;
+  } | null = null;
+  private validationBusy: Promise<unknown> | null = null;
   private querySet: GPUQuerySet | null = null;
   private queryResolve: GPUBuffer | null = null;
   private queryRead: GPUBuffer | null = null;
@@ -452,6 +461,124 @@ export class GpuRenderer {
     return { traceMs, refineMs };
   }
 
+  /**
+   * The Validation panel's measurement: renders the brief's validation mode (disk off, uniform
+   * sky, no tone mapping, one ray per pixel centre) and the termination view of the same camera
+   * into an offscreen side x side image, and reads both back. Never touches the current scene,
+   * the interactive images or the canvas. With `timed`, each pass gets timestamp-query GPU time
+   * (only where no interactive frame competes for the query set, as in the bench).
+   */
+  async measureShadow(
+    camera: CameraParams,
+    side = 1024,
+    opts: { readonly timed?: boolean } = {},
+  ): Promise<{
+    side: number;
+    bytesPerRow: number;
+    halves: Uint16Array;
+    gpuMs?: [number, number];
+    readbackMs?: number;
+  }> {
+    if (this.validationBusy) throw new Error('a shadow measurement is already running');
+    const v = this.validationTarget(side);
+    const base: SceneParams = {
+      M: 1,
+      camera,
+      mode: 'colour',
+      sky: 'uniform',
+      exposure: 1,
+      toneMapping: false,
+      disk: null,
+      antialias: false,
+    };
+    const tiles = planTiles(side, side, TILE_SIZE);
+    const timed = opts.timed === true;
+    const copy = (offset: number) => {
+      const encoder = this.device.createCommandEncoder();
+      encoder.copyTextureToBuffer(
+        { texture: v.texture },
+        { buffer: v.read, offset, bytesPerRow: v.bytesPerRow },
+        { width: side, height: side },
+      );
+      this.device.queue.submit([encoder.finish()]);
+    };
+    const run = async () => {
+      const colour = this.submitTiles(tiles, this.pipelines.render, v.group, side, side, {
+        scene: base,
+        timed,
+      });
+      const colourMs = timed ? await colour : NaN;
+      copy(0);
+      const termination = this.submitTiles(tiles, this.pipelines.render, v.group, side, side, {
+        scene: { ...base, mode: 'termination' },
+        timed,
+      });
+      const terminationMs = timed ? await termination : NaN;
+      copy(v.bytesPerRow * side);
+      const t0 = performance.now();
+      await v.read.mapAsync(GPUMapMode.READ);
+      const readbackMs = performance.now() - t0;
+      const halves = new Uint16Array(v.read.getMappedRange().slice(0));
+      v.read.unmap();
+      return {
+        side,
+        bytesPerRow: v.bytesPerRow,
+        halves,
+        ...(timed ? { gpuMs: [colourMs, terminationMs] as [number, number], readbackMs } : {}),
+      };
+    };
+    const job = run();
+    this.validationBusy = job;
+    try {
+      return await job;
+    } finally {
+      this.validationBusy = null;
+    }
+  }
+
+  private validationTarget(side: number) {
+    if (this.validation && this.validation.side === side) return this.validation;
+    this.releaseValidation();
+    const texture = this.device.createTexture({
+      label: 'validation render',
+      size: { width: side, height: side },
+      format: IMAGE_FORMAT,
+      usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_SRC,
+    });
+    const bytesPerRow = Math.ceil((side * 8) / 256) * 256;
+    this.validation = {
+      side,
+      texture,
+      group: this.device.createBindGroup({
+        layout: this.layouts.image,
+        entries: [{ binding: 0, resource: texture.createView() }],
+      }),
+      read: this.device.createBuffer({
+        label: 'validation readback',
+        size: 2 * bytesPerRow * side,
+        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+      }),
+      bytesPerRow,
+    };
+    return this.validation;
+  }
+
+  /**
+   * Frees the validation render and its buffer (the panel closed). A measurement still waiting
+   * for its readback keeps them until it settles.
+   */
+  releaseValidation(): void {
+    const v = this.validation;
+    if (!v) return;
+    this.validation = null;
+    const free = () => {
+      v.texture.destroy();
+      v.read.destroy();
+    };
+    if (this.validationBusy) void this.validationBusy.then(free, free);
+    else free();
+  }
+
   private blitPipeline(format: GPUTextureFormat): GPURenderPipeline {
     let p = this.blitPipelines.get(format);
     if (!p) {
@@ -701,6 +828,7 @@ export class GpuRenderer {
   }
 
   destroy(): void {
+    this.releaseValidation();
     this.image?.destroy();
     this.refined?.destroy();
     this.preview?.destroy();

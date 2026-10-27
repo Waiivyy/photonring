@@ -1,6 +1,8 @@
 // Test harness page: exposes the WebGPU renderer to Playwright specs through window.harness.
 import { initWebGpu } from '../../src/gpu/device.ts';
+import { classifyValidation } from '../../src/gpu/host/shadow-count.ts';
 import { GpuRenderer, type SceneParams } from '../../src/gpu/renderer.ts';
+import { shadowAngularRadius } from '../../src/physics/index.ts';
 import type { Harness, HarnessInfo } from './harness-api.ts';
 
 const parityScene: SceneParams = {
@@ -105,6 +107,35 @@ const harness: Harness = {
     const counts = await r.readSampleCounts();
     const refinedFraction = counts.reduce((n, c) => n + (c > 1 ? 1 : 0), 0) / counts.length;
     return { ...result, refinedFraction };
+  },
+  async measureShadow(request) {
+    const r = await get();
+    const { side, timed, ...camera } = request;
+    const readback = await r.measureShadow(camera, side, { timed: timed === true });
+    const t0 = performance.now();
+    const counts = classifyValidation(readback, {
+      tanHalfFovY: Math.tan((camera.fovYDeg * Math.PI) / 360),
+      tanPsi: Math.tan(shadowAngularRadius(camera.distance, 1)),
+    });
+    const classifyMs = performance.now() - t0;
+    return {
+      counts,
+      classifyMs,
+      ...(readback.gpuMs ? { gpuMs: readback.gpuMs } : {}),
+      ...(readback.readbackMs === undefined ? {} : { readbackMs: readback.readbackMs }),
+    };
+  },
+  async measurementIsolation(image, shadow) {
+    const r = await get();
+    r.resize(image.width, image.height);
+    r.setScene({ ...parityScene, ...image });
+    await r.renderAll();
+    const before = await r.readImageRGB8();
+    const { side, ...camera } = shadow;
+    await r.measureShadow(camera, side);
+    const after = await r.readImageRGB8();
+    const identical = before.length === after.length && before.every((b, i) => b === after[i]);
+    return { identical, bytes: before.length };
   },
 };
 
