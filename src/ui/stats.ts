@@ -36,6 +36,8 @@ export interface AppStats {
   /** Brightness changes applied so far, and the times (performance.now) of the last 16. */
   toggleApplies: number;
   toggleApplyTimes: number[];
+  /** Hash changes applied by this page instance (not counting its own writes). */
+  hashApplies: number;
 }
 
 export interface PhotonringDebug {
