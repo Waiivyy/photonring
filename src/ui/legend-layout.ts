@@ -36,13 +36,17 @@ export function legendLayout(
   scale: number,
 ): LegendBox | null {
   if (items.length === 0) return null;
+  // Shrink when the box would not fit inside the image with its margins.
+  const longest = Math.max(...items.map((i) => i.label.length));
+  const unitWidth = 2 * PADDING + SWATCH + GAP + longest * CHAR_WIDTH * FONT + 2 * MARGIN;
+  const unitHeight = 2 * PADDING + items.length * LINE + 2 * MARGIN;
+  scale = Math.min(scale, width / unitWidth, height / unitHeight);
   const fontSize = FONT * scale;
   const padding = PADDING * scale;
   const swatchWidth = SWATCH * scale;
   const gap = GAP * scale;
   const margin = MARGIN * scale;
   const line = LINE * scale;
-  const longest = Math.max(...items.map((i) => i.label.length));
   const boxWidth = 2 * padding + swatchWidth + gap + longest * CHAR_WIDTH * fontSize;
   const boxHeight = 2 * padding + items.length * line;
   const x = Math.max(0, width - margin - boxWidth);

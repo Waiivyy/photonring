@@ -42,9 +42,19 @@ describe('legend layout', () => {
     ).toBeGreaterThan(legendLayout(1920, 1080, [{ label: 'short' }], 1)!.width);
   });
 
-  it('stays inside a small image', () => {
-    const box = legendLayout(120, 80, items(6), 1)!;
-    expect(box.x).toBeGreaterThanOrEqual(0);
-    expect(box.y).toBeGreaterThanOrEqual(0);
+  it('shrinks to stay inside a small image', () => {
+    for (const [w, h] of [
+      [120, 80],
+      [64, 36],
+      [300, 40],
+    ] as const) {
+      const box = legendLayout(w, h, items(6), 1)!;
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.y).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(w);
+      expect(box.y + box.height).toBeLessThanOrEqual(h);
+      for (const row of box.rows) expect(row.y).toBeLessThan(box.y + box.height);
+      expect(box.fontSize).toBeLessThan(12);
+    }
   });
 });
