@@ -1,15 +1,15 @@
 // A deterministic clock with timers and animation frames, for testing timing logic without
 // waiting: advance(ms) runs every due timer in time order.
 export interface FakeClock {
-  now(): number;
-  setTimer(fn: () => void, ms: number): number;
-  clearTimer(id: number): void;
-  requestFrame(fn: (t: number) => void): number;
-  cancelFrame(id: number): void;
+  readonly now: () => number;
+  readonly setTimer: (fn: () => void, ms: number) => number;
+  readonly clearTimer: (id: number) => void;
+  readonly requestFrame: (fn: (t: number) => void) => number;
+  readonly cancelFrame: (id: number) => void;
   /** Runs due timers in order while moving time forward by ms. */
-  advance(ms: number): void;
+  readonly advance: (ms: number) => void;
   /** Runs the pending animation frames once, at the current time. */
-  runFrames(): void;
+  readonly runFrames: () => void;
   readonly pendingTimers: number;
   readonly pendingFrames: number;
 }

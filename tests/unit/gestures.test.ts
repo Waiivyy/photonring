@@ -46,7 +46,7 @@ describe('gestures', () => {
   it('wheel factor: pixels, lines and pages, clamped per event', () => {
     expect(wheelFactor(100, 0, 800)).toBeCloseTo(Math.exp(0.1), 12);
     expect(wheelFactor(3, 1, 800)).toBeCloseTo(Math.exp(3 * 16 * 0.001), 12);
-    expect(wheelFactor(1, 2, 800)).toBeCloseTo(Math.exp(0.8), 12);
+    expect(wheelFactor(1, 2, 400)).toBeCloseTo(Math.exp(0.4), 12);
     expect(wheelFactor(1e6, 0, 800)).toBe(2);
     expect(wheelFactor(-1e6, 0, 800)).toBe(0.5);
     expect(wheelFactor(NaN, 0, 800)).toBeNull();
