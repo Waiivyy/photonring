@@ -87,6 +87,39 @@ export function pixelDirection(
 }
 
 /**
+ * Image point (x, y) in pixels from the top-left corner where the view direction d appears: the
+ * exact inverse of pixelDirection. Null for directions at or behind the camera plane.
+ */
+export function projectDirection(
+  frame: CameraFrame,
+  width: number,
+  height: number,
+  d: Vec3,
+): [number, number] | null {
+  const { forward: f, right: r, up: u } = frame;
+  const along = d[0] * f[0] + d[1] * f[1] + d[2] * f[2];
+  if (!(along > 0)) return null;
+  const sx = (d[0] * r[0] + d[1] * r[1] + d[2] * r[2]) / along;
+  const sy = (d[0] * u[0] + d[1] * u[1] + d[2] * u[2]) / along;
+  const t = frame.tanHalfFovY;
+  return [(width / 2) * (1 + sx / ((width / height) * t)), (height / 2) * (1 - sy / t)];
+}
+
+/** Radius in pixels of the image of a cone of half-angle `angle` around the optical axis. */
+export function imageRadiusFromConeAngle(
+  angle: number,
+  height: number,
+  tanHalfFovY: number,
+): number {
+  return (Math.tan(angle) / tanHalfFovY) * (height / 2);
+}
+
+/** Half-angle of the cone around the optical axis that images to a circle of radius `px`. */
+export function coneAngleFromImageRadius(px: number, height: number, tanHalfFovY: number): number {
+  return Math.atan((px * 2 * tanHalfFovY) / height);
+}
+
+/**
  * Vertical field of view that keeps the shadow radius at most MAX_SHADOW_FRACTION of the image
  * half-height: never narrower than the requested one, never wider than MAX_AUTO_FOV_DEG.
  */
