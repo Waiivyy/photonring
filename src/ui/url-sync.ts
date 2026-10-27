@@ -1,24 +1,26 @@
 // Writes the view state to the URL hash: a trailing debounce, replaceState (no history entries,
 // no hashchange), and a write that may fail. Browsers can throw when the history is changed too
 // often, so a failure is retried once and otherwise left until the next change; the page never
-// depends on a write succeeding. Timers are injected, so the logic is testable with a fake clock.
+// depends on a write succeeding. A write is skipped only when the address bar already shows the
+// hash, so edits made outside the page are never mistaken for the page's own. Timers and the
+// address bar are injected, so the logic is testable with a fake clock.
 
 export interface UrlSyncDeps {
   setTimer(fn: () => void, ms: number): number;
   clearTimer(id: number): void;
+  /** The hash in the address bar now, without '#'. */
+  getHash(): string;
   /** Writes the hash (without '#'); may throw. */
   replaceHash(hash: string): void;
 }
 
 export interface UrlSync {
-  /** Writes `hash` after DEBOUNCE_MS of quiet, unless it is the hash last written. */
+  /** Writes `hash` after DEBOUNCE_MS of quiet, unless the address bar already shows it. */
   schedule(hash: string): void;
   /** Writes a pending hash now. */
   flush(): void;
   /** Drops a pending write. */
   cancel(): void;
-  /** Whether `hash` (with or without '#') is the one this sync wrote last. */
-  isOwn(hash: string): boolean;
   readonly lastWritten: string | null;
 }
 
@@ -38,7 +40,7 @@ export function createUrlSync(deps: UrlSyncDeps): UrlSync {
     timer = null;
     const hash = pending;
     if (hash === null) return;
-    if (hash === lastWritten) {
+    if (hash === deps.getHash()) {
       pending = null;
       return;
     }
@@ -65,9 +67,6 @@ export function createUrlSync(deps: UrlSyncDeps): UrlSync {
     cancel() {
       clear();
       pending = null;
-    },
-    isOwn(hash) {
-      return lastWritten !== null && (hash.startsWith('#') ? hash.slice(1) : hash) === lastWritten;
     },
     get lastWritten() {
       return lastWritten;

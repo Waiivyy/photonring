@@ -170,6 +170,7 @@ class App {
     this.urlSync = createUrlSync({
       setTimer: (fn, ms) => this.life.timeout(fn, ms),
       clearTimer: (id) => this.life.cancel(id),
+      getHash: () => location.hash.replace(/^#/, ''),
       replaceHash: (hash) => this.writeHash(hash),
     });
     this.toolbar = createToolbar([
@@ -514,7 +515,7 @@ class App {
 
   /** Address-bar edits, in-page links, Back and Forward: the hash is a complete view. */
   private readonly onHashChange = (): void => {
-    if (this.state !== 'rendering' || this.urlSync.isOwn(location.hash)) return;
+    if (this.state !== 'rendering') return;
     this.urlSync.cancel();
     const { state, issues } = parseHash(location.hash);
     this.hashApplies++;
