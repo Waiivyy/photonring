@@ -529,8 +529,8 @@ export class GpuRenderer {
     return counts;
   }
 
-  /** The presented image as 8-bit RGB, through the same blit (for tests). */
-  async readImageRGB8(): Promise<Uint8Array> {
+  /** The presented image (or the upscaled preview) as 8-bit RGB, through the same blit. */
+  async readImageRGB8(source: 'full' | 'preview' = 'full'): Promise<Uint8Array> {
     const width = this.width;
     const height = this.height;
     const target = this.device.createTexture({
@@ -538,7 +538,7 @@ export class GpuRenderer {
       format: 'rgba8unorm',
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
     });
-    this.blit(target.createView(), 'rgba8unorm');
+    this.blit(target.createView(), 'rgba8unorm', source);
     const bytesPerRow = Math.ceil((width * 4) / 256) * 256;
     const read = this.device.createBuffer({
       size: bytesPerRow * height,

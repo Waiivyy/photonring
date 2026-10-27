@@ -23,5 +23,6 @@ export default defineConfig({
     { name: 'gpu', testMatch: /gpu\/.*\.spec\.ts/ },
     { name: 'e2e', testMatch: /e2e\/.*\.spec\.ts/ },
     { name: 'bench', testMatch: /bench\/.*\.spec\.ts/ },
+    { name: 'gallery', testMatch: /gallery\/.*\.spec\.ts/ },
   ],
 });

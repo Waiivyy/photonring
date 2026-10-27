@@ -76,6 +76,11 @@ export interface Harness {
   /** Full GPU path (compute, then the tone-mapping blit) into an 8-bit RGBA texture, read back. */
   renderImage(request: HarnessImageRequest): Promise<HarnessImage>;
   /**
+   * The same, as base64 of the RGB bytes (compact for large images). With previewScale, the
+   * image is the upscaled preview the page shows while the view changes.
+   */
+  renderImageBase64(request: HarnessImageRequest, previewScale?: number): Promise<string>;
+  /**
    * Renders the full image `repeats` times after a warm-up run, and a preview at 1/2 and 1/4
    * scale after each. Milliseconds are GPU time from timestamp queries when available (else
    * wall-clock): for a pass, from the start of its first tile to the end of its last.

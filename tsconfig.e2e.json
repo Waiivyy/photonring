@@ -10,6 +10,7 @@
     "tests/gpu/page.ts",
     "tests/e2e",
     "tests/bench",
+    "tests/gallery",
     "tests/helpers"
   ]
 }

@@ -59,6 +59,24 @@ const harness: Harness = {
     await r.renderAll();
     return { rgb: [...(await r.readImageRGB8())], samples: [...(await r.readSampleCounts())] };
   },
+  async renderImageBase64(request, previewScale) {
+    const r = await get();
+    r.resize(request.width, request.height);
+    r.setScene({ ...parityScene, ...request });
+    let rgb: Uint8Array;
+    if (previewScale === undefined) {
+      await r.renderAll();
+      rgb = await r.readImageRGB8();
+    } else {
+      await r.renderPreview(previewScale);
+      rgb = await r.readImageRGB8('preview');
+    }
+    let text = '';
+    for (let i = 0; i < rgb.length; i += 0x8000) {
+      text += String.fromCharCode(...rgb.subarray(i, i + 0x8000));
+    }
+    return btoa(text);
+  },
   async benchmark(request, repeats) {
     const r = await get();
     const info = await ready;
