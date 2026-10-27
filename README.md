@@ -11,7 +11,7 @@ npm install
 npm run dev
 ```
 
-Then open http://localhost:5179 in a browser with WebGPU (Chrome or Edge 113+, Safari 26 on macOS Tahoe or iOS 26, Firefox 141+ on Windows or 147+ on Apple Silicon). Drag or use the arrow keys to orbit, scroll or press +/- to zoom, press D for the termination view.
+Then open http://localhost:5179 in a browser with WebGPU (Chrome or Edge 113+, Safari 26 on macOS Tahoe or iOS 26, Firefox 141+ on Windows or 147+ on Apple Silicon). Drag or use the arrow keys to orbit, scroll or press +/- to zoom, press D to toggle the disk and T for the termination view.
 
 | Command                 | What it does                                                                           |
 | ----------------------- | -------------------------------------------------------------------------------------- |

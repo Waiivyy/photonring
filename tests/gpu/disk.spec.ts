@@ -1,7 +1,7 @@
 // GPU against CPU parity with the accretion disk (spec section 10, items 7 and 11): plane
 // crossings, disk light per ray and rendered images, WGSL in f32 against the f64 library.
 // Run with npm run test:gpu.
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { encodeImage, renderImage, type RenderSettings } from '../../src/cpu-renderer/render.ts';
 import { DEFAULT_DISK, GOLDEN_SCENES } from '../../src/cpu-renderer/scenes.ts';
 import {
@@ -19,12 +19,18 @@ import {
   type Vec3,
 } from '../../src/physics/index.ts';
 import type { HarnessImageRequest, HarnessRay } from './harness-api.ts';
+import { openHarness } from './page.ts';
 
 const M = 1;
 const BC = criticalImpactParameter(M);
 const TERMINATIONS = ['escaped', 'captured', 'stepLimit'] as const;
 /** Translucent, so that every crossing inside the disk contributes to the light. */
 const DISK: DiskSettings = { ...DEFAULT_DISK, opacity: 0.6 };
+/**
+ * Radii are compared up to twice the outer edge. Farther crossings never reach the disk, and
+ * their relative error grows as u = 1/r approaches 0 near escape (it is logged, not asserted).
+ */
+const NEAR_DISK = 2 * DISK.rOut;
 
 const CAMERAS: Record<string, CameraParams> = {
   'inclined, 30 M': { distance: 30, azimuthDeg: 30, elevationDeg: 12, fovYDeg: 60 },
@@ -41,12 +47,6 @@ const CAMERAS: Record<string, CameraParams> = {
 };
 
 const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-
-async function openHarness(page: Page) {
-  await page.goto('/tests/gpu/harness.html');
-  const info = await page.evaluate(() => window.harness!.ready);
-  expect(info.isFallbackAdapter).toBe(false);
-}
 
 test.describe('GPU against CPU parity with the disk', () => {
   test('plane crossings and disk light per ray', async ({ page }) => {
@@ -76,6 +76,8 @@ test.describe('GPU against CPU parity with the disk', () => {
       let countMismatches = 0;
       let crossingsSeen = 0;
       let worstRadius = 0;
+      let worstAt = '';
+      let worstFar = 0;
       let worstLight = 0;
       let worstTransmittance = 0;
       rays.forEach(({ ray, b }, k) => {
@@ -91,7 +93,15 @@ test.describe('GPU against CPU parity with the disk', () => {
         crossingsSeen += g.crossings;
         const radii = cpu.crossings.map((c) => c.radius);
         g.radii.forEach((r, n) => {
-          worstRadius = Math.max(worstRadius, Math.abs(r - radii[n]!) / radii[n]!);
+          const e = Math.abs(r - radii[n]!) / radii[n]!;
+          if (radii[n]! <= NEAR_DISK) {
+            if (e > worstRadius) {
+              worstRadius = e;
+              worstAt = `b/b_c ${(b / BC).toFixed(5)}, crossing ${n}, r ${radii[n]!.toFixed(3)}`;
+            }
+          } else {
+            worstFar = Math.max(worstFar, e);
+          }
         });
         // A crossing this close to an edge may land on either side of it in f32.
         const nearEdge = radii.some(
@@ -110,7 +120,7 @@ test.describe('GPU against CPU parity with the disk', () => {
       });
       console.log(
         `${name}: ${compared} rays, ${crossingsSeen} crossings; count mismatches ${countMismatches}, ` +
-          `radius ${worstRadius.toExponential(2)}, light ${worstLight.toExponential(2)}, ` +
+          `radius ${worstRadius.toExponential(2)} (${worstAt}), far ${worstFar.toExponential(2)}, light ${worstLight.toExponential(2)}, ` +
           `transmittance ${worstTransmittance.toExponential(2)}`,
       );
       expect(terminationMismatches, name).toBe(0);

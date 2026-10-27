@@ -19,6 +19,7 @@ import {
 } from '../../src/physics/index.ts';
 import { exactSweptAngle, inwardPsiForImpactParameter } from '../helpers/reference.ts';
 import type { HarnessImageRequest, HarnessRay, HarnessRayResult } from './harness-api.ts';
+import { openHarness } from './page.ts';
 
 const M = 1;
 const BC = criticalImpactParameter(M);
@@ -32,16 +33,23 @@ const angle = (a: Vec3, b: Vec3) => {
   return Math.atan2(Math.hypot(...c), dot(a, b));
 };
 
-async function openHarness(page: Page) {
-  await page.goto('/tests/gpu/harness.html');
-  const info = await page.evaluate(() => window.harness!.ready);
-  console.log(`GPU: ${info.vendor} ${info.architecture}, fallback ${info.isFallbackAdapter}`);
-  expect(info.isFallbackAdapter).toBe(false);
-  return info;
+/** Traces rays in groups that share an observer distance, as the harness requires. */
+async function trace(page: Page, rays: HarnessRay[]): Promise<HarnessRayResult[]> {
+  const groups = new Map<number, number[]>();
+  rays.forEach((ray, i) => {
+    const d = Math.hypot(...ray.origin);
+    const group = groups.get(d) ?? [];
+    group.push(i);
+    groups.set(d, group);
+  });
+  const out: HarnessRayResult[] = new Array<HarnessRayResult>(rays.length);
+  for (const indices of groups.values()) {
+    const part = indices.map((i) => rays[i]!);
+    const result = await page.evaluate((r) => window.harness!.traceRays(r), part);
+    indices.forEach((i, k) => (out[i] = result[k]!));
+  }
+  return out;
 }
-
-const trace = (page: Page, rays: HarnessRay[]): Promise<HarnessRayResult[]> =>
-  page.evaluate((r) => window.harness!.traceRays(r), rays);
 
 /** Pixel-centre rays of cameras at 5, 30 and 200 M over a 64 x 36 grid. */
 function cameraRays(): { ray: HarnessRay; b: number }[] {
@@ -71,7 +79,8 @@ function cameraRays(): { ray: HarnessRay; b: number }[] {
 
 test.describe('GPU against CPU parity', () => {
   test('termination reasons and escape directions over 6912 camera rays', async ({ page }) => {
-    await openHarness(page);
+    const info = await openHarness(page);
+    console.log(`GPU: ${info.vendor} ${info.architecture}, fallback ${info.isFallbackAdapter}`);
     const rays = cameraRays();
     const gpu = await trace(
       page,

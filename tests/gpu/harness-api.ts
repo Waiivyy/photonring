@@ -40,7 +40,10 @@ export interface HarnessImageRequest {
 
 export interface Harness {
   readonly ready: Promise<HarnessInfo>;
-  /** Traces rays (observer mass 1) with an optional disk, through the shipped WGSL. */
+  /**
+   * Traces rays (mass 1) with an optional disk, through the shipped WGSL. All rays must start at
+   * the same distance, which sets the static observer's frequency factor.
+   */
   traceRays(rays: readonly HarnessRay[], disk?: DiskSettings | null): Promise<HarnessRayResult[]>;
   /** Sky radiance for unit directions as seen with frequency shift g. */
   skyRadiance(

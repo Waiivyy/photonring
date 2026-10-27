@@ -5,5 +5,11 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "types": ["node", "@webgpu/types"]
   },
-  "include": ["tests/gpu/*.spec.ts", "tests/e2e", "tests/bench", "tests/helpers"]
+  "include": [
+    "tests/gpu/*.spec.ts",
+    "tests/gpu/page.ts",
+    "tests/e2e",
+    "tests/bench",
+    "tests/helpers"
+  ]
 }

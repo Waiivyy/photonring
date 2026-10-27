@@ -8,6 +8,7 @@ interface AppStats {
   internalHeight: number;
   limitedBy: string;
   mode: 'colour' | 'termination';
+  disk: boolean;
   azimuthDeg: number;
   distance: number;
   tilesRemaining: number;
@@ -35,22 +36,27 @@ test('renders the black hole and finishes every tile', async ({ page }) => {
   const s = await stats(page);
   expect(s.internalWidth).toBeGreaterThan(0);
   expect(s.mode).toBe('colour');
-  await page.screenshot({ path: 'artifacts/stage2/e2e-default-view.png' });
+  await page.screenshot({ path: 'artifacts/stage3/e2e-default-view.png' });
 });
 
-test('keyboard controls orbit, zoom and toggle the termination view', async ({ page }) => {
+test('keyboard controls orbit, zoom and toggle the disk and the termination view', async ({
+  page,
+}) => {
   await page.goto('/');
   await waitForFullImage(page);
   const canvas = page.getByRole('img', { name: /black hole/i });
   await canvas.focus();
   const before = await stats(page);
+  expect(before.disk).toBe(true);
   await page.keyboard.press('ArrowLeft');
   await page.keyboard.press('Minus');
+  await page.keyboard.press('t');
   await page.keyboard.press('d');
   const after = await stats(page);
   expect(after.azimuthDeg).not.toBe(before.azimuthDeg);
   expect(after.distance).toBeGreaterThan(before.distance);
   expect(after.mode).toBe('termination');
+  expect(after.disk).toBe(false);
 });
 
 test('device loss shows a recoverable message', async ({ page }) => {

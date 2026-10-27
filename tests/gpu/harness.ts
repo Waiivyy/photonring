@@ -37,7 +37,13 @@ const harness: Harness = {
   ready,
   async traceRays(rays, disk = null) {
     const r = await get();
-    r.setScene({ ...parityScene, disk });
+    // The observer's frequency factor is a per-frame uniform, so one call needs one distance.
+    const distances = rays.map((ray) => Math.hypot(...ray.origin));
+    const distance = distances[0] ?? parityScene.camera.distance;
+    if (distances.some((d) => Math.abs(d / distance - 1) > 1e-12)) {
+      throw new Error('rays in one call must start at the same distance from the black hole');
+    }
+    r.setScene({ ...parityScene, camera: { ...parityScene.camera, distance }, disk });
     return r.traceRays(rays);
   },
   async skyRadiance(directions, g) {

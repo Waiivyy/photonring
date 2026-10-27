@@ -4,6 +4,7 @@ import { initWebGpu } from '../gpu/device.ts';
 import { chooseInternalResolution, type Resolution } from '../gpu/host/resolution.ts';
 import { TileScheduler, planTiles } from '../gpu/host/tiles.ts';
 import { GpuRenderer, TILE_SIZE } from '../gpu/renderer.ts';
+import { DEFAULT_DISK } from '../physics/index.ts';
 import { initialOrbit, orbitBy, viewCamera, zoomBy, type OrbitState } from './orbit.ts';
 import { showUnsupported } from './unsupported.ts';
 
@@ -19,6 +20,7 @@ export interface AppStats {
   internalHeight: number;
   limitedBy: Resolution['limitedBy'];
   mode: 'colour' | 'termination';
+  disk: boolean;
   azimuthDeg: number;
   distance: number;
   tilesRemaining: number;
@@ -58,6 +60,7 @@ class App {
   private readonly pointers = new Map<number, { x: number; y: number }>();
   private orbit: OrbitState = initialOrbit;
   private mode: AppStats['mode'] = 'colour';
+  private disk = true;
   private state: AppStats['state'] = 'starting';
   private resolution: Resolution = { width: 0, height: 0, limitedBy: 'none' };
   private cssKey = '';
@@ -94,13 +97,13 @@ class App {
     this.canvas.setAttribute('role', 'img');
     this.canvas.setAttribute(
       'aria-label',
-      'Rendered view of a black hole bending the light of the stars behind it',
+      'Rendered view of a black hole and its accretion disk bending the light of the stars behind it',
     );
     this.hud.className = 'hud';
     const help = document.createElement('p');
     help.className = 'help';
     help.textContent =
-      'Drag or arrow keys: orbit. Scroll, pinch or +/-: zoom. D: termination view.';
+      'Drag or arrow keys: orbit. Scroll, pinch or +/-: zoom. D: disk. T: termination view.';
     this.alert.className = 'alert';
     this.alert.setAttribute('role', 'alert');
     this.alert.hidden = true;
@@ -127,6 +130,7 @@ class App {
       internalHeight: this.resolution.height,
       limitedBy: this.resolution.limitedBy,
       mode: this.mode,
+      disk: this.disk,
       azimuthDeg: this.orbit.azimuthDeg,
       distance: this.orbit.distance,
       tilesRemaining: this.scheduler.remaining + this.inFlight,
@@ -143,7 +147,7 @@ class App {
       sky: 'stars',
       exposure: 1,
       toneMapping: true,
-      disk: null,
+      disk: this.disk ? DEFAULT_DISK : null,
     });
     this.dirty = true;
   }
@@ -281,6 +285,11 @@ class App {
         return true;
       case 'd':
       case 'D':
+        this.disk = !this.disk;
+        this.applyScene();
+        return true;
+      case 't':
+      case 'T':
         this.mode = this.mode === 'colour' ? 'termination' : 'colour';
         this.applyScene();
         return true;

@@ -78,8 +78,29 @@ fn cosSinSmall(x: f32) -> vec2f {
   return vec2f(c, s);
 }
 
+// atan(x) for |x| <= 0.06 by Taylor series, accurate to f32 rounding.
+fn atanSmall(x: f32) -> f32 {
+  let x2 = x * x;
+  return x * (1.0 - x2 * (1.0 / 3.0 - x2 * (0.2 - x2 / 7.0)));
+}
+
+// Records a disk-plane crossing at radius r and composites its light front to back, as in
+// compositeDisk (src/physics/disk.ts). Returns true when nothing behind it can be seen.
+fn addCrossing(out: ptr<function, Trace>, r: f32, lzOverE: f32) -> bool {
+  if (LOG_CROSSINGS && (*out).crossings < CROSSING_LOG_SIZE) {
+    crossingLog[(*out).crossings] = r;
+  }
+  (*out).crossings += 1u;
+  if (r < params.diskInner || r > params.diskOuter) {
+    return false;
+  }
+  (*out).emission += (*out).transmittance * params.diskOpacity * diskEmission(r, lzOverE);
+  (*out).transmittance *= 1.0 - params.diskOpacity;
+  return (*out).transmittance == 0.0;
+}
+
 // Traces a ray backwards from a static observer at `origin` with unit local direction d. With
-// stopWhenOpaque, tracing ends at the first crossing that leaves no transmittance.
+// stopWhenOpaque, tracing ends at the first crossing that leaves no transmittance (OPAQUE).
 fn traceGeodesic(origin: vec3f, d: vec3f, stopWhenOpaque: bool) -> Trace {
   var out: Trace;
   out.termination = ESCAPED;
@@ -96,14 +117,28 @@ fn traceGeodesic(origin: vec3f, d: vec3f, stopWhenOpaque: bool) -> Trace {
   let tangential = d - cosPsi * e1;
   let sinPsi = length(tangential);
   let mass = params.M;
-  if (sinPsi < RADIAL_SIN || mass == 0.0) {
-    // Radial rays and flat space: straight lines.
+  let diskOn = params.disk != 0u;
+  if (sinPsi < RADIAL_SIN) {
+    // Radial rays are straight lines; inward ones end at the centre without meeting the disk.
     if (cosPsi <= 0.0 && mass != 0.0) {
       out.termination = CAPTURED;
     }
     return out;
   }
   let e2 = tangential / sinPsi;
+  // Conserved L_z / E of the physical photon (opposite to the traced ray), as in traceRay.
+  let lzOverE = -(r0 * sinPsi / sqrt(1.0 - 2.0 * mass / r0)) * (e1.x * e2.y - e1.y * e2.x);
+  if (mass == 0.0) {
+    // Flat space: the straight line itself.
+    if (diskOn && d.z != 0.0) {
+      let along = -origin.z / d.z;
+      if (along > 0.0) {
+        let p = origin + along * d;
+        _ = addCrossing(&out, length(p.xy), lzOverE);
+      }
+    }
+    return out;
+  }
 
   let m3 = 3.0 * mass;
   let uCapture = 1.0 / m3;
@@ -115,6 +150,9 @@ fn traceGeodesic(origin: vec3f, d: vec3f, stopWhenOpaque: bool) -> Trace {
   // (cos, sin) of the orbital angle reached after n whole steps.
   var c = 1.0;
   var s = 0.0;
+  // Height above the disk plane divided by r: zeta = e1.z cos(phi) + e2.z sin(phi). Crossings are
+  // its sign changes; each step boundary value is computed once, so none is missed or doubled.
+  var zeta = e1.z;
 
   for (var n = 0u; n < params.maxSteps; n++) {
     let k1u = w;
@@ -128,27 +166,52 @@ fn traceGeodesic(origin: vec3f, d: vec3f, stopWhenOpaque: bool) -> Trace {
     let uNext = u + hSixth * (k1u + 2.0 * k2u + 2.0 * k3u + k4u);
     let wNext = w + hSixth * (k1w + 2.0 * k2w + 2.0 * k3w + k4w);
 
+    // Where in this step the ray ends, if it does.
+    var ends = false;
+    var t = 1.0;
     if (uNext <= 0.0) {
-      let t = hermiteSolve(u, w, uNext, wNext, h, 0.0);
-      let cs = cosSinSmall(t * h);
-      let cf = c * cs.x - s * cs.y;
-      let sf = s * cs.x + c * cs.y;
-      out.dir = normalize(cf * e1 + sf * e2);
-      out.phiEnd = f32(n) * h + t * h;
-      out.steps = n + 1u;
-      return out;
-    }
-    if (uNext >= uCapture && wNext > 0.0) {
+      ends = true;
+      t = hermiteSolve(u, w, uNext, wNext, h, 0.0);
+    } else if (uNext >= uCapture && wNext > 0.0) {
+      ends = true;
       out.termination = CAPTURED;
-      out.phiEnd = f32(n + 1u) * h;
+      t = hermiteSolve(u, w, uNext, wNext, h, uCapture);
+    }
+    let cn = c * params.cosStep - s * params.sinStep;
+    let sn = s * params.cosStep + c * params.sinStep;
+    let zetaNext = e1.z * cn + e2.z * sn;
+
+    if (diskOn && ((zeta > 0.0 && zetaNext <= 0.0) || (zeta < 0.0 && zetaNext >= 0.0))) {
+      // Within the step zeta = zeta0 cos(tau) + zetaDot sin(tau), zero at tan(tau) = -zeta0/zetaDot.
+      let zetaDot = e2.z * c - e1.z * s;
+      let tc = clamp(atanSmall(clamp(-zeta / zetaDot, -0.06, 0.06)) / h, 0.0, 1.0);
+      if (!ends || tc < t) {
+        let uc = hermiteValue(u, w, uNext, wNext, h, tc);
+        if (uc > 0.0 && addCrossing(&out, 1.0 / uc, lzOverE) && stopWhenOpaque) {
+          out.termination = OPAQUE;
+          out.phiEnd = f32(n) * h + tc * h;
+          out.steps = n + 1u;
+          return out;
+        }
+      }
+    }
+
+    if (ends) {
+      if (out.termination == ESCAPED) {
+        let cs = cosSinSmall(t * h);
+        let cf = c * cs.x - s * cs.y;
+        let sf = s * cs.x + c * cs.y;
+        out.dir = normalize(cf * e1 + sf * e2);
+      }
+      out.phiEnd = f32(n) * h + t * h;
       out.steps = n + 1u;
       return out;
     }
     u = uNext;
     w = wNext;
-    let cn = c * params.cosStep - s * params.sinStep;
-    s = s * params.cosStep + c * params.sinStep;
     c = cn;
+    s = sn;
+    zeta = zetaNext;
   }
   out.termination = STEP_LIMIT;
   out.phiEnd = f32(params.maxSteps) * h;
