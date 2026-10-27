@@ -18,8 +18,11 @@ struct RayOut {
   termination: u32,
   phiEnd: f32,
   steps: u32,
+  crossings: u32,
+  transmittance: f32,
+  emission: vec3f,
   pad0: u32,
-  pad1: u32,
+  radii: array<f32, CROSSING_LOG_SIZE>,
 }
 
 @group(2) @binding(0) var<storage, read> rayIn: array<RayIn>;
@@ -44,6 +47,21 @@ fn debugColour(termination: u32) -> vec3f {
   return vec3f(1.0, 0.0, 1.0);
 }
 
+// Colour of one sample: disk light, then the sky behind whatever the disk lets through, as in
+// shade (src/cpu-renderer/render.ts).
+fn shadeSample(d: vec3f) -> vec3f {
+  let tr = traceGeodesic(params.position, d, true);
+  var colour = tr.emission;
+  if (tr.termination == ESCAPED && tr.transmittance > 0.0) {
+    var sky = vec3f(1.0);
+    if (params.sky == 0u) {
+      sky = skyRadiance(tr.dir, params.gObserver);
+    }
+    colour += tr.transmittance * sky;
+  }
+  return colour;
+}
+
 @compute @workgroup_size(8, 8)
 fn renderTile(@builtin(global_invocation_id) gid: vec3u) {
   if (gid.x >= params.tileSize.x || gid.y >= params.tileSize.y) {
@@ -54,16 +72,11 @@ fn renderTile(@builtin(global_invocation_id) gid: vec3u) {
     return;
   }
   let d = pixelDirection(vec2f(px) + vec2f(0.5));
-  let tr = traceGeodesic(params.position, d);
   var colour = vec3f(0.0);
   if (params.mode == 1u) {
-    colour = debugColour(tr.termination);
-  } else if (tr.termination == ESCAPED) {
-    if (params.sky == 1u) {
-      colour = vec3f(1.0);
-    } else {
-      colour = skyRadiance(tr.dir, params.gObserver);
-    }
+    colour = debugColour(traceGeodesic(params.position, d, false).termination);
+  } else {
+    colour = shadeSample(d);
   }
   textureStore(outImage, vec2i(px), vec4f(colour, 1.0));
 }
@@ -74,8 +87,9 @@ fn traceRays(@builtin(global_invocation_id) gid: vec3u) {
   if (i >= arrayLength(&rayIn)) {
     return;
   }
-  let tr = traceGeodesic(rayIn[i].origin, rayIn[i].dir);
-  rayOut[i] = RayOut(tr.dir, tr.termination, tr.phiEnd, tr.steps, 0u, 0u);
+  let tr = traceGeodesic(rayIn[i].origin, rayIn[i].dir, false);
+  rayOut[i] = RayOut(tr.dir, tr.termination, tr.phiEnd, tr.steps, tr.crossings, tr.transmittance,
+    tr.emission, 0u, crossingLog);
 }
 
 @compute @workgroup_size(64)

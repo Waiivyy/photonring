@@ -1,10 +1,16 @@
 // WebGPU renderer: compute pipelines for the image and for the parity tests, the tone-mapping
 // blit, tiled dispatch, and GPU timing. Physics lives in the WGSL; this file only moves data.
-import { cameraFrame, staticObserverFactor, type CameraParams } from '../physics/index.ts';
+import {
+  cameraFrame,
+  diskTemperatureScale,
+  staticObserverFactor,
+  type CameraParams,
+  type DiskSettings,
+} from '../physics/index.ts';
 import { layoutStruct, packStruct } from './host/layout.ts';
 import { BLACKBODY_LUT } from './host/lut.ts';
 import { planTiles, type Tile } from './host/tiles.ts';
-import { BLIT_FIELDS, FRAME_FIELDS } from './host/wgsl.ts';
+import { BLIT_FIELDS, CROSSING_LOG_SIZE, FRAME_FIELDS } from './host/wgsl.ts';
 import { blitShaderSource, computeShaderSource } from './shaders.ts';
 
 /** Orbital-angle step and step cap of the GPU integrator (chosen in Stage 0, docs/DESIGN.md). */
@@ -20,6 +26,8 @@ export interface SceneParams {
   readonly sky: 'stars' | 'uniform';
   readonly exposure: number;
   readonly toneMapping: boolean;
+  /** Thin disk, or null for none. Inner edge outside the photon sphere (3M). */
+  readonly disk: DiskSettings | null;
 }
 
 export interface RayInput {
@@ -32,7 +40,17 @@ export interface RayOutput {
   readonly direction: [number, number, number];
   readonly phiEnd: number;
   readonly steps: number;
+  /** Disk-plane crossings with u > 0 along the traced path. */
+  readonly crossings: number;
+  /** Radii of the first crossings, at most CROSSING_LOG_SIZE of them. */
+  readonly radii: number[];
+  /** Disk light (linear sRGB) and the transmittance left behind it, as in compositeDisk. */
+  readonly emission: [number, number, number];
+  readonly transmittance: number;
 }
+
+/** Bytes per RayOut in the parity output buffer (render.wgsl). */
+const RAY_OUT_BYTES = 48 + 4 * CROSSING_LOG_SIZE;
 
 async function compile(device: GPUDevice, code: string, label: string): Promise<GPUShaderModule> {
   const module = device.createShaderModule({ code, label });
@@ -156,15 +174,21 @@ export class GpuRenderer {
         ],
       }),
     };
-    const pipeline = (groups: GPUBindGroupLayout[], entryPoint: string) =>
+    const pipeline = (
+      groups: GPUBindGroupLayout[],
+      entryPoint: string,
+      constants: Record<string, number> = {},
+    ) =>
       device.createComputePipelineAsync({
         label: entryPoint,
         layout: device.createPipelineLayout({ bindGroupLayouts: groups }),
-        compute: { module: computeModule, entryPoint },
+        compute: { module: computeModule, entryPoint, constants },
       });
     const pipelines = {
       render: await pipeline([layouts.common, layouts.image], 'renderTile'),
-      rays: await pipeline([layouts.common, layouts.empty, layouts.rays], 'traceRays'),
+      rays: await pipeline([layouts.common, layouts.empty, layouts.rays], 'traceRays', {
+        LOG_CROSSINGS: 1,
+      }),
       sky: await pipeline([layouts.common, layouts.empty, layouts.sky], 'skySamples'),
     };
     return new GpuRenderer(device, layouts, pipelines, blitModule, timestampQuery);
@@ -198,6 +222,10 @@ export class GpuRenderer {
   }
 
   setScene(scene: SceneParams): void {
+    const d = scene.disk;
+    if (d && !(d.rIn > 3 * scene.M && d.rOut > d.rIn && d.opacity >= 0 && d.opacity <= 1)) {
+      throw new RangeError('disk needs 3M < rIn < rOut and opacity in [0, 1]');
+    }
     this.scene = scene;
   }
 
@@ -227,6 +255,11 @@ export class GpuRenderer {
       tileOrigin: [tile.x, tile.y],
       tileSize: [tile.width, tile.height],
       sky: scene.sky === 'uniform' ? 1 : 0,
+      disk: scene.disk ? 1 : 0,
+      diskInner: scene.disk?.rIn ?? 0,
+      diskOuter: scene.disk?.rOut ?? 0,
+      diskOpacity: scene.disk?.opacity ?? 0,
+      diskTemperatureScale: scene.disk ? diskTemperatureScale(scene.disk.peakTemperature) : 0,
     });
     this.device.queue.writeBuffer(this.uniform, 0, data);
   }
@@ -428,16 +461,25 @@ export class GpuRenderer {
       [0, 1],
       input,
       rays.length,
-      rays.length * 32,
+      rays.length * RAY_OUT_BYTES,
     );
     const f = new Float32Array(out);
     const u = new Uint32Array(out);
-    return rays.map((_, i) => ({
-      direction: [f[i * 8] as number, f[i * 8 + 1] as number, f[i * 8 + 2] as number],
-      termination: u[i * 8 + 3] as number,
-      phiEnd: f[i * 8 + 4] as number,
-      steps: u[i * 8 + 5] as number,
-    }));
+    const stride = RAY_OUT_BYTES / 4;
+    return rays.map((_, i) => {
+      const k = i * stride;
+      const crossings = u[k + 6] as number;
+      return {
+        direction: [f[k] as number, f[k + 1] as number, f[k + 2] as number],
+        termination: u[k + 3] as number,
+        phiEnd: f[k + 4] as number,
+        steps: u[k + 5] as number,
+        crossings,
+        transmittance: f[k + 7] as number,
+        emission: [f[k + 8] as number, f[k + 9] as number, f[k + 10] as number],
+        radii: [...f.subarray(k + 12, k + 12 + Math.min(crossings, CROSSING_LOG_SIZE))],
+      };
+    });
   }
 
   /** Sky radiance for unit directions and frequency shift g (parity tests). */

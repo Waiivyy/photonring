@@ -10,6 +10,7 @@ const parityScene: SceneParams = {
   sky: 'stars',
   exposure: 1,
   toneMapping: true,
+  disk: null,
 };
 
 let renderer: GpuRenderer | null = null;
@@ -34,9 +35,9 @@ const get = async (): Promise<GpuRenderer> => {
 
 const harness: Harness = {
   ready,
-  async traceRays(rays) {
+  async traceRays(rays, disk = null) {
     const r = await get();
-    r.setScene(parityScene);
+    r.setScene({ ...parityScene, disk });
     return r.traceRays(rays);
   },
   async skyRadiance(directions, g) {

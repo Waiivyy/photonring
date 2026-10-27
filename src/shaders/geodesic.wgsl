@@ -8,7 +8,17 @@ struct Trace {
   dir: vec3f,
   phiEnd: f32,
   steps: u32,
+  // Disk-plane crossings with u > 0, in order along the traced path, and the disk light they
+  // contribute (front to back), as in compositeDisk (src/physics/disk.ts).
+  crossings: u32,
+  emission: vec3f,
+  transmittance: f32,
 }
+
+// True only in the parity pipeline: record crossing radii for the tests. As a pipeline constant
+// it is folded away in the image pipeline.
+override LOG_CROSSINGS: bool = false;
+var<private> crossingLog: array<f32, CROSSING_LOG_SIZE>;
 
 fn binetAcc(u: f32, m3: f32) -> f32 {
   return m3 * u * u - u;
@@ -68,13 +78,17 @@ fn cosSinSmall(x: f32) -> vec2f {
   return vec2f(c, s);
 }
 
-// Traces a ray backwards from a static observer at `origin` with unit local direction d.
-fn traceGeodesic(origin: vec3f, d: vec3f) -> Trace {
+// Traces a ray backwards from a static observer at `origin` with unit local direction d. With
+// stopWhenOpaque, tracing ends at the first crossing that leaves no transmittance.
+fn traceGeodesic(origin: vec3f, d: vec3f, stopWhenOpaque: bool) -> Trace {
   var out: Trace;
   out.termination = ESCAPED;
   out.dir = d;
   out.phiEnd = 0.0;
   out.steps = 0u;
+  out.crossings = 0u;
+  out.emission = vec3f(0.0);
+  out.transmittance = 1.0;
 
   let r0 = length(origin);
   let e1 = origin / r0;

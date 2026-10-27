@@ -24,7 +24,15 @@ export const FRAME_FIELDS: readonly StructField[] = [
   ['tileOrigin', 'vec2u'],
   ['tileSize', 'vec2u'],
   ['sky', 'u32'],
+  ['disk', 'u32'],
+  ['diskInner', 'f32'],
+  ['diskOuter', 'f32'],
+  ['diskOpacity', 'f32'],
+  ['diskTemperatureScale', 'f32'],
 ];
+
+/** Number of plane-crossing radii the parity entry point reports per ray. */
+export const CROSSING_LOG_SIZE = 8;
 
 /** Parameters of the tone-mapping blit. */
 export const BLIT_FIELDS: readonly StructField[] = [
@@ -60,6 +68,9 @@ export function wgslHeader(lut: LutParams): string {
     'const ESCAPED: u32 = 0u;',
     'const CAPTURED: u32 = 1u;',
     'const STEP_LIMIT: u32 = 2u;',
+    '// Stopped at an opaque disk: the light behind it no longer matters (image pass only).',
+    'const OPAQUE: u32 = 3u;',
+    `const CROSSING_LOG_SIZE: u32 = ${CROSSING_LOG_SIZE}u;`,
     `const RADIAL_SIN: f32 = ${f32(GPU_RADIAL_SIN)};`,
     `const STAR_LAYER_COUNT: u32 = ${STAR_LAYERS.length}u;`,
     `var<private> STAR_LAYERS: array<vec4f, ${STAR_LAYERS.length}> = array<vec4f, ${STAR_LAYERS.length}>(${layers.join(', ')});`,

@@ -1,14 +1,8 @@
 // Canonical scenes for golden images and validation renders.
-import { autoFieldOfView, iscoRadius } from '../physics/index.ts';
-import type { DiskSettings, RenderSettings } from './render.ts';
+import { autoFieldOfView, DEFAULT_DISK } from '../physics/index.ts';
+import type { RenderSettings } from './render.ts';
 
-/** Toy disk: inner edge at the ISCO, outer edge at 20M, opaque, 6500 K at its hottest radius. */
-export const DEFAULT_DISK: DiskSettings = {
-  rIn: iscoRadius(1),
-  rOut: 20,
-  opacity: 1,
-  peakTemperature: 6500,
-};
+export { DEFAULT_DISK };
 
 const base: RenderSettings = {
   width: 160,

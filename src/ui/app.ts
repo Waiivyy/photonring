@@ -143,6 +143,7 @@ class App {
       sky: 'stars',
       exposure: 1,
       toneMapping: true,
+      disk: null,
     });
     this.dirty = true;
   }

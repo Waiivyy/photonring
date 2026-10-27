@@ -1,5 +1,6 @@
 // Toy thin-disk model. Not a Page-Thorne solution: no relativistic corrections to the flux.
 import { blackbodyColour } from './colour.ts';
+import { iscoRadius } from './constants.ts';
 import type { Vec3 } from './observer.ts';
 import { circularOrbitEmitter, redshiftFactor } from './redshift.ts';
 
@@ -12,6 +13,17 @@ export interface DiskSettings {
   /** Emitted temperature at the hottest radius, (49/36) r_in, in kelvin. */
   readonly peakTemperature: number;
 }
+
+/**
+ * Default toy disk for M = 1: inner edge at the ISCO, outer edge at 20M, opaque, 6500 K at its
+ * hottest radius (chosen at the Stage 1 check-in, docs/DESIGN.md section 10).
+ */
+export const DEFAULT_DISK: DiskSettings = {
+  rIn: iscoRadius(1),
+  rOut: 20,
+  opacity: 1,
+  peakTemperature: 6500,
+};
 
 /** Radius of peak temperature for the profile below, r = (49/36) r_in. */
 const PEAK_RATIO = 49 / 36;

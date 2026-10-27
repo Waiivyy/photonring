@@ -179,6 +179,7 @@ test.describe('GPU against CPU parity', () => {
         sky,
         exposure: s.exposure,
         toneMapping: s.toneMapping,
+        disk: null,
       };
       const gpu = await page.evaluate((r) => window.harness!.renderImage(r), request);
       const cpu = encodeImage(renderImage(s), s);

@@ -1,4 +1,5 @@
 // Contract between the GPU test harness page (tests/gpu/harness.ts) and the Playwright specs.
+import type { DiskSettings } from '../../src/physics/index.ts';
 
 export interface HarnessInfo {
   readonly vendor: string;
@@ -18,6 +19,12 @@ export interface HarnessRayResult {
   readonly direction: readonly [number, number, number];
   readonly phiEnd: number;
   readonly steps: number;
+  /** Disk-plane crossings with u > 0, and the radii of the first ones (at most 8). */
+  readonly crossings: number;
+  readonly radii: readonly number[];
+  /** Disk light and remaining transmittance along the path (zero and 1 without a disk). */
+  readonly emission: readonly [number, number, number];
+  readonly transmittance: number;
 }
 
 export interface HarnessImageRequest {
@@ -28,11 +35,13 @@ export interface HarnessImageRequest {
   readonly sky: 'stars' | 'uniform';
   readonly exposure: number;
   readonly toneMapping: boolean;
+  readonly disk: DiskSettings | null;
 }
 
 export interface Harness {
   readonly ready: Promise<HarnessInfo>;
-  traceRays(rays: readonly HarnessRay[]): Promise<HarnessRayResult[]>;
+  /** Traces rays (observer mass 1) with an optional disk, through the shipped WGSL. */
+  traceRays(rays: readonly HarnessRay[], disk?: DiskSettings | null): Promise<HarnessRayResult[]>;
   /** Sky radiance for unit directions as seen with frequency shift g. */
   skyRadiance(
     directions: readonly (readonly [number, number, number])[],
