@@ -112,6 +112,35 @@ export function resultRows(r: ShadowResult): { label: string; value: string }[] 
   ];
 }
 
+/** The rows that do not need a measurement, for a camera whose result is still pending. */
+export function analyticRows(
+  distance: number,
+  fovYDeg: number,
+  side: number,
+): { rows: { label: string; value: string }[]; analyticPx: number; tolerancePx: number } {
+  const t = Math.tan((fovYDeg * Math.PI) / 360);
+  const analyticRad = shadowAngularRadius(distance, 1);
+  const analyticPx = imageRadiusFromConeAngle(analyticRad, side, t);
+  const tolerancePx = Math.max(1, 0.005 * analyticPx);
+  const where = `px of the ${side} render`;
+  return {
+    analyticPx,
+    tolerancePx,
+    rows: [
+      { label: 'Observer distance', value: `${formatValue(distance, 1)} M` },
+      { label: 'Field of view', value: `${formatValue(fovYDeg, 1)} degrees (vertical)` },
+      {
+        label: 'Analytic angular radius',
+        value: `${formatValue(analyticRad * DEG, 4)} degrees, ${formatValue(analyticPx, 2)} ${where}`,
+      },
+      {
+        label: 'Tolerance',
+        value: `1 px of the ${side} render or 0.5 %, whichever is larger: ${formatValue(tolerancePx, 2)} px`,
+      },
+    ],
+  };
+}
+
 /** One sentence for the live region when a measurement completes. */
 export function announcement(r: ShadowResult): string {
   const verdict = r.pass ? 'within tolerance' : 'outside tolerance';

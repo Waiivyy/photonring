@@ -235,6 +235,42 @@ dialog :focus-visible {
   line-height: 1.4;
 }
 
+.panel.validation {
+  left: 0.75rem;
+  right: auto;
+  top: 0.75rem;
+}
+
+.results {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.3rem 0.75rem;
+  margin: 0.5rem 0;
+}
+
+.results dt {
+  color: var(--muted);
+}
+
+.results dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.validation[data-state='done'] .results dd:nth-of-type(7) {
+  font-weight: 600;
+}
+
+.formula {
+  margin: 0 0 0.5rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+}
+
+.panel a {
+  color: var(--accent);
+}
+
 .panel h2 {
   margin: 0.25rem 0 0.5rem;
   font-size: 1rem;
@@ -353,7 +389,8 @@ dialog :focus-visible {
     bottom: 4.5rem;
   }
 
-  .panel {
+  .panel,
+  .panel.validation {
     top: auto;
     right: 0;
     bottom: 0;

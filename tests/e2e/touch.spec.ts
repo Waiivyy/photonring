@@ -67,7 +67,9 @@ test('tapping Zoom in zooms, a single-pointer alternative to the pinch', async (
 
 test('every control is at least 44 x 44 CSS px', async ({ page }) => {
   await page.getByRole('button', { name: 'Controls', exact: true }).tap();
-  const targets = page.locator('.toolbar button, .panel button, .panel label');
+  const targets = page.locator(
+    '.toolbar button:visible, .panel button:visible, .panel label:visible',
+  );
   const n = await targets.count();
   expect(n).toBeGreaterThan(10);
   for (let i = 0; i < n; i++) {

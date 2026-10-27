@@ -6,7 +6,7 @@ import { initWebGpu } from '../gpu/device.ts';
 import { ProgressiveRenderer, type FrameAction } from '../gpu/host/progressive.ts';
 import { chooseInternalResolution, type Resolution } from '../gpu/host/resolution.ts';
 import { GpuRenderer, TILE_SIZE } from '../gpu/renderer.ts';
-import { DEFAULT_DISK, type CameraParams } from '../physics/index.ts';
+import { DEFAULT_DISK, shadowAngularRadius, type CameraParams } from '../physics/index.ts';
 import { createAnnouncer, type Announcer } from './announcer.ts';
 import { createControlsPanel, type ControlsPanel, type SceneToggle } from './controls-panel.ts';
 import { cameraSentence, sceneSummary } from './describe.ts';
@@ -24,11 +24,18 @@ import {
   type BrightnessLimiter,
   type BrightnessPair,
 } from './rate-limit.ts';
+import { classifyValidation } from '../gpu/host/shadow-count.ts';
 import type { AppStats, ImageRect } from './stats.ts';
 import { createToolbar } from './toolbar.ts';
 import { showUnsupported } from './unsupported.ts';
 import { formatHash, needsNotice, parseHash } from './url-state.ts';
 import { createUrlSync, type UrlSync } from './url-sync.ts';
+import { announcement, shadowResult, type ShadowResult } from './validation.ts';
+import {
+  VALIDATION_SIDE,
+  createValidationPanel,
+  type ValidationPanel,
+} from './validation-panel.ts';
 import { DEFAULT_VIEW, toggleOverlay, type ViewMode, type ViewState } from './view-state.ts';
 
 /** GPU time per animation frame the renderer aims for. */
@@ -38,7 +45,7 @@ const SETTLE_MS = 120;
 /** Pixel cap for the internal resolution (4K UHD). */
 const MAX_PIXELS = 3840 * 2160;
 
-type PanelId = 'controls';
+type PanelId = 'controls' | 'validation';
 
 const HASH_NOTICE =
   'Some settings in the link were invalid or out of range and have been adjusted.';
@@ -118,6 +125,16 @@ class App {
   private readonly limiter: BrightnessLimiter;
   private readonly toolbar: ReturnType<typeof createToolbar>;
   private readonly controls: ControlsPanel;
+  private readonly validation: ValidationPanel;
+  /** Validation: the camera its rows show, the camera of its result, and the measurement state. */
+  private validationShown = '';
+  private validationDone = '';
+  private validationBusy = false;
+  private validationGen = 0;
+  private validationRuns = 0;
+  private validationMs = 0;
+  private lastValidation: ShadowResult | null = null;
+  private lastAnnounced = '';
   private panels: PanelId[] = [];
   /** The scene of the image last presented to the canvas: the overlays follow it. */
   private presented: SceneView | null = null;
@@ -181,7 +198,15 @@ class App {
         controls: 'controls-panel',
         onClick: () => this.togglePanel('controls'),
       },
+      {
+        id: 'btn-validation',
+        label: 'Validation',
+        key: 'V',
+        controls: 'validation-panel',
+        onClick: () => this.togglePanel('validation'),
+      },
     ]);
+    this.validation = createValidationPanel({ close: () => this.closePanel('validation', true) });
     this.controls = createControlsPanel({
       action: (a) => this.dispatch(a, 'button'),
       scene: (toggle, on) => this.setSceneToggle(toggle, on, false),
@@ -213,6 +238,7 @@ class App {
       this.overlay.svg,
       this.toolbar.element,
       this.controls.element,
+      this.validation.element,
       this.overlay.legend,
       this.hud,
       help,
@@ -220,6 +246,7 @@ class App {
       this.alert,
     );
     this.syncControls();
+    this.syncValidationPanel();
 
     this.context.configure({ device: this.device, format: this.format, alphaMode: 'opaque' });
     bindCanvasInput(
@@ -240,6 +267,7 @@ class App {
         stats: () => this.stats(),
         destroyDevice: () => this.device.destroy(),
         presentedImage: (rect) => this.presentedImage(rect),
+        validation: () => this.lastValidation,
       },
     };
     this.state = 'rendering';
@@ -280,6 +308,9 @@ class App {
       hashApplies: this.hashApplies,
       ringsState: this.overlay.ringsState,
       ringMs: this.overlay.ringMs,
+      validationOpen: this.view.validationOpen,
+      validationRuns: this.validationRuns,
+      validationMs: this.validationMs,
     };
   }
 
@@ -340,6 +371,7 @@ class App {
     if (action.kind !== 'idle') this.run(action);
     if (this.plan.done) this.settled();
     this.overlay.update(this.overlayFrame());
+    this.updateValidation();
     this.updateHud();
     this.life.frame(this.frame);
   };
@@ -460,6 +492,7 @@ class App {
     }
     if (!sameOrbit(prev.orbit, next.orbit) || prev.antialias !== next.antialias) this.applyScene();
     this.syncControls();
+    this.syncValidationPanel();
     this.urlSync.schedule(formatHash(next));
   }
 
@@ -537,9 +570,7 @@ class App {
 
   /** Actions this build of the page can perform (the rest arrive with later features). */
   private supports(a: Action): boolean {
-    return (
-      a.type !== 'save' && a.type !== 'about' && !(a.type === 'panel' && a.panel !== 'controls')
-    );
+    return a.type !== 'save' && a.type !== 'about';
   }
 
   private onKey(e: KeyboardEvent): boolean {
@@ -581,7 +612,7 @@ class App {
         this.setOverlay(a.id, !v.overlays.includes(a.id), source === 'key');
         return;
       case 'panel':
-        this.togglePanel(a.panel as PanelId);
+        this.togglePanel(a.panel);
         return;
       case 'escape': {
         const top = topPanel(this.panels);
@@ -597,7 +628,8 @@ class App {
   // ---- Panels ------------------------------------------------------------------------------
 
   private panelParts(id: PanelId): { panel: HTMLElement; button: HTMLButtonElement } {
-    return { panel: this.controls.element, button: this.toolbar.buttons.get(`btn-${id}`)! };
+    const panel = id === 'controls' ? this.controls.element : this.validation.element;
+    return { panel, button: this.toolbar.buttons.get(`btn-${id}`)! };
   }
 
   private togglePanel(id: PanelId): void {
@@ -605,7 +637,25 @@ class App {
     else this.openPanel(id);
   }
 
+  /** The Validation panel is part of the view (and the URL); the Controls panel is not. */
   private openPanel(id: PanelId): void {
+    if (id === 'validation') this.commit({ ...this.view, validationOpen: true });
+    else this.showPanel(id);
+  }
+
+  private closePanel(id: PanelId, focusButton: boolean): void {
+    if (id === 'validation') this.commit({ ...this.view, validationOpen: false });
+    else this.hidePanel(id);
+    if (focusButton) this.panelParts(id).button.focus();
+  }
+
+  private syncValidationPanel(): void {
+    const open = this.panels.includes('validation');
+    if (this.view.validationOpen && !open) this.showPanel('validation');
+    else if (!this.view.validationOpen && open) this.hidePanel('validation');
+  }
+
+  private showPanel(id: PanelId): void {
     const single = window.matchMedia(NARROW).matches;
     for (const other of this.panels) if (single && other !== id) this.closePanel(other, false);
     this.panels = openPanel(this.panels, id, { single });
@@ -615,13 +665,70 @@ class App {
     this.root.classList.toggle('panel-open', this.panels.length > 0);
   }
 
-  private closePanel(id: PanelId, focusButton: boolean): void {
+  private hidePanel(id: PanelId): void {
     this.panels = closePanel(this.panels, id);
     const { panel, button } = this.panelParts(id);
     panel.hidden = true;
     button.setAttribute('aria-expanded', 'false');
     this.root.classList.toggle('panel-open', this.panels.length > 0);
-    if (focusButton) button.focus();
+    if (id === 'validation') {
+      // Discard a measurement in flight and free the offscreen render.
+      this.validationGen++;
+      this.validationShown = '';
+      this.validationDone = '';
+      this.renderer.releaseValidation();
+    }
+  }
+
+  // ---- Validation --------------------------------------------------------------------------
+
+  /**
+   * While the panel is open: its analytic rows follow the presented camera at once, and once
+   * the image is complete the shadow is measured on the offscreen validation render, unless a
+   * result for this camera is already shown or a measurement is in flight.
+   */
+  private updateValidation(): void {
+    if (!this.view.validationOpen || !this.presented) return;
+    const camera = this.presented.camera;
+    const key = `${camera.distance}|${camera.azimuthDeg}|${camera.elevationDeg}|${camera.fovYDeg}`;
+    if (key !== this.validationShown && key !== this.validationDone) {
+      this.validationShown = key;
+      this.validation.pending('waiting', camera.distance, camera.fovYDeg);
+    }
+    if (!this.plan.done || this.validationBusy || key === this.validationDone) return;
+    this.validationBusy = true;
+    const gen = ++this.validationGen;
+    const t0 = performance.now();
+    this.validation.pending('measuring', camera.distance, camera.fovYDeg);
+    this.renderer
+      .measureShadow(camera, VALIDATION_SIDE)
+      .then((readback) => {
+        const counts = classifyValidation(readback, {
+          tanHalfFovY: Math.tan((camera.fovYDeg * Math.PI) / 360),
+          tanPsi: Math.tan(shadowAngularRadius(camera.distance, 1)),
+        });
+        return shadowResult({ ...camera, side: VALIDATION_SIDE, counts });
+      })
+      .then(
+        (result) => {
+          this.validationBusy = false;
+          if (gen !== this.validationGen || this.life.disposed) return;
+          this.validationMs = performance.now() - t0;
+          this.validationRuns++;
+          this.lastValidation = result;
+          this.validationDone = key;
+          this.validationShown = key;
+          this.validation.done(result);
+          const text = announcement(result);
+          if (text !== this.lastAnnounced) this.announcer.announce(text);
+          this.lastAnnounced = text;
+        },
+        () => {
+          this.validationBusy = false;
+          if (gen !== this.validationGen || this.life.disposed) return;
+          this.validation.failed('Measurement unavailable: the GPU device was lost.');
+        },
+      );
   }
 
   // ---- Device loss -------------------------------------------------------------------------

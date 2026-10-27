@@ -14,9 +14,12 @@ async function recordAnnouncements(page: Page) {
   await page.addInitScript(() => {
     const seen: string[] = [];
     (window as unknown as { announcements: string[] }).announcements = seen;
+    let last = '';
     new MutationObserver(() => {
       const t = document.getElementById('announcer')?.textContent ?? '';
-      if (t) seen.push(t);
+      // A new message (an emptied region is the announcer re-reading the same text).
+      if (t !== last && t !== '') seen.push(t);
+      last = t;
     }).observe(document, { subtree: true, childList: true, characterData: true });
   });
 }
