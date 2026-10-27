@@ -24,7 +24,11 @@ test('Tab order: the view, then the toolbar, then the open panel', async ({ page
   await expect(view(page)).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(page.getByRole('button', { name: 'Controls', exact: true })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button', { name: 'Validation', exact: true })).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
   await page.keyboard.press('Enter');
+  await page.keyboard.press('Tab');
   await page.keyboard.press('Tab');
   await expect(page.getByRole('button', { name: 'Orbit left' })).toBeFocused();
 });

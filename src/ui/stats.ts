@@ -1,5 +1,6 @@
 // The page's read-only debug interface (window.photonring), shared by the app and the browser
 // tests. Types only.
+import type { ShadowResult } from './validation.ts';
 
 export interface AppStats {
   state: 'starting' | 'rendering' | 'lost';
@@ -42,6 +43,10 @@ export interface AppStats {
   ringsState: 'off' | 'pending' | 'ready';
   /** Main-thread milliseconds spent computing the last complete set of ring curves. */
   ringMs: number;
+  validationOpen: boolean;
+  /** Completed shadow measurements, and the wall-clock ms of the last (request to result). */
+  validationRuns: number;
+  validationMs: number;
 }
 
 export interface ImageRect {
@@ -59,6 +64,8 @@ export interface PhotonringDebug {
    * through the same blit the canvas gets.
    */
   presentedImage(rect?: ImageRect): Promise<{ width: number; height: number; rgba: string }>;
+  /** The last shadow measurement of the Validation panel, or null. */
+  validation(): ShadowResult | null;
 }
 
 declare global {
