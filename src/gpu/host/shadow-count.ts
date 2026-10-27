@@ -42,10 +42,17 @@ export interface ValidationCounts {
 const ONE = 0x3c00;
 const COLOUR_TOLERANCE = 1e-3;
 
-const matches = (rgb: readonly [number, number, number], c: readonly number[]) =>
-  Math.abs(rgb[0] - (c[0] as number)) <= COLOUR_TOLERANCE &&
-  Math.abs(rgb[1] - (c[1] as number)) <= COLOUR_TOLERANCE &&
-  Math.abs(rgb[2] - (c[2] as number)) <= COLOUR_TOLERANCE;
+let halfTable: Float32Array | null = null;
+/** Every binary16 value decoded once (256 KB), so the per-pixel work is a lookup. */
+function halfValues(): Float32Array {
+  if (!halfTable) {
+    halfTable = new Float32Array(65536);
+    for (let h = 0; h < 65536; h++) halfTable[h] = halfToFloat(h);
+  }
+  return halfTable;
+}
+
+const near = (x: number, c: number) => Math.abs(x - c) <= COLOUR_TOLERANCE;
 
 /**
  * Counts the readback. `tanHalfFovY` is the render's, `tanPsi` the tangent of the analytic shadow
@@ -84,6 +91,10 @@ export function classifyValidation(
   let worstMismatchBand = 0;
   let worstDisagreementBand = 0;
   const termBase = rowHalves * side;
+  const table = halfValues();
+  const [cr, cg, cb] = TERMINATION_COLOURS.captured;
+  const [er, eg, eb] = TERMINATION_COLOURS.escaped;
+  const [sr, sg, sb] = TERMINATION_COLOURS.stepLimit;
 
   for (let j = 0; j < side; j++) {
     const sy = (1 - (2 * (j + 0.5)) / side) * t;
@@ -100,20 +111,18 @@ export function classifyValidation(
       else other++;
 
       const k = termBase + c;
-      const rgb: [number, number, number] = [
-        halfToFloat(halves[k] as number),
-        halfToFloat(halves[k + 1] as number),
-        halfToFloat(halves[k + 2] as number),
-      ];
+      const tr = table[halves[k] as number] as number;
+      const tg = table[halves[k + 1] as number] as number;
+      const tb = table[halves[k + 2] as number] as number;
       let isCaptured = false;
       let isEscaped = false;
-      if (matches(rgb, TERMINATION_COLOURS.captured)) {
+      if (near(tr, cr) && near(tg, cg) && near(tb, cb)) {
         captured++;
         isCaptured = true;
-      } else if (matches(rgb, TERMINATION_COLOURS.escaped)) {
+      } else if (near(tr, er) && near(tg, eg) && near(tb, eb)) {
         escaped++;
         isEscaped = true;
-      } else if (matches(rgb, TERMINATION_COLOURS.stepLimit)) stepLimit++;
+      } else if (near(tr, sr) && near(tg, sg) && near(tb, sb)) stepLimit++;
       else termOther++;
 
       const sx = ((2 * (i + 0.5)) / side - 1) * t;
