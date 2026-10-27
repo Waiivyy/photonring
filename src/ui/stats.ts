@@ -38,11 +38,27 @@ export interface AppStats {
   toggleApplyTimes: number[];
   /** Hash changes applied by this page instance (not counting its own writes). */
   hashApplies: number;
+  /** Lensed ring overlays: none enabled, computing for the presented view, or drawn. */
+  ringsState: 'off' | 'pending' | 'ready';
+  /** Main-thread milliseconds spent computing the last complete set of ring curves. */
+  ringMs: number;
+}
+
+export interface ImageRect {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
 }
 
 export interface PhotonringDebug {
   stats(): AppStats;
   destroyDevice(): void;
+  /**
+   * RGBA of the presented full image (internal pixels), optionally cropped, as base64, read back
+   * through the same blit the canvas gets.
+   */
+  presentedImage(rect?: ImageRect): Promise<{ width: number; height: number; rgba: string }>;
 }
 
 declare global {
