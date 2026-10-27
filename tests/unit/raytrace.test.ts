@@ -4,6 +4,7 @@ import {
   cameraFrame,
   circularOrbitEmitter,
   criticalImpactParameter,
+  firstPlaneCrossingAngle,
   impactParameterFromLocalAngle,
   pixelDirection,
   redshiftFactor,
@@ -206,6 +207,18 @@ describe('7. disk plane crossings', () => {
       const ray = traceRay(M, origin, [d[0] / n, d[1] / n, 0], OPTS);
       expect(ray.crossings).toEqual([]);
     }
+  });
+
+  it('first crossing angle: pi in the plane, none for the plane itself, else the zero of z', () => {
+    expect(firstPlaneCrossingAngle(0, 0.6)).toBe(Math.PI);
+    expect(firstPlaneCrossingAngle(0, -0.6)).toBe(Math.PI);
+    expect(firstPlaneCrossingAngle(0, 0)).toBeUndefined();
+    expect(firstPlaneCrossingAngle(1e-15, -1e-15)).toBeUndefined();
+    const [e1z, e2z] = [0.3, 0.5];
+    const phi0 = firstPlaneCrossingAngle(e1z, e2z) as number;
+    expect(phi0).toBeGreaterThan(0);
+    expect(phi0).toBeLessThanOrEqual(Math.PI);
+    expect(Math.abs(e1z * Math.cos(phi0) + e2z * Math.sin(phi0))).toBeLessThan(1e-15);
   });
 
   it('near the horizon (capture radius 2.01 M): counts agree and no crossing lies inside', () => {

@@ -36,6 +36,19 @@ export interface RayResult {
 
 const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 
+/**
+ * First orbital angle, in (0, pi], at which a ray plane with basis e1 (towards the observer) and
+ * e2 meets the disk plane: z(phi) = r (e1z cos phi + e2z sin phi) vanishes at phi0 + k pi. An
+ * observer in the plane gets pi (its own position is not a crossing). Undefined when the ray
+ * plane is the disk plane itself, which a zero-thickness disk never crosses.
+ */
+export function firstPlaneCrossingAngle(e1z: number, e2z: number): number | undefined {
+  if (!(Math.hypot(e1z, e2z) > 1e-14)) return undefined;
+  let phi0 = Math.atan2(-e1z, e2z);
+  phi0 -= Math.PI * Math.floor(phi0 / Math.PI);
+  return phi0 > 0 ? phi0 : Math.PI;
+}
+
 function finiteVec(v: Vec3): boolean {
   return v.length === 3 && v.every(Number.isFinite);
 }
@@ -114,13 +127,7 @@ export function traceRay(M: number, origin: Vec3, direction: Vec3, opts: RayOpti
     };
   }
 
-  // z(phi) = r (e1z cos phi + e2z sin phi) vanishes at phi0 + k pi; take phi0 in (0, pi].
-  let firstCrossing: number | undefined;
-  if (Math.hypot(e1[2], e2[2]) > 1e-14) {
-    let phi0 = Math.atan2(-e1[2], e2[2]);
-    phi0 -= Math.PI * Math.floor(phi0 / Math.PI);
-    firstCrossing = phi0 > 0 ? phi0 : Math.PI;
-  }
+  const firstCrossing = firstPlaneCrossingAngle(e1[2], e2[2]);
 
   const R = opts.round ?? f64;
   const u0 = 1 / r0;
