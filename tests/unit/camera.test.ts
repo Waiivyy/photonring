@@ -3,8 +3,12 @@ import { describe, expect, it } from 'vitest';
 import {
   autoFieldOfView,
   cameraFrame,
+  coneAngleFromImageRadius,
+  imageRadiusFromConeAngle,
   pixelDirection,
+  projectDirection,
   shadowAngularRadius,
+  traceRay,
   type CameraParams,
   type Vec3,
 } from '../../src/physics/index.ts';
@@ -137,5 +141,95 @@ describe('automatic field of view near the hole', () => {
 
   it('caps at 120 degrees', () => {
     expect(autoFieldOfView(5, 1, 60)).toBe(120);
+  });
+});
+
+describe('direction to image point (inverse of pixelDirection)', () => {
+  it.each([
+    [16, 9, 60],
+    [9, 16, 30],
+    [1, 1, 120],
+    [21, 9, 90],
+  ])('aspect %d:%d, fov %d: projecting a pixel direction gives the pixel back', (aw, ah, fov) => {
+    const f = cameraFrame({ distance: 12, azimuthDeg: 37, elevationDeg: -23, fovYDeg: fov });
+    const w = aw * 64;
+    const h = ah * 64;
+    for (const [x, y] of [
+      [0, 0],
+      [w / 2, h / 2],
+      [w, h],
+      [0.37 * w, 0.81 * h],
+      [w + 50, -30],
+    ] as const) {
+      const p = projectDirection(f, w, h, pixelDirection(f, w, h, x, y));
+      expect(p).not.toBeNull();
+      expect(Math.abs((p as [number, number])[0] - x)).toBeLessThan(1e-9);
+      expect(Math.abs((p as [number, number])[1] - y)).toBeLessThan(1e-9);
+    }
+  });
+
+  it('returns null for directions at or behind the camera plane', () => {
+    const f = cameraFrame(base);
+    const back: Vec3 = [-f.forward[0], -f.forward[1], -f.forward[2]];
+    expect(projectDirection(f, 160, 90, back)).toBeNull();
+    expect(projectDirection(f, 160, 90, f.right)).toBeNull();
+  });
+});
+
+describe('cone half-angle and image radius', () => {
+  it('a cone around the optical axis images to tan(angle) / tan(fov/2) half-heights', () => {
+    const t = Math.tan(30 * DEG);
+    expect(imageRadiusFromConeAngle(30 * DEG, 1080, t)).toBeCloseTo(540, 9);
+    expect(imageRadiusFromConeAngle(0, 1080, t)).toBe(0);
+    const f = cameraFrame(base);
+    const psi = 0.2;
+    const r = imageRadiusFromConeAngle(psi, 1080, f.tanHalfFovY);
+    const d = pixelDirection(f, 1920, 1080, 960 + r, 540);
+    expect(angle(d, f.forward)).toBeCloseTo(psi, 12);
+  });
+
+  it('the two conversions are exact inverses', () => {
+    for (const t of [Math.tan(15 * DEG), 1, Math.tan(60 * DEG)]) {
+      for (const psi of [1e-6, 0.01, 0.3, 1.2]) {
+        const px = imageRadiusFromConeAngle(psi, 1024, t);
+        expect(coneAngleFromImageRadius(px, 1024, t)).toBeCloseTo(psi, 14);
+      }
+    }
+  });
+});
+
+describe('shadow edge is the outline of the horizon and of the photon sphere', () => {
+  // Every ray inside the analytic edge reaches r = 3M and then r = 2M; every ray outside escapes.
+  // Checked half a pixel either side of the edge at 1080 rows, in 16 image directions.
+  it.each([5, 10, 30, 100, 200])('r_o = %d M, capture radii 3M and 2.001M', (rObs) => {
+    const f = cameraFrame({
+      distance: rObs,
+      azimuthDeg: 20,
+      elevationDeg: 15,
+      fovYDeg: autoFieldOfView(rObs, 1, 60),
+    });
+    const W = 1920;
+    const H = 1080;
+    const edge = imageRadiusFromConeAngle(shadowAngularRadius(rObs, 1), H, f.tanHalfFovY);
+    for (let k = 0; k < 16; k++) {
+      const theta = (2 * Math.PI * k) / 16;
+      for (const [offset, expected] of [
+        [-0.5, 'captured'],
+        [0.5, 'escaped'],
+      ] as const) {
+        const rpx = edge + offset;
+        const d = pixelDirection(
+          f,
+          W,
+          H,
+          W / 2 + rpx * Math.cos(theta),
+          H / 2 - rpx * Math.sin(theta),
+        );
+        for (const captureRadius of [3, 2.001]) {
+          const ray = traceRay(1, f.position, d, { dphi: 0.0125, maxSteps: 20000, captureRadius });
+          expect(ray.termination).toBe(expected);
+        }
+      }
+    }
   });
 });
