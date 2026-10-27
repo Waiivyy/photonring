@@ -16,6 +16,7 @@ import { bindCanvasInput } from './input.ts';
 import { KEYMAP, ariaKeyshortcuts, keyAction, type Action } from './keymap.ts';
 import { createLifecycle, type Lifecycle } from './lifecycle.ts';
 import { orbitBy, resetOrbit, viewCamera, zoomBy, type OrbitState } from './orbit.ts';
+import { edgeEllipse } from './overlay-geometry.ts';
 import { OVERLAY_STYLES, type OverlayId } from './overlay-style.ts';
 import { OverlayLayer } from './overlays.ts';
 import { closePanel, openPanel, topPanel } from './panel-stack.ts';
@@ -27,6 +28,8 @@ import {
 } from './rate-limit.ts';
 import { classifyValidation } from '../gpu/host/shadow-count.ts';
 import type { AppStats, ImageRect } from './stats.ts';
+import { screenshotName } from './screenshot-name.ts';
+import { composeImage, download } from './screenshot.ts';
 import { createToolbar } from './toolbar.ts';
 import { showUnsupported } from './unsupported.ts';
 import { formatHash, needsNotice, parseHash } from './url-state.ts';
@@ -137,6 +140,8 @@ class App {
   private validationMs = 0;
   private lastValidation: ShadowResult | null = null;
   private lastAnnounced = '';
+  private saving = false;
+  private saveWaiters: { resolve: () => void; reject: (e: Error) => void }[] = [];
   private panels: PanelId[] = [];
   /** The scene of the image last presented to the canvas: the overlays follow it. */
   private presented: SceneView | null = null;
@@ -208,6 +213,12 @@ class App {
         onClick: () => this.togglePanel('validation'),
       },
       {
+        id: 'btn-save',
+        label: 'Save image',
+        key: 'S',
+        onClick: () => void this.save(),
+      },
+      {
         id: 'btn-about',
         label: 'About',
         key: '?',
@@ -227,10 +238,7 @@ class App {
   start(): void {
     this.loadHash();
     this.canvas.setAttribute('aria-label', this.summary());
-    this.canvas.setAttribute(
-      'aria-keyshortcuts',
-      ariaKeyshortcuts(KEYMAP.filter((b) => this.supports(b.action))),
-    );
+    this.canvas.setAttribute('aria-keyshortcuts', ariaKeyshortcuts(KEYMAP));
     const help = el(
       'p',
       { class: 'help', id: 'help' },
@@ -382,6 +390,11 @@ class App {
     if (this.plan.done) this.settled();
     this.overlay.update(this.overlayFrame());
     this.updateValidation();
+    if (this.saveWaiters.length > 0 && this.readyToSave()) {
+      const waiters = this.saveWaiters;
+      this.saveWaiters = [];
+      for (const w of waiters) w.resolve();
+    }
     this.updateHud();
     this.life.frame(this.frame);
   };
@@ -578,14 +591,9 @@ class App {
 
   // ---- Input -------------------------------------------------------------------------------
 
-  /** Actions this build of the page can perform (the rest arrive with later features). */
-  private supports(a: Action): boolean {
-    return a.type !== 'save';
-  }
-
   private onKey(e: KeyboardEvent): boolean {
     const a = keyAction(e);
-    if (!a || !this.supports(a)) return false;
+    if (!a) return false;
     if (a.type === 'escape' && this.panels.length === 0) return false;
     this.dispatch(a, 'key');
     return true;
@@ -633,6 +641,7 @@ class App {
         this.about.open(source === 'key' ? this.canvas : this.toolbar.buttons.get('btn-about')!);
         return;
       case 'save':
+        void this.save();
         return;
     }
   }
@@ -689,6 +698,77 @@ class App {
       this.validationShown = '';
       this.validationDone = '';
       this.renderer.releaseValidation();
+    }
+  }
+
+  // ---- Saving the image --------------------------------------------------------------------
+
+  /** Everything visible is complete: the image, any pending brightness change, the rings. */
+  private readyToSave(): boolean {
+    return (
+      this.state === 'rendering' &&
+      this.plan.done &&
+      this.presented !== null &&
+      this.limiter.isIdle() &&
+      this.overlay.ringsState !== 'pending'
+    );
+  }
+
+  /** Resolves once readyToSave holds (checked every frame); rejects after 10 s or on teardown. */
+  private whenReadyToSave(): Promise<void> {
+    if (this.readyToSave()) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const waiter = { resolve, reject };
+      this.saveWaiters.push(waiter);
+      this.life.timeout(() => {
+        if (!this.saveWaiters.includes(waiter)) return;
+        this.saveWaiters = this.saveWaiters.filter((w) => w !== waiter);
+        reject(new Error('the image did not finish within 10 seconds'));
+      }, 10_000);
+    });
+  }
+
+  private async save(): Promise<void> {
+    if (this.saving) return;
+    this.saving = true;
+    const button = this.toolbar.buttons.get('btn-save')!;
+    button.setAttribute('aria-disabled', 'true');
+    try {
+      if (!this.readyToSave()) this.announcer.announce('Saving the image when it is complete');
+      await this.whenReadyToSave();
+      const shown = this.presented!;
+      const W = this.renderer.width;
+      const H = this.renderer.height;
+      const cssWidth = this.canvas.clientWidth || W;
+      const frame = this.overlayFrame();
+      const view = {
+        width: W,
+        height: H,
+        aspect: W / H,
+        tanHalfFovY: Math.tan((shown.camera.fovYDeg * Math.PI) / 360),
+      };
+      const rgba = await this.renderer.readImageRGBA('full');
+      const blob = await composeImage({
+        width: W,
+        height: H,
+        scale: W / cssWidth,
+        rgba,
+        edge: frame.overlays.includes('edge') ? edgeEllipse(shown.camera.distance, view) : null,
+        rings: this.overlay.paths(view, frame),
+        overlays: frame.overlays,
+        termination: shown.view === 'termination',
+      });
+      if (this.life.disposed) return;
+      const name = screenshotName({ ...shown.camera, view: shown.view });
+      download(blob, name, this.life);
+      this.announcer.announce(`Saved ${name}`);
+    } catch (e) {
+      if (!this.life.disposed) {
+        this.announcer.announce(`Could not save: ${e instanceof Error ? e.message : String(e)}.`);
+      }
+    } finally {
+      this.saving = false;
+      button.removeAttribute('aria-disabled');
     }
   }
 
@@ -773,6 +853,8 @@ class App {
   }
 
   private dispose(): void {
+    for (const w of this.saveWaiters) w.reject(new Error('the GPU device was lost'));
+    this.saveWaiters = [];
     this.life.dispose();
     this.renderer.destroy();
   }

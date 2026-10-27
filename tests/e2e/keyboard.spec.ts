@@ -19,7 +19,7 @@ test.beforeEach(async ({ page }) => {
   await openApp(page);
 });
 
-const TOOLBAR = ['Controls', 'Validation', 'About'];
+const TOOLBAR = ['Controls', 'Validation', 'Save image', 'About'];
 
 test('Tab order: the view, then the toolbar, then the open panel', async ({ page }) => {
   await page.keyboard.press('Tab');

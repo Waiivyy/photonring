@@ -5,15 +5,7 @@ import { readFileSync } from 'node:fs';
 import type { Download, Page } from '@playwright/test';
 import { readPng, type PngImage } from '../helpers/png-read.ts';
 import { legendLayout } from '../../src/ui/legend-layout.ts';
-import {
-  expect,
-  openApp,
-  stats,
-  test,
-  view,
-  waitForFullImage,
-  waitForSettled,
-} from './fixtures.ts';
+import { expect, openApp, stats, test, view, waitForSettled } from './fixtures.ts';
 
 const full = (patch: string) =>
   `/#v=1&r=30&az=0&el=12&disk=1&aa=1&view=colour&ov=none&val=0${patch ? `&${patch}` : ''}`;
