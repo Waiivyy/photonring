@@ -26,6 +26,8 @@ import {
 import type { AppStats } from './stats.ts';
 import { createToolbar } from './toolbar.ts';
 import { showUnsupported } from './unsupported.ts';
+import { formatHash, needsNotice, parseHash } from './url-state.ts';
+import { createUrlSync, type UrlSync } from './url-sync.ts';
 import { DEFAULT_VIEW, toggleOverlay, type ViewMode, type ViewState } from './view-state.ts';
 
 /** GPU time per animation frame the renderer aims for. */
@@ -36,6 +38,12 @@ const SETTLE_MS = 120;
 const MAX_PIXELS = 3840 * 2160;
 
 type PanelId = 'controls';
+
+const HASH_NOTICE =
+  'Some settings in the link were invalid or out of range and have been adjusted.';
+
+const sameOrbit = (a: OrbitState, b: OrbitState) =>
+  a.distance === b.distance && a.azimuthDeg === b.azimuthDeg && a.elevationDeg === b.elevationDeg;
 
 /** Panels become bottom sheets, one at a time, below this width (CSS px). */
 const NARROW = '(max-width: 640px)';
@@ -110,6 +118,8 @@ class App {
   private readonly toolbar: ReturnType<typeof createToolbar>;
   private readonly controls: ControlsPanel;
   private panels: PanelId[] = [];
+  private readonly urlSync: UrlSync;
+  private hashApplies = 0;
   /** Announce the camera once the view settles (after keyboard or camera-button input). */
   private announceCamera = false;
   private state: AppStats['state'] = 'starting';
@@ -152,6 +162,11 @@ class App {
         clearTimer: (id) => this.life.cancel(id),
       },
     );
+    this.urlSync = createUrlSync({
+      setTimer: (fn, ms) => this.life.timeout(fn, ms),
+      clearTimer: (id) => this.life.cancel(id),
+      replaceHash: (hash) => this.writeHash(hash),
+    });
     this.toolbar = createToolbar([
       {
         id: 'btn-controls',
@@ -170,6 +185,7 @@ class App {
   }
 
   start(): void {
+    this.loadHash();
     this.canvas.setAttribute('aria-label', this.summary());
     this.canvas.setAttribute(
       'aria-keyshortcuts',
@@ -207,6 +223,7 @@ class App {
       },
       this.life,
     );
+    window.addEventListener('hashchange', this.onHashChange, { signal: this.life.signal });
     void this.device.lost.then((info) => {
       if (!this.life.disposed) this.showLost(info.reason, info.message);
     });
@@ -248,6 +265,7 @@ class App {
       brightnessPending: !this.limiter.isIdle(),
       toggleApplies: this.limiter.applies,
       toggleApplyTimes: [...this.limiter.applyTimes],
+      hashApplies: this.hashApplies,
     };
   }
 
@@ -381,36 +399,32 @@ class App {
 
   // ---- State changes ------------------------------------------------------------------------
 
-  private setOrbit(next: OrbitState): void {
-    if (next === this.view.orbit) return;
-    const o = this.view.orbit;
-    if (
-      next.distance === o.distance &&
-      next.azimuthDeg === o.azimuthDeg &&
-      next.elevationDeg === o.elevationDeg
-    ) {
-      return;
+  /**
+   * Makes `next` the requested view: the camera and anti-aliasing apply at once, disk and
+   * termination view go through the brightness limiter, and the URL follows (debounced).
+   */
+  private commit(next: ViewState): void {
+    const prev = this.view;
+    if (next === prev) return;
+    this.view = next;
+    if (prev.disk !== next.disk || prev.view !== next.view) {
+      this.limiter.request({ disk: next.disk, view: next.view });
     }
-    this.view = { ...this.view, orbit: next };
-    this.applyScene();
+    if (!sameOrbit(prev.orbit, next.orbit) || prev.antialias !== next.antialias) this.applyScene();
+    this.syncControls();
+    this.urlSync.schedule(formatHash(next));
   }
 
-  private requestBrightness(): void {
-    this.limiter.request({ disk: this.view.disk, view: this.view.view });
+  private setOrbit(next: OrbitState): void {
+    if (sameOrbit(next, this.view.orbit)) return;
+    this.commit({ ...this.view, orbit: next });
   }
 
   private setSceneToggle(toggle: SceneToggle, on: boolean, announce: boolean): void {
-    if (toggle === 'disk') {
-      this.view = { ...this.view, disk: on };
-      this.requestBrightness();
-    } else if (toggle === 'termination') {
-      this.view = { ...this.view, view: on ? 'termination' : 'colour' };
-      this.requestBrightness();
-    } else {
-      this.view = { ...this.view, antialias: on };
-      this.applyScene();
-    }
-    this.syncControls();
+    const v = this.view;
+    if (toggle === 'disk') this.commit({ ...v, disk: on });
+    else if (toggle === 'termination') this.commit({ ...v, view: on ? 'termination' : 'colour' });
+    else this.commit({ ...v, antialias: on });
     if (announce) {
       const name = { disk: 'Disk', antialias: 'Anti-aliasing', termination: 'Termination view' }[
         toggle
@@ -420,10 +434,47 @@ class App {
   }
 
   private setOverlay(id: OverlayId, on: boolean, announce: boolean): void {
-    if (this.view.overlays.includes(id) !== on) this.view = toggleOverlay(this.view, id);
-    this.syncControls();
+    if (this.view.overlays.includes(id) !== on) this.commit(toggleOverlay(this.view, id));
     if (announce) this.announcer.announce(`${OVERLAY_STYLES[id].label} ${on ? 'on' : 'off'}`);
   }
+
+  // ---- URL hash ----------------------------------------------------------------------------
+
+  /** Writes the hash now, with replaceState: no history entry, no hashchange. */
+  private writeHash(hash: string): void {
+    history.replaceState(history.state, '', `${location.pathname}${location.search}#${hash}`);
+  }
+
+  /** Reads the hash on load: a shared view renders without the default view first. */
+  private loadHash(): void {
+    if (location.hash === '' || location.hash === '#') return;
+    const { state, issues } = parseHash(location.hash);
+    this.view = state;
+    this.applied = { disk: state.disk, view: state.view };
+    this.limiter.reset(this.applied);
+    this.canonicaliseHash(state);
+    if (needsNotice(issues)) this.announcer.announce(HASH_NOTICE);
+  }
+
+  /** Rewrites a non-canonical hash at once, which also clears hostile text from the address bar. */
+  private canonicaliseHash(state: ViewState): void {
+    const hash = formatHash(state);
+    if (location.hash !== `#${hash}`) {
+      this.urlSync.schedule(hash);
+      this.urlSync.flush();
+    }
+  }
+
+  /** Address-bar edits, in-page links, Back and Forward: the hash is a complete view. */
+  private readonly onHashChange = (): void => {
+    if (this.state !== 'rendering' || this.urlSync.isOwn(location.hash)) return;
+    this.urlSync.cancel();
+    const { state, issues } = parseHash(location.hash);
+    this.hashApplies++;
+    this.commit(state);
+    this.canonicaliseHash(state);
+    if (needsNotice(issues)) this.announcer.announce(HASH_NOTICE);
+  };
 
   private syncControls(): void {
     this.controls.sync({
@@ -529,6 +580,8 @@ class App {
 
   private showLost(reason: string, message: string): void {
     this.state = 'lost';
+    // The restarted page reads the hash, so it must hold the latest view.
+    this.urlSync.flush();
     const button = el('button', { type: 'button' }, 'Restart the renderer');
     button.addEventListener(
       'click',
