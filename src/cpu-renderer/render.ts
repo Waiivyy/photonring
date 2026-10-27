@@ -7,6 +7,7 @@ import {
   skyRadiance,
   srgbEncode,
   staticObserverFactor,
+  TERMINATION_COLOURS,
   toneMap,
   traceRay,
   type CameraParams,
@@ -51,13 +52,6 @@ export interface RenderOutput {
   /** Counts per sample, not per pixel. */
   readonly stats: RenderStats;
 }
-
-/** Termination debug colours: escaped blue, captured black, step limit magenta. */
-const DEBUG: Record<'escaped' | 'captured' | 'stepLimit', Vec3> = {
-  escaped: [0.15, 0.3, 0.8],
-  captured: [0, 0, 0],
-  stepLimit: [1, 0, 1],
-};
 
 function validate(s: RenderSettings): void {
   const positiveInt = (v: number, max: number) => Number.isInteger(v) && v >= 1 && v <= max;
@@ -105,7 +99,7 @@ export function renderImage(s: RenderSettings): RenderOutput {
           stats[ray.termination]++;
           let c: Vec3;
           if (s.mode === 'termination') {
-            c = DEBUG[ray.termination];
+            c = TERMINATION_COLOURS[ray.termination];
           } else {
             c = shade(s, ray, gObserver);
           }

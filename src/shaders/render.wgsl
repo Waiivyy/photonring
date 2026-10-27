@@ -39,12 +39,12 @@ fn pixelDirection(p: vec2f) -> vec3f {
 
 fn debugColour(termination: u32) -> vec3f {
   if (termination == ESCAPED) {
-    return vec3f(0.15, 0.3, 0.8);
+    return DEBUG_ESCAPED;
   }
   if (termination == CAPTURED) {
-    return vec3f(0.0);
+    return DEBUG_CAPTURED;
   }
-  return vec3f(1.0, 0.0, 1.0);
+  return DEBUG_STEP_LIMIT;
 }
 
 // Colour of one sample: disk light, then the sky behind whatever the disk lets through, as in

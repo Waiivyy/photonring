@@ -116,3 +116,13 @@ export function srgbEncode(c: number): number {
 export function toneMap(x: number, exposure: number): number {
   return -Math.expm1(-exposure * x);
 }
+
+/**
+ * Termination debug colours in linear sRGB, shared by both renderers, the legend swatches and the
+ * validation classifier: escaped blue, captured black, step limit magenta.
+ */
+export const TERMINATION_COLOURS: Readonly<Record<'escaped' | 'captured' | 'stepLimit', Vec3>> = {
+  escaped: [0.15, 0.3, 0.8],
+  captured: [0, 0, 0],
+  stepLimit: [1, 0, 1],
+};

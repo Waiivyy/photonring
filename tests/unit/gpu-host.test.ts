@@ -9,6 +9,7 @@ import {
   type StructField,
 } from '../../src/gpu/host/layout.ts';
 import { halfToFloat } from '../../src/gpu/host/half.ts';
+import { wgslHeader } from '../../src/gpu/host/wgsl.ts';
 import { BLACKBODY_LUT, buildBlackbodyLut, lutColour } from '../../src/gpu/host/lut.ts';
 import { blackbodyColour, luminance } from '../../src/physics/index.ts';
 
@@ -221,5 +222,14 @@ describe('half-precision readback', () => {
     expect(halfToFloat(0x0001)).toBe(2 ** -24);
     expect(halfToFloat(0x7c00)).toBe(Infinity);
     expect(halfToFloat(0x7e00)).toBeNaN();
+  });
+});
+
+describe('generated WGSL constants', () => {
+  it('the termination debug colours come from the shared TypeScript constant', () => {
+    const header = wgslHeader({ size: 2, tMin: 1000, tMax: 100000 });
+    expect(header).toContain('const DEBUG_ESCAPED: vec3f = vec3f(0.15, 0.3, 0.8);');
+    expect(header).toContain('const DEBUG_CAPTURED: vec3f = vec3f(0.0, 0.0, 0.0);');
+    expect(header).toContain('const DEBUG_STEP_LIMIT: vec3f = vec3f(1.0, 0.0, 1.0);');
   });
 });
