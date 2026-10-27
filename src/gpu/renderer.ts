@@ -32,6 +32,8 @@ export interface SceneParams {
   readonly disk: DiskSettings | null;
   /** Adaptive 3 x 3 supersampling after the one-sample pass (colour mode only). */
   readonly antialias: boolean;
+  /** Contrast threshold override for measurements; -1 refines every pixel (uniform 3 x 3). */
+  readonly aaThreshold?: number;
 }
 
 export interface RayInput {
@@ -342,7 +344,7 @@ export class GpuRenderer {
       diskTemperatureScale: scene.disk ? diskTemperatureScale(scene.disk.peakTemperature) : 0,
       bandCosMin: band.cosMin,
       bandCosMax: band.cosMax,
-      aaThreshold: AA_THRESHOLD,
+      aaThreshold: scene.aaThreshold ?? AA_THRESHOLD,
       exposure: scene.exposure,
       toneMapping: scene.toneMapping && scene.mode === 'colour' ? 1 : 0,
     });

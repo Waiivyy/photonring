@@ -65,16 +65,28 @@ const harness: Harness = {
     r.resize(request.width, request.height);
     r.setScene({ ...parityScene, ...request });
     await r.renderAll(); // warm-up: pipeline caches, first allocation
-    const gpuMs: (number | null)[] = [];
-    const wallMs: number[] = [];
+    const result = {
+      timestampQuery: info.timestampQuery,
+      traceMs: [] as number[],
+      refineMs: [] as number[],
+      previewHalfMs: [] as number[],
+      previewQuarterMs: [] as number[],
+      wallMs: [] as number[],
+    };
     for (let i = 0; i < repeats; i++) {
       const t0 = performance.now();
       const { traceMs, refineMs } = await r.renderAll();
       await r.device.queue.onSubmittedWorkDone();
-      wallMs.push(performance.now() - t0);
-      gpuMs.push(info.timestampQuery ? traceMs + (refineMs ?? 0) : null);
+      result.wallMs.push(performance.now() - t0);
+      result.traceMs.push(traceMs);
+      if (refineMs !== null) result.refineMs.push(refineMs);
+      result.previewHalfMs.push(await r.renderPreview(0.5));
+      result.previewQuarterMs.push(await r.renderPreview(0.25));
     }
-    return { gpuMs, wallMs };
+    await r.renderAll();
+    const counts = await r.readSampleCounts();
+    const refinedFraction = counts.reduce((n, c) => n + (c > 1 ? 1 : 0), 0) / counts.length;
+    return { ...result, refinedFraction };
   },
 };
 

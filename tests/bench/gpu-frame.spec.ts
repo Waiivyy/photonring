@@ -1,9 +1,11 @@
-// GPU frame-time benchmark (Stage 2, no disk). Not a pass/fail test: it prints a table and
-// writes artifacts/stage2/benchmark.json. Run with npm run bench:gpu.
+// GPU frame-time benchmark (Stage 3). Not a pass/fail test: it prints a table per stage of the
+// progressive renderer and writes artifacts/stage3/benchmark.json. Run with npm run bench:gpu.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { test } from '@playwright/test';
-import { autoFieldOfView } from '../../src/physics/index.ts';
+import { choosePreviewScale } from '../../src/gpu/host/progressive.ts';
+import { autoFieldOfView, DEFAULT_DISK } from '../../src/physics/index.ts';
 import type { HarnessImageRequest } from '../gpu/harness-api.ts';
+import { openHarness } from '../gpu/page.ts';
 
 const views = {
   'default (30 M, 12 deg, fov 60)': { distance: 30, azimuthDeg: 0, elevationDeg: 12, fovYDeg: 60 },
@@ -21,26 +23,37 @@ const resolutions: [number, number][] = [
   [2560, 1440],
   [3840, 2160],
 ];
+/** The interactive page's frame budget (src/ui/app.ts). */
+const BUDGET_MS = 12;
+const REPEATS = 9;
 
 const median = (v: number[]) => {
+  if (v.length === 0) return NaN;
   const s = [...v].sort((a, b) => a - b);
   return s[Math.floor(s.length / 2)] as number;
 };
+const fmt = (v: number) => (Number.isFinite(v) ? v.toFixed(2) : '-');
 
-test('GPU frame time by view and resolution', async ({ page }) => {
-  test.setTimeout(600_000);
-  await page.goto('/tests/gpu/harness.html');
-  const info = await page.evaluate(() => window.harness!.ready);
+test('GPU time per stage by view, disk and resolution', async ({ page }) => {
+  test.setTimeout(1_200_000);
+  const info = await openHarness(page);
   const browser = page.context().browser();
   const rows: Record<string, unknown>[] = [];
   console.log(
-    `GPU ${info.vendor} ${info.architecture}, ${browser?.browserType().name()} ${browser?.version()}, headless`,
+    `GPU ${info.vendor} ${info.architecture}, ${browser?.browserType().name()} ${browser?.version()}, headless, ` +
+      `${info.timestampQuery ? 'timestamp queries' : 'wall clock'}, median of ${REPEATS}`,
   );
   console.log(
-    '| view | resolution | GPU ms (median of 9) | GPU ms (min) | wall ms (median) | Mrays/s (GPU median) |',
+    '| view | disk | resolution | first pass ms | anti-aliasing ms | refined % | full image ms | preview 1/2 ms | preview 1/4 ms | interactive scale |',
   );
-  console.log('|---|---|---|---|---|---|');
+  console.log('|---|---|---|---|---|---|---|---|---|---|');
+  const cases: [string, (typeof views)[keyof typeof views], boolean, number | undefined][] = [];
   for (const [name, camera] of Object.entries(views)) {
+    for (const disk of [true, false]) cases.push([name, camera, disk, undefined]);
+  }
+  // For comparison: every pixel refined, which is uniform 3 x 3 supersampling.
+  cases.push(['default, uniform 3 x 3', views['default (30 M, 12 deg, fov 60)'], true, -1]);
+  for (const [name, camera, disk, aaThreshold] of cases) {
     for (const [width, height] of resolutions) {
       const request: HarnessImageRequest = {
         width,
@@ -50,32 +63,42 @@ test('GPU frame time by view and resolution', async ({ page }) => {
         sky: 'stars',
         exposure: 1,
         toneMapping: true,
-        disk: null,
-        antialias: false,
+        disk: disk ? DEFAULT_DISK : null,
+        antialias: true,
+        ...(aaThreshold === undefined ? {} : { aaThreshold }),
       };
       const r = await page.evaluate(([req, n]) => window.harness!.benchmark(req, n), [
         request,
-        9,
+        REPEATS,
       ] as const);
-      const gpu = r.gpuMs.filter((x): x is number => x !== null);
-      const g = gpu.length > 0 ? median(gpu) : NaN;
+      const trace = median(r.traceMs);
+      const refine = median(r.refineMs);
+      const scale = choosePreviewScale(trace / (width * height), width * height, BUDGET_MS);
       const row = {
         view: name,
+        disk,
         width,
         height,
-        gpuMedianMs: g,
-        gpuMinMs: gpu.length > 0 ? Math.min(...gpu) : NaN,
-        wallMedianMs: median(r.wallMs),
+        traceMs: trace,
+        refineMs: refine,
+        refinedFraction: r.refinedFraction,
+        fullMs: trace + refine,
+        previewHalfMs: median(r.previewHalfMs),
+        previewQuarterMs: median(r.previewQuarterMs),
+        wallMs: median(r.wallMs),
+        interactiveScale: scale,
       };
       rows.push(row);
       console.log(
-        `| ${name} | ${width} x ${height} | ${g.toFixed(2)} | ${row.gpuMinMs.toFixed(2)} | ${row.wallMedianMs.toFixed(2)} | ${((width * height) / (g * 1000)).toFixed(0)} |`,
+        `| ${name} | ${disk ? 'on' : 'off'} | ${width} x ${height} | ${fmt(trace)} | ${fmt(refine)} | ` +
+          `${(100 * r.refinedFraction).toFixed(1)} | ${fmt(trace + refine)} | ${fmt(row.previewHalfMs)} | ` +
+          `${fmt(row.previewQuarterMs)} | ${scale} |`,
       );
     }
   }
-  mkdirSync('artifacts/stage2', { recursive: true });
+  mkdirSync('artifacts/stage3', { recursive: true });
   writeFileSync(
-    'artifacts/stage2/benchmark.json',
+    'artifacts/stage3/benchmark.json',
     JSON.stringify({ gpu: info, browser: browser?.version(), rows }, null, 2) + '\n',
   );
 });

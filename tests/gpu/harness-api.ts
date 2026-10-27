@@ -37,6 +37,8 @@ export interface HarnessImageRequest {
   readonly toneMapping: boolean;
   readonly disk: DiskSettings | null;
   readonly antialias: boolean;
+  /** See SceneParams.aaThreshold. */
+  readonly aaThreshold?: number;
 }
 
 export interface HarnessImage {
@@ -44,6 +46,19 @@ export interface HarnessImage {
   readonly rgb: number[];
   /** Samples behind each pixel: 1, or 9 where anti-aliasing refined it. */
   readonly samples: number[];
+}
+
+export interface HarnessBenchmark {
+  readonly timestampQuery: boolean;
+  readonly traceMs: number[];
+  /** Empty when anti-aliasing is off. */
+  readonly refineMs: number[];
+  readonly previewHalfMs: number[];
+  readonly previewQuarterMs: number[];
+  /** First submission until the queue drains, both passes. */
+  readonly wallMs: number[];
+  /** Fraction of pixels the anti-aliasing pass refined. */
+  readonly refinedFraction: number;
 }
 
 export interface Harness {
@@ -61,14 +76,11 @@ export interface Harness {
   /** Full GPU path (compute, then the tone-mapping blit) into an 8-bit RGBA texture, read back. */
   renderImage(request: HarnessImageRequest): Promise<HarnessImage>;
   /**
-   * Renders the full image `repeats` times. Returns, per run, the GPU time between the start of
-   * the first tile pass and the end of the last (timestamp queries; null without them) and the
-   * wall-clock time from the first submission until the queue drains.
+   * Renders the full image `repeats` times after a warm-up run, and a preview at 1/2 and 1/4
+   * scale after each. Milliseconds are GPU time from timestamp queries when available (else
+   * wall-clock): for a pass, from the start of its first tile to the end of its last.
    */
-  benchmark(
-    request: HarnessImageRequest,
-    repeats: number,
-  ): Promise<{ gpuMs: (number | null)[]; wallMs: number[] }>;
+  benchmark(request: HarnessImageRequest, repeats: number): Promise<HarnessBenchmark>;
 }
 
 declare global {
