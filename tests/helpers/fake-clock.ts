@@ -23,7 +23,8 @@ export function fakeClock(start = 0): FakeClock {
     now: () => t,
     setTimer(fn, ms) {
       const id = nextId++;
-      timers.set(id, { at: t + Math.max(0, ms), fn });
+      // Like setTimeout, whose delay is a whole number of ms: fractions are dropped.
+      timers.set(id, { at: t + Math.max(0, Math.trunc(ms)), fn });
       return id;
     },
     clearTimer(id) {

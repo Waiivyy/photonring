@@ -207,7 +207,7 @@ test('ten presses of D in a second change the brightness at most 3 times, 500 ms
   expect(times.length).toBeGreaterThan(0);
   expect(times.length).toBeLessThanOrEqual(4);
   for (let i = 1; i < times.length; i++) {
-    expect(times[i]! - times[i - 1]!).toBeGreaterThanOrEqual(499);
+    expect(times[i]! - times[i - 1]!).toBeGreaterThanOrEqual(500);
   }
   for (const t of times)
     expect(times.filter((u) => u >= t && u <= t + 1000).length).toBeLessThanOrEqual(3);

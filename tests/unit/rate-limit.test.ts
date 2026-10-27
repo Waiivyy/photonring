@@ -103,6 +103,23 @@ describe('brightness limiter', () => {
     }
   });
 
+  it('keeps 500 ms between applies with fractional times and whole-ms timers', () => {
+    const { clock, applied, limiter } = setup();
+    clock.advance(0.4);
+    limiter.request(flipDisk(START)); // 1000.4: applies at once
+    clock.advance(100.3);
+    limiter.request(START); // 1100.7: the timer delay 399.7 becomes 399 ms
+    clock.advance(0.6);
+    limiter.request(flipDisk(START));
+    limiter.request(START);
+    clock.advance(1000);
+    for (let i = 1; i < applied.length; i++) {
+      expect(applied[i]!.at - applied[i - 1]!.at).toBeGreaterThanOrEqual(500);
+    }
+    expect(applied.length).toBe(2);
+    expect(limiter.applied).toEqual(START);
+  });
+
   it('reset sets both pairs without counting a change', () => {
     const { clock, applied, limiter } = setup();
     limiter.request(flipDisk(START));
@@ -124,7 +141,8 @@ describe('brightness limiter', () => {
       limiter.request(want);
       clock.advance(600);
     }
-    expect(limiter.applyTimes).toHaveLength(16);
+    // Applies at 1000, 1600, ..., 12400: the last 16 of the 20.
+    expect(limiter.applyTimes).toEqual(Array.from({ length: 16 }, (_, i) => 1000 + 600 * (i + 4)));
     expect(limiter.applies).toBe(20);
   });
 

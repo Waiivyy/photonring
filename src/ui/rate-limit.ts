@@ -55,10 +55,16 @@ export function createBrightnessLimiter(
     if (times.length > KEEP_TIMES) times.shift();
     apply(applied);
   };
-  const trailing = () => {
-    timer = null;
-    if (!same(requested, applied)) doApply();
+  /** Timers run whole milliseconds late or early by rounding, so the clock decides. */
+  const schedule = (wait: number) => {
+    timer = deps.setTimer(trailing, Math.ceil(wait));
   };
+  function trailing(): void {
+    timer = null;
+    const wait = lastApply + INTERVAL_MS - deps.now();
+    if (wait > 0) schedule(wait);
+    else if (!same(requested, applied)) doApply();
+  }
 
   return {
     request(pair) {
@@ -67,7 +73,7 @@ export function createBrightnessLimiter(
       if (same(requested, applied)) return;
       const wait = lastApply + INTERVAL_MS - deps.now();
       if (wait <= 0) doApply();
-      else timer = deps.setTimer(trailing, wait);
+      else schedule(wait);
     },
     reset(pair) {
       if (timer !== null) deps.clearTimer(timer);
