@@ -26,6 +26,16 @@ export interface AppStats {
   traceMs: number;
   refineMs: number;
   timing: 'timestamp-query' | 'wall-clock';
+  /** Enabled overlays, in canonical order. */
+  overlays: string[];
+  controlsOpen: boolean;
+  /** What the controls ask for; the image follows within the brightness limiter's interval. */
+  requestedDisk: boolean;
+  requestedMode: 'colour' | 'termination';
+  brightnessPending: boolean;
+  /** Brightness changes applied so far, and the times (performance.now) of the last 16. */
+  toggleApplies: number;
+  toggleApplyTimes: number[];
 }
 
 export interface PhotonringDebug {

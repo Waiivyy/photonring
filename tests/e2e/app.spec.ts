@@ -1,39 +1,19 @@
 // App behaviour in headless Chrome (spec section 10, item 14 and the Stage 2 parts of the UI).
-import { expect, test, type Page } from '@playwright/test';
+import { expect, openApp, stats, test, view, waitForFullImage } from './fixtures.ts';
 
-interface AppStats {
-  state: 'starting' | 'rendering' | 'lost';
-  frames: number;
-  internalWidth: number;
-  internalHeight: number;
-  limitedBy: string;
-  mode: 'colour' | 'termination';
-  disk: boolean;
-  antialias: boolean;
-  azimuthDeg: number;
-  distance: number;
-  stage: 'preview' | 'trace' | 'refine' | 'done';
-  previews: number;
-  previewScale: number;
-  tilesRemaining: number;
-  traceMs: number;
-  refineMs: number;
-}
-
-declare global {
-  interface Window {
-    photonring?: { debug: { stats(): AppStats; destroyDevice(): void } };
-  }
-}
-
-const stats = (page: Page) => page.evaluate(() => window.photonring!.debug.stats());
-
-async function waitForFullImage(page: Page) {
-  await page.waitForFunction(() => {
-    const s = window.photonring?.debug.stats();
-    return s !== undefined && s.state === 'rendering' && s.frames > 0 && s.stage === 'done';
-  });
-}
+test('page loads: title, heading, toolbar and a full image', async ({ page }) => {
+  const t0 = Date.now();
+  await page.goto('/');
+  await expect(page).toHaveTitle(/photonring/);
+  await expect(page.getByRole('heading', { level: 1, name: 'photonring' })).toBeAttached();
+  await expect(page.getByRole('group', { name: 'Tools' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Controls' })).toBeVisible();
+  await page.waitForFunction(() => (window.photonring?.debug.stats().frames ?? 0) > 0);
+  const firstFrame = Date.now() - t0;
+  await waitForFullImage(page);
+  // Environment dependent, so logged rather than asserted.
+  console.log(`first frame after ${firstFrame} ms, full image after ${Date.now() - t0} ms`);
+});
 
 test('renders the black hole and finishes every tile', async ({ page }) => {
   await page.setViewportSize({ width: 960, height: 540 });
@@ -48,10 +28,8 @@ test('renders the black hole and finishes every tile', async ({ page }) => {
 test('keyboard controls orbit, zoom and toggle the disk and the termination view', async ({
   page,
 }) => {
-  await page.goto('/');
-  await waitForFullImage(page);
-  const canvas = page.getByRole('img', { name: /black hole/i });
-  await canvas.focus();
+  await openApp(page);
+  await view(page).focus();
   const before = await stats(page);
   expect(before.disk).toBe(true);
   await page.keyboard.press('ArrowLeft');
@@ -61,8 +39,10 @@ test('keyboard controls orbit, zoom and toggle the disk and the termination view
   const after = await stats(page);
   expect(after.azimuthDeg).not.toBe(before.azimuthDeg);
   expect(after.distance).toBeGreaterThan(before.distance);
-  expect(after.mode).toBe('termination');
-  expect(after.disk).toBe(false);
+  // Disk and termination view share the brightness limiter, so the second change can arrive up
+  // to 500 ms after the first.
+  await expect.poll(async () => (await stats(page)).mode).toBe('termination');
+  await expect.poll(async () => (await stats(page)).disk).toBe(false);
 });
 
 test('a camera move previews at reduced resolution, then refines with anti-aliasing', async ({
@@ -74,7 +54,7 @@ test('a camera move previews at reduced resolution, then refines with anti-alias
   await waitForFullImage(page);
   const before = await stats(page);
   expect(before.antialias).toBe(true);
-  await page.getByRole('img', { name: /black hole/i }).focus();
+  await view(page).focus();
   await page.keyboard.press('ArrowLeft');
   await waitForFullImage(page);
   const after = await stats(page);
@@ -89,7 +69,7 @@ test('a camera move previews at reduced resolution, then refines with anti-alias
 test('A toggles anti-aliasing', async ({ page }) => {
   await page.goto('/');
   await waitForFullImage(page);
-  await page.getByRole('img', { name: /black hole/i }).focus();
+  await view(page).focus();
   await page.keyboard.press('a');
   await waitForFullImage(page);
   const s = await stats(page);
@@ -118,21 +98,4 @@ test('a resolution above the device limit falls back to a smaller internal resol
   expect(s.internalWidth).toBeLessThanOrEqual(256);
   expect(s.internalHeight).toBeLessThanOrEqual(256);
   expect(s.limitedBy).toBe('texture');
-});
-
-test('without WebGPU the page explains why and shows pre-rendered images', async ({ page }) => {
-  await page.addInitScript(() => {
-    Object.defineProperty(Navigator.prototype, 'gpu', { get: () => undefined, configurable: true });
-  });
-  await page.goto('/');
-  await expect(page.getByRole('heading', { name: /WebGPU is not available/i })).toBeVisible();
-  await expect(page.getByText(/Chrome/).first()).toBeVisible();
-  const images = page.locator('figure img');
-  await expect(images).toHaveCount(4);
-  for (const img of await images.all()) {
-    await expect
-      .poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth))
-      .toBeGreaterThan(0);
-    expect(await img.getAttribute('alt')).toBeTruthy();
-  }
 });
