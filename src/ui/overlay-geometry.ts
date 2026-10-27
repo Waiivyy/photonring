@@ -3,7 +3,12 @@
 // coordinates (sx, sy) = tan(alpha) (cos theta, sin theta) around the optical axis, so a curve
 // depends only on the distance and the elevation, never on the azimuth or the image size.
 // Pure, DOM-free. Physics: docs/PHYSICS.md, section 6a.
-import { firstPlaneCrossingAngle, ringImageAngle, shadowAngularRadius } from '../physics/index.ts';
+import {
+  firstPlaneCrossingAngle,
+  ringFoldSweep,
+  ringImageAngle,
+  shadowAngularRadius,
+} from '../physics/index.ts';
 
 export type RingRadius = 2 | 3 | 6;
 export type ImageOrder = 0 | 1;
@@ -34,7 +39,7 @@ export interface ImageView {
 }
 
 export const BASE_SAMPLES = 256;
-export const MAX_DEPTH = 8;
+export const MAX_DEPTH = 12;
 export const MAX_VERTICES = 2048;
 /** Image points this far from the optical axis (beside or behind the camera) are not drawn. */
 export const MAX_IMAGE_ANGLE = (89.5 * Math.PI) / 180;
@@ -75,6 +80,47 @@ export function ringImagePoint(
   return [t * Math.cos(theta), t * Math.sin(theta)];
 }
 
+/** Distance from p to the segment ab (to its nearer end beyond the segment). */
+function segmentDistance(p: TanPoint, a: TanPoint, b: TanPoint): number {
+  const ex = b[0] - a[0];
+  const ey = b[1] - a[1];
+  const len2 = ex * ex + ey * ey;
+  const t =
+    len2 === 0 ? 0 : Math.min(1, Math.max(0, ((p[0] - a[0]) * ex + (p[1] - a[1]) * ey) / len2));
+  return Math.hypot(p[0] - a[0] - t * ex, p[1] - a[1] - t * ey);
+}
+
+/**
+ * The uniform directions, plus the directions where the curve folds back (the image of the ray
+ * that turns exactly at R, its outermost point): near edge-on views that tip is narrower than
+ * the uniform spacing. The fold sweep phi0 + n pi = Phi gives tan(phi0) = -tan(el) / sin(theta).
+ */
+function sampleDirections(
+  rObs: number,
+  elevationDeg: number,
+  R: RingRadius,
+  order: ImageOrder,
+): number[] {
+  const thetas = Array.from({ length: BASE_SAMPLES }, (_, i) => (2 * Math.PI * i) / BASE_SAMPLES);
+  const fold = ringFoldSweep(rObs, R, 1);
+  const el = elevationDeg * DEG;
+  if (fold !== null && el !== 0) {
+    const target = fold - order * Math.PI;
+    if (target > 0 && target <= Math.PI) {
+      const s = -Math.tan(el) / Math.tan(target);
+      if (Math.abs(s) <= 1) {
+        for (const t of [Math.asin(s), Math.PI - Math.asin(s)]) {
+          const theta = ((t % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+          const phi0 = firstPlaneCrossingAngle(Math.sin(el), Math.sin(theta) * Math.cos(el));
+          if (phi0 !== undefined && Math.abs(phi0 - target) < 1e-9) thetas.push(theta);
+        }
+      }
+    }
+  }
+  thetas.sort((a, b) => a - b);
+  return thetas.filter((t, i) => i === 0 || t - (thetas[i - 1] as number) > 1e-12);
+}
+
 interface Sample {
   readonly theta: number;
   readonly p: TanPoint;
@@ -83,9 +129,10 @@ interface Sample {
 }
 
 /**
- * Builds the curve by adaptive sampling in theta: 256 uniform directions, each interval bisected
- * while the true midpoint is more than chordTolerance from the chord (to depth 8, and only where
- * the interval is near the viewport), and bisected towards breaks to depth 8. At most
+ * Builds the curve by adaptive sampling in theta: 256 uniform directions plus the fold
+ * directions, each interval bisected while the true midpoint is more than chordTolerance from
+ * the chord (to depth MAX_DEPTH, and only where the chords meet the viewport), and bisected
+ * towards breaks to the same depth. At most
  * MAX_VERTICES vertices. Yields after every evaluated point, so a caller can spread the work over
  * frames. Off-screen coordinates are kept as they are: below MAX_IMAGE_ANGLE they stay small
  * enough for SVG and canvas paths.
@@ -96,11 +143,34 @@ export function* ringCurveJob(req: RingCurveRequest): Generator<void, TanCurve, 
   const halfW = MARGIN * aspect * tanHalfFovY;
   const halfH = MARGIN * tanHalfFovY;
   const point = (theta: number) => ringImagePoint(rObs, elevationDeg, R, order, theta);
-  const near = (p: TanPoint) => Math.abs(p[0]) <= halfW && Math.abs(p[1]) <= halfH;
+  /** Whether the segment pq meets the viewport plus its margin (Liang-Barsky clipping). */
+  const crosses = (p: TanPoint, q: TanPoint): boolean => {
+    let t0 = 0;
+    let t1 = 1;
+    const dx = q[0] - p[0];
+    const dy = q[1] - p[1];
+    for (const [den, num] of [
+      [-dx, p[0] + halfW],
+      [dx, halfW - p[0]],
+      [-dy, p[1] + halfH],
+      [dy, halfH - p[1]],
+    ] as const) {
+      if (den === 0) {
+        if (num < 0) return false;
+      } else {
+        const t = num / den;
+        if (den < 0) t0 = Math.max(t0, t);
+        else t1 = Math.min(t1, t);
+        if (t0 > t1) return false;
+      }
+    }
+    return true;
+  };
 
+  const thetas = sampleDirections(rObs, elevationDeg, R, order);
   const base: (TanPoint | null)[] = [];
-  for (let i = 0; i < BASE_SAMPLES; i++) {
-    base.push(point((2 * Math.PI * i) / BASE_SAMPLES));
+  for (const theta of thetas) {
+    base.push(point(theta));
     yield;
   }
 
@@ -134,13 +204,10 @@ export function* ringCurveJob(req: RingCurveRequest): Generator<void, TanCurve, 
       return;
     }
     const m: Sample = { theta, p, depth };
-    const ex = b.p[0] - a.p[0];
-    const ey = b.p[1] - a.p[1];
-    const len = Math.hypot(ex, ey);
-    const dx = p[0] - a.p[0];
-    const dy = p[1] - a.p[1];
-    const deviation = len === 0 ? Math.hypot(dx, dy) : Math.abs(dx * ey - dy * ex) / len;
-    if (deviation > tol && (near(a.p) || near(b.p) || near(p))) {
+    // A chord whose midpoint is within tolerance is kept as it is. Off screen, a chord that
+    // misses the viewport (with its margin) only gets its midpoint, so it stays off screen.
+    if (segmentDistance(p, a.p, b.p) <= tol) return;
+    if (crosses(a.p, p) || crosses(p, b.p) || crosses(a.p, b.p)) {
       yield* refine(a, m);
       push(p);
       yield* refine(m, b);
@@ -179,12 +246,15 @@ export function* ringCurveJob(req: RingCurveRequest): Generator<void, TanCurve, 
 
   // Walk the closed loop of uniform samples, starting at a break if there is one, so that no
   // segment wraps through the start; without breaks, the first point closes the loop.
-  const n = BASE_SAMPLES;
+  const n = thetas.length;
   const firstBreak = base.indexOf(null);
   const start = firstBreak < 0 ? 0 : firstBreak;
+  /** Direction of the k-th sample after `start`, unwrapped so it keeps increasing. */
+  const thetaAt = (k: number) =>
+    (thetas[(start + k) % n] as number) + 2 * Math.PI * Math.floor((start + k) / n);
   const sampleAt = (k: number): Sample | null => {
     const p = base[(start + k) % n] ?? null;
-    return p ? { theta: (2 * Math.PI * (start + k)) / n, p, depth: 0 } : null;
+    return p ? { theta: thetaAt(k), p, depth: 0 } : null;
   };
   let prev = sampleAt(0);
   if (prev) {
@@ -198,10 +268,10 @@ export function* ringCurveJob(req: RingCurveRequest): Generator<void, TanCurve, 
       yield* refine(prev, s);
       push(s.p);
     } else if (prev && !s) {
-      yield* approach(prev, (2 * Math.PI * (start + k)) / n, 1);
+      yield* approach(prev, thetaAt(k), 1);
       endSegment();
     } else if (!prev && s) {
-      yield* approach(s, (2 * Math.PI * (start + k - 1)) / n, 1);
+      yield* approach(s, thetaAt(k - 1), 1);
       push(s.p);
     }
     prev = s;

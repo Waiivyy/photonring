@@ -54,6 +54,14 @@ const VIEWS: View[] = [
   { name: '6 M, elevation 12 (on the ISCO)', distance: 6, azimuthDeg: 0, elevationDeg: 12 },
   { name: '200 M, elevation 12', distance: 200, azimuthDeg: 0, elevationDeg: 12 },
   { name: '30 M, azimuth 137', distance: 30, azimuthDeg: 137, elevationDeg: 12 },
+  {
+    name: '30 M, elevation 0.26 (nearly edge-on)',
+    distance: 30,
+    azimuthDeg: 0,
+    elevationDeg: 0.26,
+  },
+  { name: '10 M, elevation 0.05', distance: 10, azimuthDeg: 0, elevationDeg: 0.05 },
+  { name: '6.5 M, elevation 0.01', distance: 6.5, azimuthDeg: 0, elevationDeg: 0.01 },
 ];
 
 const CURVES: [RingRadius, ImageOrder][] = [
@@ -217,6 +225,22 @@ describe('lensed ring curves', () => {
           }
         }
       }
+    }
+  });
+
+  it('near edge-on, the ISCO direct image reaches the outermost point of the ring', () => {
+    // The image angle peaks for the ray that turns exactly at r = 6M; the curve must include it.
+    for (const v of VIEWS.filter((x) => Math.abs(x.elevationDeg) < 1)) {
+      if (v.elevationDeg === 0) continue;
+      const t = frameOf(v).tanHalfFovY;
+      const k = Math.sqrt(1 - (2 * M) / v.distance) / v.distance;
+      const tip = Math.tan(Math.asin((k * 6) / Math.sqrt(1 - (2 * M) / 6)));
+      const reach = Math.max(
+        ...vertices(ringCurve(request(v, 6, 0))).map((p) => Math.hypot(p[0], p[1])),
+      );
+      const pxPerTan = H / (2 * t);
+      expect((tip - reach) * pxPerTan, v.name).toBeLessThan(0.01);
+      expect(reach).toBeLessThanOrEqual(tip * (1 + 1e-12));
     }
   });
 
