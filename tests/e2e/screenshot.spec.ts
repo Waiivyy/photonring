@@ -15,7 +15,7 @@ async function save(
   trigger: () => Promise<void>,
 ): Promise<{ download: Download; png: PngImage }> {
   const [download] = await Promise.all([page.waitForEvent('download'), trigger()]);
-  const png = readPng(readFileSync((await download.path())));
+  const png = readPng(readFileSync(await download.path()));
   return { download, png };
 }
 
