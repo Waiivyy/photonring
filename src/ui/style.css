@@ -4,6 +4,7 @@
   --fg: #e8e6e3;
   --muted: #b3b0ab;
   --panel: rgba(12, 12, 14, 0.78);
+  --panel-solid: rgba(12, 12, 14, 0.92);
   --accent: #8ab4ff;
   font-family:
     system-ui,

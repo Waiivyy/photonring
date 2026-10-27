@@ -314,7 +314,9 @@ describe('lensed ring curves', () => {
     const off = vertices(curve).filter(
       (p) => Math.abs(p[0]) > 1.1 * ASPECT * t || Math.abs(p[1]) > 1.1 * t,
     );
-    expect(off.length).toBeLessThanOrEqual(BASE_SAMPLES + 2 * 8 * curve.segments.length + 8);
+    // Off screen, an interval gets at most its midpoint (to see whether the curve comes back on
+    // screen), never a recursive refinement, which could add up to 2^8 points per interval.
+    expect(off.length).toBeLessThanOrEqual(2 * BASE_SAMPLES + 16 * curve.segments.length);
   });
 
   it('a job run in time slices gives the same curve as one run in one go', () => {
