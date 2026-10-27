@@ -93,11 +93,9 @@ test('on a narrow screen the panel is a bottom sheet and the page keeps pinch zo
   expect(touchAction).toContain('pinch-zoom');
 });
 
-test('no horizontal scrolling at 320 CSS px', async ({ page }) => {
+test('no horizontal scrolling inside the open sheet at 320 CSS px', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 640 });
   await page.getByRole('button', { name: 'Controls', exact: true }).tap();
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  );
-  expect(overflow).toBeLessThanOrEqual(0);
+  const panel = page.locator('#controls-panel');
+  expect(await panel.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
 });

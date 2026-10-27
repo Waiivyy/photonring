@@ -79,11 +79,28 @@ test('ring curves are hidden while the elevation changes and drawn once it settl
   await expect(group(page, 'isco').locator('path')).toHaveCount(0);
   await expect(group(page, 'isco')).toHaveAttribute('data-state', 'ready');
   await expect(group(page, 'isco').locator('path.line')).toHaveCount(2);
-  // An azimuth change keeps the curves: they do not depend on it.
-  await page.keyboard.press('ArrowLeft');
-  await page.waitForTimeout(50);
-  await expect(group(page, 'isco')).toHaveAttribute('data-state', 'ready');
   expect((await stats(page)).ringMs).toBeGreaterThan(0);
+  // An azimuth change keeps the curves (they do not depend on it): the group never goes back to
+  // pending and its paths are the same nodes, not recomputed ones.
+  await waitForFullImage(page);
+  await group(page, 'isco').evaluate((g) => {
+    const w = window as unknown as { seen: string[]; firstPath: Element | null };
+    w.seen = [];
+    w.firstPath = g.querySelector('path.line');
+    new MutationObserver(() => w.seen.push(g.getAttribute('data-state') ?? '')).observe(g, {
+      attributes: true,
+      childList: true,
+    });
+  });
+  await page.keyboard.press('ArrowLeft');
+  await waitForFullImage(page);
+  const unchanged = await group(page, 'isco').evaluate((g) => {
+    const w = window as unknown as { seen: string[]; firstPath: Element | null };
+    return { seen: w.seen, same: g.querySelector('path.line') === w.firstPath };
+  });
+  expect(unchanged.seen).not.toContain('pending');
+  expect(unchanged.same).toBe(true);
+  expect((await stats(page)).azimuthDeg).toBe(5);
 });
 
 test('toggling overlays renders no new GPU frame', async ({ page }) => {

@@ -9,11 +9,6 @@ const camera = async (page: Page) => {
   const s = await stats(page);
   return { distance: s.distance, azimuthDeg: s.azimuthDeg, elevationDeg: s.elevationDeg };
 };
-const activeName = (page: Page) =>
-  page.evaluate(() => {
-    const a = document.activeElement as HTMLElement | null;
-    return a ? (a.getAttribute('aria-label') ?? a.id ?? a.tagName) : null;
-  });
 
 test.beforeEach(async ({ page }) => {
   await openApp(page);
@@ -230,5 +225,5 @@ test('toggles made by shortcut are announced', async ({ page }) => {
   await expect(announcer).toHaveText('Shadow edge off');
   await page.keyboard.press('r');
   await expect(announcer).toHaveText('View reset');
-  expect(await activeName(page)).not.toBeNull();
+  await expect(view(page)).toBeFocused();
 });

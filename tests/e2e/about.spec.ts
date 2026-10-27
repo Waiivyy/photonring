@@ -17,6 +17,8 @@ test('the About button opens a modal dialog with the honesty note first', async 
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole('heading', { name: 'About photonring' })).toBeFocused();
   await expect(dialog.locator('.honesty')).toHaveText(HONESTY);
+  // First: right after the heading.
+  await expect(dialog.locator('h2 + p.honesty')).toHaveCount(1);
   await expect(dialog).toContainText('runs entirely in your browser');
   await expect(dialog).toContainText('no analytics, telemetry or cookies');
   await expect(dialog).toContainText(/after #/);
