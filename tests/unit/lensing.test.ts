@@ -173,6 +173,51 @@ describe('view angle of a ring point after a given sweep', () => {
     }
   });
 
+  it('never throws near the photon sphere: images too close to the edge to resolve return it', () => {
+    let failures = 0;
+    for (const rObs of [3.0001, 3.001, 3.005, 3.01, 3.012, 3.05, 3.5]) {
+      const psi = shadowAngularRadius(rObs, M);
+      for (const R of [2.999, 3, 3 + 1e-9, 3 + 1e-7, 3.0001, 3.01]) {
+        if (R >= rObs) continue;
+        for (let k = 1; k <= 40; k++) {
+          const sweep = (4 * Math.PI * k) / 40;
+          let alpha: number;
+          try {
+            alpha = ringImageAngle(rObs, R, sweep, M);
+          } catch {
+            failures++;
+            continue;
+          }
+          expect(alpha).toBeGreaterThan(0);
+          expect(alpha).toBeLessThan(Math.PI);
+          if (R <= 3) expect(alpha).toBeLessThanOrEqual(psi);
+        }
+      }
+    }
+    expect(failures).toBe(0);
+    const psi = shadowAngularRadius(3.01, M);
+    expect(Math.abs(ringImageAngle(3.01, 3, 4 * Math.PI, M) - psi)).toBeLessThan(1e-12 * psi);
+  });
+
+  it('solves tiny sweeps down to 1e-14 (nearly radial rays)', () => {
+    // For a nearly radial ray the sweep is b |u_R - u_o| up to a relative O(b^2): an exact
+    // reference where the integrator's step is far longer than the whole motion.
+    for (const rObs of [5, 6, 30, 200]) {
+      const k = Math.sqrt(1 - (2 * M) / rObs) / rObs;
+      for (const R of [2, 3, 6] as const) {
+        if (R === rObs) continue;
+        const du = Math.abs(1 / R - 1 / rObs);
+        for (const sweep of [1e-14, 1e-13, 1e-12, 2e-12, 1e-11]) {
+          const alpha = ringImageAngle(rObs, R, sweep, M);
+          const exact = Math.asin((k * sweep) / du);
+          const expected = R < rObs ? exact : Math.PI - exact;
+          const scale = R < rObs ? expected : Math.PI - expected;
+          expect(Math.abs(alpha - expected) / scale).toBeLessThan(1e-9);
+        }
+      }
+    }
+  });
+
   it('images of rings at or inside 3M lie inside the shadow edge', () => {
     for (const rObs of observers) {
       const psi = shadowAngularRadius(rObs, M);

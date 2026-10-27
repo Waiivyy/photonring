@@ -210,19 +210,34 @@ over $[u_A, u_B]$ (section 8a below $b_c$, the Carlson form of section 8 above),
 - $R = r_o$ (to $10^{-12}$ relative): outward rays never return, so
   $\psi_{sh} < \alpha \le \pi/2$ and the sweep is $2\,\Phi(b; u_o, u_2)$.
 
-The logarithmic variables resolve the divergence at the shadow edge. Each branch is monotone in
-its variable, so every sweep has one root; the plunging branch is proved above, and the other
-branches are checked numerically: a scan over 2000 view angles in six cases finds exactly one
-sign change of $r(\text{sweep}) - R$. The solver is Brent's method (tolerance $10^{-15}$ in the
-variable, at most 100 iterations), brackets start $10^{-13}\psi_{sh}$ from the edge, an impact
-parameter that rounds onto $b_c$ is moved one ulp to the side of its branch, and the second
-interval is clamped to zero length when rounding puts $u_2$ just below $1/R$ at the fold.
+Each branch is monotone, so every sweep has one root; the plunging branch is proved above, and
+the other branches are checked numerically: a scan over 2000 view angles in six cases finds
+exactly one sign change of $r(\text{sweep}) - R$.
+
+**Numerics.** Brent's method (tolerance $10^{-15}$ in its variable, at most 100 iterations). A
+branch's bracket is split once at its midpoint, and the half that holds the root is solved in a
+variable measured from its own end, so angles very close to $0$, to $\pi$ or to the edge keep
+full relative precision: $\ln\alpha$, $\ln(\pi - \alpha)$, $\ln|\alpha - \psi_{sh}|$, or
+$\alpha$ itself at a regular end such as the fold. The far end of each bracket is a nearly
+radial ray chosen from the sweep: for $b \le b_c/2$, $1/\sqrt{P} \le 1.155\,b$, so
+$b = \text{sweep}/(4\,|u_R - u_o|)$ has a sweep below $0.29$ of the target, which makes the
+solver valid down to the smallest sweeps. The near end is $10^{-13}\psi_{sh}$ from the edge; a
+root closer than that is returned there. That happens only for observers within about $0.01M$
+of the photon sphere, where $b(\alpha)$ is so flat near the edge that the root is a few ulps
+from $b_c$. An impact parameter that rounds onto $b_c$ is moved one ulp to the side of its
+branch, the second interval is clamped to zero length when rounding puts $u_2$ just below $1/R$
+at the fold, and for $R$ so close above $3M$ that the outbound branch is narrower than
+rounding, its images are the edge. `ringFoldSweep` gives the fold's sweep, so the overlay
+curves can sample the outermost point of the ring image, which near edge-on views is narrower
+than the uniform sampling.
 
 **Checks** (`tests/unit/lensing.test.ts`). The radius reached at the target sweep agrees with
 the Binet integrator (f64, $d\phi = 5\times10^{-4}$) within $10^{-9}$ relative for
 $r_o \in \{5, 5.5, 6, 6.5, 10, 30, 200\}$, $R \in \{2, 3, 6\}$ and eight sweeps up to $2\pi$, and
-with the exact elliptic-integral reference for $R = 6$. Images of $R \le 3M$ lie inside the edge,
-and at a sweep of $4\pi$ every image is within $10^{-3}\psi_{sh}$ of it.
+with the exact elliptic-integral reference for $R = 6$. Sweeps from $10^{-14}$ to $10^{-11}$
+match the radial-ray limit $b = \text{sweep}/|u_R - u_o|$ within $10^{-9}$. Observers from
+$3.0001M$ to $3.5M$ with rings near $3M$ never make the solver throw. Images of $R \le 3M$ lie
+inside the edge, and at a sweep of $4\pi$ every image is within $10^{-3}\psi_{sh}$ of it.
 
 **Which orders are drawn.** Face-on at $30M$ (measured with `ringImageAngle`; the edge is at
 $9.6327°$):

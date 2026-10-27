@@ -79,11 +79,25 @@ function brent(f: (x: number) => number, lo: number, hi: number, tol: number): n
 const EDGE_OFFSET = 1e-13;
 
 /**
+ * How a bracket end is approached. Near a singular end the solver works in a logarithmic
+ * variable measured from that end, so angles very close to 0, to pi or to the shadow edge keep
+ * full relative precision; 'plain' is alpha itself, for regular ends.
+ */
+type EndKind = 'zero' | 'pi' | 'below' | 'above' | 'plain';
+
+interface End {
+  readonly kind: EndKind;
+  readonly alpha: number;
+}
+
+/**
  * View angle alpha in (0, pi), measured from the direction to the hole, at which a static
  * observer at rObs (> 3M) sees the point of radius R (>= 2M) in the disk plane that the backward
  * ray reaches after sweeping the orbital angle `sweep` in (0, 4 pi]. The image of order n of a
  * ring point lies at the sweep of the (n+1)-th disk-plane crossing. For every sweep the root is
- * unique, and for R <= 3M it lies inside the shadow edge.
+ * unique, and for R <= 3M it lies inside the shadow edge. A root nearer the edge than
+ * EDGE_OFFSET (relative) is returned at that distance; this happens only for observers within
+ * about 0.01M of the photon sphere, where the impact parameter barely changes near the edge.
  */
 export function ringImageAngle(rObs: number, R: number, sweep: number, M = 1): number {
   if (![rObs, R, sweep, M].every(Number.isFinite) || !(M > 0)) {
@@ -91,8 +105,9 @@ export function ringImageAngle(rObs: number, R: number, sweep: number, M = 1): n
   }
   if (!(rObs > 3 * M)) throw new RangeError(`observer must be outside the photon sphere: ${rObs}`);
   if (!(R >= 2 * M)) throw new RangeError(`ring must be at or outside the horizon: ${R}`);
-  if (!(sweep > 0 && sweep <= 4 * Math.PI))
+  if (!(sweep > 0 && sweep <= 4 * Math.PI)) {
     throw new RangeError(`sweep out of (0, 4 pi]: ${sweep}`);
+  }
 
   const bc = criticalImpactParameter(M);
   const bcBelow = bc * (1 - Number.EPSILON);
@@ -102,11 +117,10 @@ export function ringImageAngle(rObs: number, R: number, sweep: number, M = 1): n
   // sin(alpha) = k b for a static observer at rObs.
   const k = Math.sqrt(1 - 2 * M * uo) / rObs;
   const psi = shadowAngularRadius(rObs, M);
-  const xTol = 1e-15;
 
-  /** Impact parameter of view angle alpha, kept on the requested side of b_c. */
-  const impact = (alpha: number, side: 'below' | 'above' | 'either'): number => {
-    const b = Math.sin(alpha) / k;
+  /** Impact parameter from sin(alpha), kept on the requested side of b_c. */
+  const impact = (sinAlpha: number, side: 'below' | 'above' | 'either'): number => {
+    const b = sinAlpha / k;
     if (side === 'below') return Math.min(b, bcBelow);
     if (side === 'above') return Math.max(b, bcAbove);
     return Math.abs(b / bc - 1) < 1e-14 ? bcAbove : b;
@@ -122,40 +136,137 @@ export function ringImageAngle(rObs: number, R: number, sweep: number, M = 1): n
     const { u2 } = orbitRoots(b, M);
     return swept(b, uo, u2) + (u2 > uR ? sweptAngleElliptic(b, uR, u2, M) : 0);
   };
-  const belowEdge = (x: number) => psi - Math.exp(x);
-  const aboveEdge = (x: number) => psi + Math.exp(x);
-  const xNearEdge = Math.log(psi * EDGE_OFFSET);
+  /**
+   * Far end of a bracket: a nearly radial ray whose sweep is surely below `sweep`. For any
+   * b <= b_c/2, 1/sqrt(P) <= b / sqrt(1 - (b/b_c)^2) <= 1.155 b, so over an interval of width du
+   * the sweep is at most 1.155 b du; b = sweep / (4 du) keeps it below 0.29 sweep.
+   */
+  const farAngle = (du: number) => Math.asin(k * Math.min((0.25 * sweep) / du, bc / 2));
+
+  const toVar = (e: End, alpha: number): number => {
+    switch (e.kind) {
+      case 'zero':
+        return Math.log(alpha);
+      case 'pi':
+        return Math.log(Math.PI - alpha);
+      case 'below':
+        return Math.log(psi - alpha);
+      case 'above':
+        return Math.log(alpha - psi);
+      case 'plain':
+        return alpha;
+    }
+  };
+  /** alpha and sin(alpha) of a variable value, the sine computed without cancellation. */
+  const fromVar = (e: End, v: number): [number, number] => {
+    switch (e.kind) {
+      case 'zero': {
+        const d = Math.exp(v);
+        return [d, Math.sin(d)];
+      }
+      case 'pi': {
+        const d = Math.exp(v);
+        return [Math.PI - d, Math.sin(d)];
+      }
+      case 'below': {
+        const a = psi - Math.exp(v);
+        return [a, Math.sin(a)];
+      }
+      case 'above': {
+        const a = psi + Math.exp(v);
+        return [a, Math.sin(a)];
+      }
+      case 'plain':
+        return [v, Math.sin(v)];
+    }
+  };
+  /** The point next to an end where the solver may evaluate (edges cannot be reached). */
+  const nearEnd = (e: End): number =>
+    e.kind === 'below'
+      ? psi * (1 - EDGE_OFFSET)
+      : e.kind === 'above'
+        ? psi * (1 + EDGE_OFFSET)
+        : e.alpha;
+
+  /**
+   * Root of sweepAt(alpha) = sweep on a monotone branch from `low` (sweep below the target) to
+   * `high` (sweep above it). The bracket is split once at its midpoint, and the half holding
+   * the root is solved in the variable of its own end.
+   */
+  const solve = (
+    sweepAt: (alpha: number, sinAlpha: number) => number,
+    low: End,
+    high: End,
+  ): number => {
+    const f = (e: End) => (v: number) => {
+      const [a, sa] = fromVar(e, v);
+      return sweepAt(a, sa) - sweep;
+    };
+    const hiAlpha = nearEnd(high);
+    if (f(high)(toVar(high, hiAlpha)) <= 0) return hiAlpha;
+    const loAlpha = nearEnd(low);
+    if (f(low)(toVar(low, loAlpha)) >= 0) return loAlpha;
+    const mid = (loAlpha + hiAlpha) / 2;
+    const fMid = sweepAt(mid, Math.sin(mid)) - sweep;
+    if (fMid === 0) return mid;
+    const end = fMid > 0 ? low : high;
+    const other = fMid > 0 ? loAlpha : hiAlpha;
+    const v = brent(f(end), toVar(end, other), toVar(end, mid), 1e-15);
+    return fromVar(end, v)[0];
+  };
 
   if (Math.abs(R / rObs - 1) <= 1e-12) {
     // Outward rays never come back to rObs; inward ones with b > b_c turn and return.
-    const f = (x: number) => outAndBack(impact(aboveEdge(x), 'above')) - sweep;
-    const xHigh = Math.log(Math.PI / 2 - psi);
-    if (f(xHigh) >= 0) return Math.PI / 2;
-    return aboveEdge(brent(f, xNearEdge, xHigh, xTol));
+    return solve(
+      (_a, sa) => outAndBack(impact(sa, 'above')),
+      { kind: 'plain', alpha: Math.PI / 2 },
+      { kind: 'above', alpha: psi },
+    );
   }
 
   if (R < rObs) {
+    const low: End = { kind: 'zero', alpha: farAngle(uR - uo) };
     if (R <= 3 * M) {
       // Only plunging rays reach R; the inbound sweep grows from 0 to infinity towards the edge.
-      const f = (x: number) => swept(impact(belowEdge(x), 'below'), uo, uR) - sweep;
-      return belowEdge(brent(f, xNearEdge, Math.log(psi * (1 - 1e-12)), xTol));
+      return solve((_a, sa) => swept(impact(sa, 'below'), uo, uR), low, {
+        kind: 'below',
+        alpha: psi,
+      });
     }
     // R > 3M: inbound branch up to the ray that turns exactly at R, then the outbound branch.
     const alphaTurn = Math.asin((k * R) / Math.sqrt(1 - 2 * M * uR));
-    const inbound = (alpha: number) => swept(impact(alpha, 'either'), uo, uR);
-    const phiStar = inbound(alphaTurn);
-    if (sweep <= phiStar) return brent((a) => inbound(a) - sweep, 1e-14, alphaTurn, xTol);
-    const f = (x: number) => outAndBack(impact(aboveEdge(x), 'above')) - sweep;
-    const xHigh = Math.log(alphaTurn - psi);
-    if (f(xHigh) >= 0) return alphaTurn;
-    return aboveEdge(brent(f, xNearEdge, xHigh, xTol));
+    const inbound = (_a: number, sa: number) => swept(impact(sa, 'either'), uo, uR);
+    const phiStar = inbound(alphaTurn, Math.sin(alphaTurn));
+    if (sweep <= phiStar) return solve(inbound, low, { kind: 'plain', alpha: alphaTurn });
+    // For R just above 3M the outbound branch is narrower than rounding: its images are the edge.
+    if (!(alphaTurn > psi * (1 + EDGE_OFFSET))) return psi;
+    return solve(
+      (_a, sa) => outAndBack(impact(sa, 'above')),
+      { kind: 'plain', alpha: alphaTurn },
+      { kind: 'above', alpha: psi },
+    );
   }
 
   // R > rObs: outward rays go straight out to R; inward ones with b > b_c turn and come out.
-  const f = (x: number) => {
-    const alpha = aboveEdge(x);
-    if (alpha >= Math.PI / 2) return swept(impact(alpha, 'either'), uR, uo) - sweep;
-    return outAndBack(impact(alpha, 'above')) - sweep;
-  };
-  return aboveEdge(brent(f, xNearEdge, Math.log(Math.PI * (1 - 1e-12) - psi), xTol));
+  return solve(
+    (a, sa) =>
+      a >= Math.PI / 2 ? swept(impact(sa, 'either'), uR, uo) : outAndBack(impact(sa, 'above')),
+    { kind: 'pi', alpha: Math.PI - farAngle(uo - uR) },
+    { kind: 'above', alpha: psi },
+  );
+}
+
+/**
+ * Sweep at which the image of the ring R folds back: the ray that turns exactly at R, which is
+ * seen at the largest angle of any ray reaching R. Defined for 3M < R < rObs; null otherwise
+ * (rings at or inside 3M are reached only by plunging rays, and rings beyond the observer by
+ * rays that never turn inside them).
+ */
+export function ringFoldSweep(rObs: number, R: number, M = 1): number | null {
+  if (!(R > 3 * M && R < rObs && Number.isFinite(rObs))) return null;
+  const bTurn = R / Math.sqrt(1 - (2 * M) / R);
+  if (!(bTurn > criticalImpactParameter(M))) return null;
+  const { u2 } = orbitRoots(bTurn, M);
+  const uo = 1 / rObs;
+  return u2 > uo ? sweptAngleElliptic(bTurn, uo, u2, M) : null;
 }
