@@ -517,7 +517,7 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
   or Alt are always left to the browser, toggles ignore auto-repeat, and Escape closes the most
   recently opened panel first. One key map (`src/ui/keymap.ts`) drives the handler, the canvas's
   `aria-keyshortcuts`, the key hints and the About table. Panels are bottom sheets, one at a time,
-  up to 760 CSS px wide; above that, two 22rem panels fit side by side below the toolbar.
+  up to 760 CSS px wide; above that, two 22rem panels fit side by side below the toolbar and end above the readouts. Focus rings pair the accent with a dark ring so they read on any image; the view's ring is an element drawn above the canvas, because a canvas's own outline shadow is painted under its WebGPU content.
 - **Photosensitivity.** The two toggles that change the brightness of the whole image (disk and
   termination view) share one limiter, whether they come from keys, checkboxes or the URL: a
   change from rest applies at once, and later ones are coalesced so that consecutive changes are
