@@ -254,11 +254,11 @@ frames to a canvas and compares a screenshot with the clear colour.
   20260907.0337.1), Chrome 152.0.7977.83 headless exposes the paravirtual Apple GPU with no flags:
   vendor `apple`, architecture empty, no `timestamp-query` (so the page uses its wall-clock timing
   path there), `maxTextureDimension2D` 16384. Compute and presentation pass. The 13 parity tests and
-  all 109 page tests against the build passed in all 13 of the 17 runs on 2026-10-28 in which the
-  job started, and the GPU shadow measurement (validation mode at six distances) came out byte for
-  byte equal to the M5's in each of them. In the other 4 runs GitHub assigned no macOS runner within
-  15 to 25 minutes and cancelled the job ("not acquired by Runner of type hosted even after multiple
-  attempts", with a notice that macOS arm64 runners have capacity constraints).
+  all 109 page tests against the build passed in all 13 of the first 17 runs on 2026-10-28 in which
+  the job started, and the GPU shadow measurement (validation mode at six distances) came out byte
+  for byte equal to the M5's in each of them. In the other 4 runs GitHub assigned no macOS runner
+  within 15 to 25 minutes and cancelled the job ("not acquired by Runner of type hosted even after
+  multiple attempts", with a notice that macOS arm64 runners have capacity constraints).
 - **Ubuntu: the built page runs on SwiftShader, once Chrome has a Vulkan driver.** On
   `ubuntu-24.04`, Chrome (155.0.8059.39 on image 20261012.334.1 and 156.0.8078.47 on image
   20261025.353.1, both seen on 2026-10-28) offers SwiftShader with
