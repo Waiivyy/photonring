@@ -12,6 +12,7 @@ import {
   type CameraParams,
   type Vec3,
 } from '../../src/physics/index.ts';
+import { measured } from '../helpers/measured.ts';
 
 const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const cross = (a: Vec3, b: Vec3): Vec3 => [
@@ -43,7 +44,9 @@ describe('camera frame', () => {
     for (let i = 0; i < 3; i++) expect(c[i]).toBeCloseTo(f.forward[i] as number, 14);
     expect(norm(f.position)).toBeCloseTo(d, 12);
     const toHole: Vec3 = [-f.position[0] / d, -f.position[1] / d, -f.position[2] / d];
-    expect(angle(f.forward, toHole)).toBeLessThan(1e-14);
+    expect(
+      measured('item 9: forward points at the hole, rad', angle(f.forward, toHole)),
+    ).toBeLessThan(1e-14);
   });
 
   it('places azimuth 0, elevation 0 on +x with +z up and +y to the right', () => {
@@ -81,20 +84,27 @@ describe('pixel to ray direction', () => {
     const w = aw * 40;
     const h = ah * 40;
     const centre = pixelDirection(f, w, h, w / 2, h / 2);
-    expect(angle(centre, f.forward)).toBeLessThan(1e-14);
+    expect(
+      measured('item 9: image centre on the optical axis, rad', angle(centre, f.forward)),
+    ).toBeLessThan(1e-14);
     const tanHalf = Math.tan((fov * DEG) / 2);
     // Top and bottom edge centres are half the vertical field of view away, above and below.
     const top = pixelDirection(f, w, h, w / 2, 0);
+    const edgeKey = 'item 9: edge and corner angles, error in rad';
+    measured(edgeKey, Math.abs(angle(top, f.forward) - (fov * DEG) / 2));
     expect(angle(top, f.forward)).toBeCloseTo((fov * DEG) / 2, 12);
     expect(dot(top, f.up)).toBeGreaterThan(0);
     expect(dot(pixelDirection(f, w, h, w / 2, h), f.up)).toBeLessThan(0);
     // Right edge: horizontal half-angle atan(aspect tan(fov/2)), on the right.
     const right = pixelDirection(f, w, h, w, h / 2);
+    measured(edgeKey, Math.abs(angle(right, f.forward) - Math.atan((w / h) * tanHalf)));
     expect(angle(right, f.forward)).toBeCloseTo(Math.atan((w / h) * tanHalf), 12);
     expect(dot(right, f.right)).toBeGreaterThan(0);
     // Corner.
     const corner = pixelDirection(f, w, h, w, 0);
-    expect(angle(corner, f.forward)).toBeCloseTo(Math.atan(tanHalf * Math.hypot(w / h, 1)), 12);
+    const cornerAngle = Math.atan(tanHalf * Math.hypot(w / h, 1));
+    measured(edgeKey, Math.abs(angle(corner, f.forward) - cornerAngle));
+    expect(angle(corner, f.forward)).toBeCloseTo(cornerAngle, 12);
     expect(norm(corner)).toBeCloseTo(1, 14);
   });
 
@@ -111,7 +121,8 @@ describe('pixel to ray direction', () => {
       ] as const) {
         const ref = pixelDirection(f, cssW, cssH, x, y);
         const scaled = pixelDirection(f, cssW * dpr, cssH * dpr, x * dpr, y * dpr);
-        expect(angle(ref, scaled)).toBeLessThan(1e-15);
+        const key = 'item 9: same CSS point at device pixel ratios 1 to 3, rad';
+        expect(measured(key, angle(ref, scaled))).toBeLessThan(1e-15);
       }
     },
   );
@@ -163,8 +174,9 @@ describe('direction to image point (inverse of pixelDirection)', () => {
     ] as const) {
       const p = projectDirection(f, w, h, pixelDirection(f, w, h, x, y));
       expect(p).not.toBeNull();
-      expect(Math.abs((p as [number, number])[0] - x)).toBeLessThan(1e-9);
-      expect(Math.abs((p as [number, number])[1] - y)).toBeLessThan(1e-9);
+      const key = 'item 9: pixel to direction and back, error in px';
+      expect(measured(key, Math.abs((p as [number, number])[0] - x))).toBeLessThan(1e-9);
+      expect(measured(key, Math.abs((p as [number, number])[1] - y))).toBeLessThan(1e-9);
     }
   });
 

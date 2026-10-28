@@ -27,6 +27,7 @@
     "probe:webgpu": "node tests/probe/webgpu-adapter.ts",
     "bench:gpu": "playwright test --project=bench",
     "gallery:gpu": "playwright test --project=gallery",
+    "measure": "rm -rf artifacts/measured && MEASURE=1 vitest run && node tools/measured-report.ts",
     "spike": "node tools/precision-spike.ts",
     "render:cpu": "node tools/render-cpu.ts",
     "golden:update": "node tools/update-goldens.ts",

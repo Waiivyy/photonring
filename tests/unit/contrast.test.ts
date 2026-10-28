@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { HALO, OVERLAY_IDS, OVERLAY_STYLES } from '../../src/ui/overlay-style.ts';
+import { measured } from '../helpers/measured.ts';
 
 type Rgb = [number, number, number];
 
@@ -55,13 +56,24 @@ describe('overlay lines', () => {
   it('are at least 3:1 against a black sky and against their halo over a white disk', () => {
     for (const id of OVERLAY_IDS) {
       const c = hex(OVERLAY_STYLES[id].colour);
-      expect(ratio(c, BLACK), id).toBeGreaterThanOrEqual(3);
-      expect(ratio(c, haloOverWhite), id).toBeGreaterThanOrEqual(3);
+      const onBlack = measured('Stage 4: overlay line contrast on black', ratio(c, BLACK), 'min');
+      expect(onBlack, id).toBeGreaterThanOrEqual(3);
+      const onHalo = measured(
+        'Stage 4: overlay line contrast on its halo over white',
+        ratio(c, haloOverWhite),
+        'min',
+      );
+      expect(onHalo, id).toBeGreaterThanOrEqual(3);
     }
   });
 
   it('the halo over white is at least 3:1 against white, so the line stands out on any image', () => {
-    expect(ratio(haloOverWhite, WHITE)).toBeGreaterThanOrEqual(3);
+    const halo = measured(
+      'Stage 4: halo over white against white',
+      ratio(haloOverWhite, WHITE),
+      'min',
+    );
+    expect(halo).toBeGreaterThanOrEqual(3);
   });
 
   it('every overlay has its own dash pattern, so colour is never the only cue', () => {
@@ -78,7 +90,12 @@ describe('page text', () => {
       const where = `on --${panel} over ${backdrop === BLACK ? 'black' : 'white'}`;
       it(`text tokens are at least 4.5:1 ${where}`, () => {
         for (const name of ['fg', 'muted', 'accent']) {
-          expect(ratio(token(name).rgb, bg), `--${name} ${where}`).toBeGreaterThanOrEqual(4.5);
+          const r = measured(
+            'Stage 4: text contrast on the panels',
+            ratio(token(name).rgb, bg),
+            'min',
+          );
+          expect(r, `--${name} ${where}`).toBeGreaterThanOrEqual(4.5);
         }
       });
     }
@@ -87,7 +104,10 @@ describe('page text', () => {
   it('the swatch outline is at least 3:1 on the solid panel', () => {
     const p = token('panel-solid');
     for (const backdrop of [BLACK, WHITE]) {
-      expect(ratio(token('fg').rgb, over(p.rgb, p.alpha, backdrop))).toBeGreaterThanOrEqual(3);
+      const r = ratio(token('fg').rgb, over(p.rgb, p.alpha, backdrop));
+      expect(
+        measured('Stage 4: swatch outline contrast on the solid panel', r, 'min'),
+      ).toBeGreaterThanOrEqual(3);
     }
   });
 });

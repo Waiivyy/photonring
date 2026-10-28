@@ -14,6 +14,7 @@ import {
   type Round,
 } from '../../src/physics/index.ts';
 import { exactSweptAngle, inwardPsiForImpactParameter } from '../helpers/reference.ts';
+import { measured } from '../helpers/measured.ts';
 
 const M = 1;
 const BC = criticalImpactParameter(M);
@@ -45,12 +46,12 @@ function pathError(ray: PlanarRayResult, r0: number, psi: number): number {
   return Math.abs(ray.positionAngle - exactSweptAngle(r0, psi, M, ray.finalRadius));
 }
 
-describe.each(Object.entries(METHODS))('%s', (_name, trace) => {
+describe.each(Object.entries(METHODS))('%s', (name, trace) => {
   describe('1. critical impact parameter by bisection on capture versus escape', () => {
     it.each([
       ['f64', f64, 1e-6],
       ['f32', f32, 1e-4],
-    ] as const)('%s: matches 3 sqrt(3) M', (_p, round, tol) => {
+    ] as const)('%s: matches 3 sqrt(3) M', (p, round, tol) => {
       const r0 = 30;
       // chi is the angle from the inward radial: chi = 0 is captured, chi = pi/2 escapes.
       let lo = 0;
@@ -62,7 +63,8 @@ describe.each(Object.entries(METHODS))('%s', (_name, trace) => {
         else hi = mid;
       }
       const bNum = impactParameterFromLocalAngle(r0, (lo + hi) / 2, M);
-      expect(Math.abs(bNum / BC - 1)).toBeLessThan(tol);
+      const err = Math.abs(bNum / BC - 1);
+      expect(measured(`item 1: b_c by bisection, ${name}, ${p}, relative`, err)).toBeLessThan(tol);
     });
   });
 
@@ -74,10 +76,16 @@ describe.each(Object.entries(METHODS))('%s', (_name, trace) => {
       const alpha = deflectionAngleElliptic(b, M);
       const ray64 = trace(r0, psi, f64, true);
       expect(ray64.termination).toBe('escaped');
-      expect(pathError(ray64, r0, psi) / alpha).toBeLessThan(1e-6);
+      const err64 = pathError(ray64, r0, psi) / alpha;
+      expect(measured(`item 2: integrated deflection, ${name}, f64, relative`, err64)).toBeLessThan(
+        1e-6,
+      );
       const ray32 = trace(r0, psi, f32, false);
       expect(ray32.termination).toBe('escaped');
-      expect(pathError(ray32, r0, psi) / alpha).toBeLessThan(1e-3);
+      const err32 = pathError(ray32, r0, psi) / alpha;
+      expect(measured(`item 2: integrated deflection, ${name}, f32, relative`, err32)).toBeLessThan(
+        1e-3,
+      );
     });
   });
 
@@ -87,7 +95,8 @@ describe.each(Object.entries(METHODS))('%s', (_name, trace) => {
       const psi = inwardPsiForImpactParameter(r0, 2 * BC, M);
       const coarse = pathError(trace(r0, psi, f64, false), r0, psi);
       const fine = pathError(trace(r0, psi, f64, true), r0, psi);
-      expect(fine).toBeLessThan(coarse / 50);
+      const key = `item 3: renderer step error over fine step error, ${name}`;
+      expect(measured(key, coarse / fine, 'min')).toBeGreaterThan(50);
     });
   });
 
@@ -143,7 +152,7 @@ describe('3. conserved quantities along a ray (f64)', () => {
         worst = Math.max(worst, Math.abs(invariant * b * b - 1));
       },
     });
-    expect(worst).toBeLessThan(1e-9);
+    expect(measured('item 3: Binet first integral, relative', worst)).toBeLessThan(1e-9);
   });
 
   it.each([
@@ -151,7 +160,7 @@ describe('3. conserved quantities along a ray (f64)', () => {
     ['leapfrog', traceCartesianLeapfrog, 0.0005, 1e-12],
   ] as const)(
     'Cartesian %s: h = |x cross v| and the energy integral 1/b^2 stay constant',
-    (_n, tracer, eta, hTol) => {
+    (n, tracer, eta, hTol) => {
       let h0 = NaN;
       let worstH = 0;
       let worstB = 0;
@@ -170,8 +179,10 @@ describe('3. conserved quantities along a ray (f64)', () => {
           worstB = Math.max(worstB, Math.abs(invB2 * b * b - 1));
         },
       });
-      expect(worstH).toBeLessThan(hTol);
-      expect(worstB).toBeLessThan(1e-6);
+      expect(measured(`item 3: Cartesian ${n}, h, relative`, worstH)).toBeLessThan(hTol);
+      expect(measured(`item 3: Cartesian ${n}, energy integral, relative`, worstB)).toBeLessThan(
+        1e-6,
+      );
     },
   );
 
@@ -182,7 +193,10 @@ describe('3. conserved quantities along a ray (f64)', () => {
       const ray = traceBinetRK4(M, r0b, psib, { round: f64, dphi, maxSteps: 10000 });
       return Math.abs(ray.escapeAngle - exactSweptAngle(r0b, psib, M));
     };
-    const ratio = err(0.08) / err(0.04);
+    const ratio = measured(
+      'item 3: Binet RK4 error ratio when the step halves',
+      err(0.08) / err(0.04),
+    );
     expect(ratio).toBeGreaterThan(12);
     expect(ratio).toBeLessThan(20);
   });

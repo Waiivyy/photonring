@@ -37,6 +37,7 @@ import {
   relErr,
   slope,
 } from '../helpers/numeric.ts';
+import { measured } from '../helpers/measured.ts';
 
 const SQRT3 = Math.sqrt(3);
 
@@ -52,7 +53,10 @@ describe('1. analytic constants', () => {
     'photon sphere is the maximum of the photon potential (M = %d), hence unstable',
     (M) => {
       const rMax = goldenSectionMax((r) => photonPotential(r, M), 2.2 * M, 10 * M);
-      expect(Math.abs(rMax - photonSphereRadius(M))).toBeLessThan(1e-6 * M);
+      const off = Math.abs(rMax - photonSphereRadius(M)) / M;
+      expect(
+        measured('item 1: photon sphere found at the potential maximum, error / M', off),
+      ).toBeLessThan(1e-6);
       const h = 1e-3 * M;
       const r = photonSphereRadius(M);
       const second =
@@ -64,18 +68,25 @@ describe('1. analytic constants', () => {
 
   it.each([1, 2.5])('b_c = V_max^(-1/2) and u = 1/3M is a double root at b_c (M = %d)', (M) => {
     const bc = criticalImpactParameter(M);
-    expect(relErr(1 / Math.sqrt(photonPotential(3 * M, M)), bc)).toBeLessThan(1e-15);
+    const vmax = relErr(1 / Math.sqrt(photonPotential(3 * M, M)), bc);
+    expect(measured('item 1: b_c = V_max^(-1/2), relative', vmax)).toBeLessThan(1e-15);
     // Circular null orbit: (du/dphi)^2 and its u-derivative both vanish at u = 1/3M.
     const u = 1 / (3 * M);
     const du = 1e-6 / M;
-    expect(Math.abs(orbitPolynomial(u, bc, M)) * M * M).toBeLessThan(1e-15);
+    const residual = Math.abs(orbitPolynomial(u, bc, M)) * M * M;
+    expect(measured('item 1: double root at u = 1/3M, |P| M^2', residual)).toBeLessThan(1e-15);
     const deriv = (orbitPolynomial(u + du, bc, M) - orbitPolynomial(u - du, bc, M)) / (2 * du);
-    expect(Math.abs(deriv) * M).toBeLessThan(1e-9);
+    expect(measured("item 1: double root at u = 1/3M, |P'| M", Math.abs(deriv) * M)).toBeLessThan(
+      1e-9,
+    );
   });
 
   it.each([1, 2.5])('ISCO is the minimum of the circular-orbit angular momentum (M = %d)', (M) => {
     const rMin = goldenSectionMin((r) => circularOrbitAngularMomentumSq(r, M), 3.5 * M, 30 * M);
-    expect(Math.abs(rMin - iscoRadius(M))).toBeLessThan(1e-5 * M);
+    const off = Math.abs(rMin - iscoRadius(M)) / M;
+    expect(
+      measured('item 1: ISCO found at the angular momentum minimum, error / M', off),
+    ).toBeLessThan(1e-5);
   });
 });
 
@@ -91,14 +102,20 @@ describe('2a. orbit polynomial roots', () => {
     expect(r.u3).toBeGreaterThanOrEqual(1 / (3 * M));
     expect(r.u3).toBeLessThan(1 / (2 * M));
     // P(u) = 2M u^3 - u^2 + 1/b^2 = 2M (u - u1)(u - u2)(u - u3)
-    expect(relErr(r.u1 + r.u2 + r.u3, 1 / (2 * M))).toBeLessThan(1e-14);
-    expect(relErr(r.u1 * r.u2 * r.u3, -1 / (2 * M * b * b))).toBeLessThan(1e-12);
+    const sum = relErr(r.u1 + r.u2 + r.u3, 1 / (2 * M));
+    expect(measured('item 2: orbit roots, Vieta sum, relative', sum)).toBeLessThan(1e-14);
+    const product = relErr(r.u1 * r.u2 * r.u3, -1 / (2 * M * b * b));
+    expect(measured('item 2: orbit roots, Vieta product, relative', product)).toBeLessThan(1e-12);
     const pair = r.u1 * r.u2 + r.u1 * r.u3 + r.u2 * r.u3;
     expect(Math.abs(pair)).toBeLessThan(1e-14 * Math.abs(r.u1 * r.u3));
-    expect(relErr(r.d21, r.u2 - r.u1)).toBeLessThan(1e-12);
-    expect(relErr(r.d31, r.u3 - r.u1)).toBeLessThan(1e-14);
-    expect(Math.abs(r.d32 - (r.u3 - r.u2))).toBeLessThan(1e-15);
-    expect(Math.abs(r.q0 - (1 / (3 * M) - r.u2))).toBeLessThan(1e-15);
+    const d21 = relErr(r.d21, r.u2 - r.u1);
+    expect(measured('item 2: orbit roots, u2 - u1, relative', d21)).toBeLessThan(1e-12);
+    const d31 = relErr(r.d31, r.u3 - r.u1);
+    expect(measured('item 2: orbit roots, u3 - u1, relative', d31)).toBeLessThan(1e-14);
+    const d32 = Math.abs(r.d32 - (r.u3 - r.u2));
+    expect(measured('item 2: orbit roots, u3 - u2, absolute', d32)).toBeLessThan(1e-15);
+    const q0 = Math.abs(r.q0 - (1 / (3 * M) - r.u2));
+    expect(measured('item 2: orbit roots, 1/3M - u2, absolute', q0)).toBeLessThan(1e-15);
   });
 
   it('rejects b <= b_c, where there is no turning point', () => {
@@ -115,7 +132,10 @@ describe('2b. deflection angle: quadrature versus elliptic integrals', () => {
       const q = deflectionAngleQuadrature(b, M);
       const e = deflectionAngleElliptic(b, M);
       expect(q).toBeGreaterThan(0);
-      expect(relErr(q, e)).toBeLessThan(1e-11);
+      const where = ratio <= 1.1 ? 'b <= 1.1 b_c' : 'b > 1.1 b_c';
+      expect(
+        measured(`item 2: quadrature against elliptic, ${where}, relative`, relErr(q, e)),
+      ).toBeLessThan(1e-11);
     }
   });
 
@@ -131,7 +151,9 @@ describe('2b. deflection angle: quadrature versus elliptic integrals', () => {
     const uB = uBSpec === 'turning' ? orbitRoots(b, M).u2 : uBSpec;
     const q = sweptAngleQuadrature(b, uA, uB, M);
     const e = sweptAngleElliptic(b, uA, uB, M);
-    expect(relErr(q, e)).toBeLessThan(1e-11);
+    expect(
+      measured('item 2: swept angle, quadrature against elliptic, relative', relErr(q, e)),
+    ).toBeLessThan(1e-11);
   });
 
   it('swept angle without a turning point (b < b_c, outward ray) matches adaptive Simpson', () => {
@@ -139,14 +161,20 @@ describe('2b. deflection angle: quadrature versus elliptic integrals', () => {
     for (const b of [0.5, 2, 5]) {
       const u0 = 1 / 30;
       const simpson = adaptiveSimpson((u) => 1 / Math.sqrt(orbitPolynomial(u, b, M)), 0, u0);
-      expect(relErr(sweptAngleQuadrature(b, 0, u0, M), simpson)).toBeLessThan(1e-11);
+      const err = relErr(sweptAngleQuadrature(b, 0, u0, M), simpson);
+      expect(
+        measured('item 2: swept angle without turning point against Simpson, relative', err),
+      ).toBeLessThan(1e-11);
     }
   });
 
   it('the full deflection is twice the swept angle to the turning point, minus pi', () => {
     const b = 7.5;
     const half = sweptAngleQuadrature(b, 0, orbitRoots(b, 1).u2, 1);
-    expect(relErr(2 * half - Math.PI, deflectionAngleQuadrature(b, 1))).toBeLessThan(1e-13);
+    const err = relErr(2 * half - Math.PI, deflectionAngleQuadrature(b, 1));
+    expect(measured('item 2: deflection = 2 x swept angle - pi, relative', err)).toBeLessThan(
+      1e-13,
+    );
   });
 });
 
@@ -165,6 +193,7 @@ describe('2c. deflection angle: weak and strong field limits', () => {
       const alpha = deflectionAngleQuadrature(b, 1);
       const remainder = alpha - weakFieldDeflection(b, 1, 3);
       const fourth = ((3465 * Math.PI) / 64) * b ** -4;
+      measured(`item 2: weak field, remainder over fourth term at b = ${b} M`, remainder / fourth);
       expect(remainder / fourth).toBeGreaterThan(0.95);
       expect(remainder / fourth).toBeLessThan(1.06);
     },
@@ -173,7 +202,10 @@ describe('2c. deflection angle: weak and strong field limits', () => {
   it('(alpha - 4M/b) b^2 / M^2 approaches 15 pi / 4', () => {
     const b = 2000;
     const scaled = (deflectionAngleQuadrature(b, 1) - 4 / b) * b * b;
-    expect(relErr(scaled, (15 * Math.PI) / 4)).toBeLessThan(2e-3);
+    const err = relErr(scaled, (15 * Math.PI) / 4);
+    expect(
+      measured('item 2: weak field, (alpha - 4M/b) b^2 against 15 pi / 4 at 2000 M, relative', err),
+    ).toBeLessThan(2e-3);
   });
 
   it('Bozza (2002) strong-field coefficients: abar = 1, bbar = ln[216(7 - 4 sqrt 3)] - pi', () => {
@@ -195,8 +227,14 @@ describe('2c. deflection angle: weak and strong field limits', () => {
     for (let i = 1; i < errs.length; i++) {
       expect(errs[i]).toBeLessThan(errs[i - 1] as number);
     }
-    expect(errs[errs.length - 1]).toBeLessThan(1e-5);
-    const p = slope(eps.map(Math.log), errs.map(Math.log));
+    const last = errs[errs.length - 1] as number;
+    expect(measured('item 2: strong field, error at b = (1 + 1e-7) b_c, rad', last)).toBeLessThan(
+      1e-5,
+    );
+    const p = measured(
+      'item 2: strong field, log-log slope of the error',
+      slope(eps.map(Math.log), errs.map(Math.log)),
+    );
     expect(p).toBeGreaterThan(0.8);
     expect(p).toBeLessThan(1.2);
   });
@@ -207,9 +245,8 @@ describe('6a. shadow angular radius for a static observer at r_o', () => {
 
   it.each(radii)('r_o = %d M: the shadow edge maps back to b = b_c in the local frame', (ro) => {
     const psi = shadowAngularRadius(ro, 1);
-    expect(
-      relErr(impactParameterFromLocalAngle(ro, psi, 1), criticalImpactParameter(1)),
-    ).toBeLessThan(1e-13);
+    const err = relErr(impactParameterFromLocalAngle(ro, psi, 1), criticalImpactParameter(1));
+    expect(measured('item 6: shadow edge maps back to b_c, relative', err)).toBeLessThan(1e-13);
   });
 
   it.each(radii)(
@@ -222,7 +259,10 @@ describe('6a. shadow angular radius for a static observer at r_o', () => {
       const speed2 = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
       // 1/b^2 = |x'|^2 / h^2 - 2M / r^3 (derived in docs/PHYSICS.md)
       const b = 1 / Math.sqrt(speed2 / (h * h) - 2 / ro ** 3);
-      expect(relErr(b, criticalImpactParameter(1))).toBeLessThan(1e-13);
+      const err = relErr(b, criticalImpactParameter(1));
+      expect(
+        measured('item 6: shadow edge, b from the Euclidean energy integral, relative', err),
+      ).toBeLessThan(1e-13);
     },
   );
 
@@ -234,7 +274,10 @@ describe('6a. shadow angular radius for a static observer at r_o', () => {
 
   it('differs from the naive b_c / r_o and approaches it far away', () => {
     const naive = (ro: number) => Math.asin(criticalImpactParameter(1) / ro);
-    expect(relErr(shadowAngularRadius(30, 1), naive(30))).toBeGreaterThan(0.03);
+    const at30 = relErr(shadowAngularRadius(30, 1), naive(30));
+    expect(
+      measured('item 6: shadow against the naive b_c / r_o at 30 M, relative', at30),
+    ).toBeGreaterThan(0.03);
     expect(relErr(shadowAngularRadius(1e5, 1), naive(1e5))).toBeLessThan(2e-5);
   });
 
@@ -248,14 +291,14 @@ describe('5. redshift factor g = nu_obs / nu_emit', () => {
   const radii = [6, 7, 10, 20, 100];
 
   it.each(radii)('r = %d M: face-on disk (L_z = 0) gives sqrt(1 - 3M/r)', (r) => {
-    expect(
-      relErr(redshiftFactor(circularOrbitEmitter(r, 1), 0), Math.sqrt(1 - 3 / r)),
-    ).toBeLessThan(1e-15);
+    const err = relErr(redshiftFactor(circularOrbitEmitter(r, 1), 0), Math.sqrt(1 - 3 / r));
+    expect(measured('item 5: face-on disk g = sqrt(1 - 3M/r), relative', err)).toBeLessThan(1e-15);
   });
 
   it.each(radii)('r = %d M: static emitter gives sqrt(1 - 2M/r) for any L_z', (r) => {
     for (const lz of [-5, 0, 3]) {
-      expect(relErr(redshiftFactor(staticEmitter(r, 1), lz), Math.sqrt(1 - 2 / r))).toBeLessThan(
+      const err = relErr(redshiftFactor(staticEmitter(r, 1), lz), Math.sqrt(1 - 2 / r));
+      expect(measured('item 5: static emitter g = sqrt(1 - 2M/r), relative', err)).toBeLessThan(
         1e-15,
       );
     }
@@ -281,7 +324,7 @@ describe('5. redshift factor g = nu_obs / nu_emit', () => {
         gMax = Math.max(gMax, g);
       }
     }
-    expect(gMax).toBeLessThan(2);
+    expect(measured('item 5: largest g from the ISCO to 1000 M', gMax)).toBeLessThan(2);
   });
 
   it('static emitter seen by a static observer: g = sqrt((1 - 2M/r_e) / (1 - 2M/r_o))', () => {
@@ -292,7 +335,10 @@ describe('5. redshift factor g = nu_obs / nu_emit', () => {
       [50, 8],
     ] as const) {
       const g = redshiftFactor(staticEmitter(re, 1), 0) * staticObserverFactor(ro, 1);
-      expect(relErr(g, Math.sqrt((1 - 2 / re) / (1 - 2 / ro)))).toBeLessThan(1e-15);
+      const err = relErr(g, Math.sqrt((1 - 2 / re) / (1 - 2 / ro)));
+      expect(measured('item 5: static emitter to static observer, relative', err)).toBeLessThan(
+        1e-15,
+      );
     }
   });
 
