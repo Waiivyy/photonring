@@ -453,3 +453,92 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
   disk within 1 level of the CPU reference (6 levels in 3 of 43,200 channels at 5 M), anti-aliased
   images within 2 levels in all but at most 8 of 43,200 channels; GPU time for the anti-aliased
   1920 x 1080 frame with the disk 12.8 ms (5.3 ms first pass, 7.5 ms anti-aliasing).
+
+## 13. Stage 4 decisions
+
+- **What the horizon and photon sphere overlays show.** For a static observer outside $3M$, the
+  view directions whose backward rays reach any sphere of radius $R \le 3M$ are exactly the cone
+  inside the shadow edge (`docs/PHYSICS.md`, section 6a). A lensed outline of the horizon or of
+  the photon sphere would therefore be the shadow-edge circle drawn again. The shadow-edge
+  overlay says so in its legend, and the Horizon, Photon sphere and ISCO toggles draw where the
+  circles $r = 2M$, $3M$ and $6M$ in the disk plane appear through the bent light: the direct
+  image of each, plus the image of light that passed behind the hole for the ISCO (the inner
+  edges of the disk's two images). Unlensed "flat-space" circles were rejected: Schwarzschild $r$
+  is an areal radius, so such circles depend on a coordinate choice and nothing in the renderer
+  could check them.
+- **Overlays are vectors, not WGSL.** The brief's folder layout has `shaders/overlays`; the
+  overlays are instead computed in the f64 library and drawn as an SVG layer over the canvas,
+  whose viewBox is the canvas's CSS size. Line widths and dashes are then CSS px at every
+  distance, resolution and pixel ratio, the lines stay sharp over previews, toggling them costs
+  no GPU frame, and the same path data draws them into saved images. The shadow edge is closed
+  form; ring curves come from `ringImageAngle`, one root solve per image direction, sampled
+  adaptively (chord within 0.1 px at 2160 rows on screen, at most 2048 vertices, plus the
+  directions where the curve folds back, which near edge-on views are narrower than the uniform
+  sampling). The layer follows the camera of the image last presented, so lines never run ahead
+  of the image. Ring curves are computed only after the presented view has been still for the
+  renderer's settle time (120 ms), in slices of 8 ms per frame, and kept for the last 8 views;
+  they do not depend on the azimuth, so orbiting around the axis keeps them.
+- **The lookup table for ring curves was not needed.** The design set a trigger: build a table
+  of image angle against sweep if the rings took more than 250 ms from the settle time to
+  appear. With 4 ms slices they took 230 to 247 ms (median of 7, Apple M5, Chrome 156 headless,
+  1920 x 1080, three ring overlays); with 8 ms slices 130 to 163 ms (`docs/PERFORMANCE.md`).
+- **The Validation panel measures a separate render.** While the panel is open and the image is
+  complete, two offscreen 1024 x 1024 renders of the presented camera run through the image
+  pipeline: the brief's validation mode (disk off, uniform sky of exactly 1.0, no tone mapping,
+  one ray per pixel centre) and the termination view of the same rays. They are never shown, so
+  there is no white flash. A square render at the view's own field of view keeps the shadow off
+  the border at every distance and in portrait windows, and gives results that do not depend on
+  the device; the panel says that its pixel figures are pixels of that render. The black pixels
+  give the radius $\sqrt{A/\pi}$; the termination render also counts step-limit pixels and every
+  pixel whose class disagrees with the analytic edge, which catches errors that cancel in the
+  area. Tolerance: 1 px of the render or 0.5 %, whichever is larger. A scheduler
+  (`src/ui/validation-scheduler.ts`) measures once per presented camera, discards a result that
+  arrives after the camera changed or the panel closed, and shows a stored result again when the
+  view returns to it.
+- **URL state** (`src/ui/url-state.ts`). Version 1, every key in a fixed order, for example
+  `#v=1&r=30&az=0&el=12&disk=1&aa=1&view=colour&ov=none&val=0`. A hash is a complete view: missing
+  keys take their defaults, so a link shows the same view in any tab. The app's camera is always
+  rounded to the URL's precision (distance to 0.001 M, angles to 0.01 degrees), so the image, the
+  HUD, the hash and the saved file name describe the same view and every reachable state
+  round-trips exactly; drags, pinches and wheel bursts are applied to the state at the start of
+  the gesture, so motion below that precision adds up. The parser never throws: at most 512
+  characters (else the defaults), 32 pairs and 8 overlay names; keys must be lower-case ASCII
+  letters, values at most 64 characters, numbers must match a plain decimal pattern and be finite;
+  the first occurrence of a key wins; distances are clamped to 5 to 200 M, so no link can place
+  the camera at or inside the horizon. Malformed values fall back to their default, and the page
+  says once that the link was adjusted, without echoing it. The hash is written with
+  `replaceState` and a fragment-only URL, 300 ms after the last change (no history entries, no
+  dependence on the write succeeding); edits in the address bar apply the whole view at once.
+  Not in the URL: the field of view (automatic), whether the Controls panel or About is open, and
+  the diagnostic `?maxdim` and `?budget`.
+- **Keyboard and touch.** Single-key shortcuts work only while the view has focus (WCAG 2.1.4);
+  every action is also a native button or checkbox, including orbit and zoom (Camera buttons in
+  the Controls panel, a single-pointer alternative to dragging and pinching). Keys with Ctrl, Cmd
+  or Alt are always left to the browser, toggles ignore auto-repeat, and Escape closes the most
+  recently opened panel first. One key map (`src/ui/keymap.ts`) drives the handler, the canvas's
+  `aria-keyshortcuts`, the key hints and the About table. Panels are bottom sheets, one at a time,
+  up to 760 CSS px wide; above that, two 22rem panels fit side by side below the toolbar.
+- **Photosensitivity.** The two toggles that change the brightness of the whole image (disk and
+  termination view) share one limiter, whether they come from keys, checkboxes or the URL: a
+  change from rest applies at once, and later ones are coalesced so that consecutive changes are
+  at least 500 ms apart, at most 3 in any one second and 2 flashes per second, below the 3 of
+  WCAG 2.3.1. The controls and the URL show what was asked for; the image, the stats and the saved
+  file show what is drawn.
+- **No motion of its own.** There is no automatic camera motion and no CSS animation or
+  transition anywhere, so `prefers-reduced-motion` needs no separate code path.
+- **About** (`src/ui/about.ts`): a native modal dialog with the brief's honesty note first, what
+  the image shows and its limits, what each line means, the units, the controls, a privacy
+  statement (no analytics, cookies or storage, nothing loaded from other sites, the view kept in
+  the part of the address after #) and links to these documents on GitHub. It states no numbers.
+- **Saving the image.** The settled full-quality image at the internal resolution, with the
+  visible overlays and a small legend (also in the termination view), encoded by the browser as
+  PNG and offered as a download; nothing leaves the device. A save waits until the image is
+  complete, no brightness change is pending and the visible rings are drawn (at most 10 s), and
+  the file is named after the view it shows, for example `photonring-r30-az0-el12.png`.
+- **Teardown.** Every listener, timer and animation frame of the page belongs to one lifecycle
+  (`src/ui/lifecycle.ts`) that the Restart after device loss releases at once; the hash is
+  written before the restart, and focus moves to the new view.
+- **Screen readers.** The canvas is an image whose accessible name summarises the drawn view once
+  it is complete; announcements go to one polite live region. NVDA and JAWS in browse mode may not
+  pass arrow keys to the canvas; the Camera buttons are the documented path. No screen reader
+  has been tested by hand yet.
