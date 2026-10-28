@@ -90,8 +90,12 @@ describe('workflows', () => {
 
   it('ci.yml can only read the repository', () => {
     const permissions = top('ci.yml').get('permissions')!;
+    expect(permissions.inline).toBe('');
     const granted = [...blocks(permissions.lines, 2)].map(([k, v]) => `${k}: ${v.inline}`);
     expect(granted).toEqual(['contents: read']);
+    // A job-level block would replace the top-level one for that job.
+    for (const [id, job] of jobs('ci.yml'))
+      expect(blocks(job.lines, 4).has('permissions'), id).toBe(false);
     expect(read('ci.yml')).not.toMatch(/^\s*(pages|id-token):\s*write/m);
   });
 
