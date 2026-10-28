@@ -70,8 +70,11 @@ jobs:
           cache: npm
       - id: install
         run: npm ci
-      - name: Chrome version and WebGPU adapter (information only)
-        run: npm run probe:webgpu
+      # Fails the job at once if WebGPU cannot compute and present here; later steps still run.
+      - name: Chrome version, WebGPU adapter, compute and canvas presentation
+        run: npm run probe:webgpu -- --require present
+        env:
+          DEBUG: pw:browser
       - name: No requests beyond same-origin files (item 15)
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npx playwright test -c playwright.dist.config.ts --output test-results/dist
@@ -114,8 +117,10 @@ jobs:
           cache: npm
       - id: install
         run: npm ci
-      - name: Chrome version and a hardware WebGPU adapter
-        run: npm run probe:webgpu -- --require hardware
+      - name: Chrome version, a hardware WebGPU adapter, compute and canvas presentation
+        run: npm run probe:webgpu -- --require hardware,present
+        env:
+          DEBUG: pw:browser
       # Parity is deterministic: a pass on retry still fails the job.
       - name: GPU against CPU parity
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
