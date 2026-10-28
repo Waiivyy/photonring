@@ -68,7 +68,7 @@ describe.each(Object.entries(METHODS))('%s', (_name, trace) => {
 
   describe('2. deflection versus the reference integrals (observer at 10^4 M)', () => {
     const r0 = 1e4;
-    it.each([1.02, 1.1, 2, 10, 100])('b = %d b_c', (ratio) => {
+    it.each([1.01, 1.02, 1.1, 2, 10, 100, 1000])('b = %s b_c', (ratio) => {
       const b = ratio * BC;
       const psi = inwardPsiForImpactParameter(r0, b, M);
       const alpha = deflectionAngleElliptic(b, M);
