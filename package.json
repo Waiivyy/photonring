@@ -12,6 +12,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.web.json && vite build && node tools/check-dist.ts",
+    "size": "node tools/dist-sizes.ts",
     "preview": "vite preview -c vite.preview.config.ts --port 4173 --strictPort",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.web.json && tsc -p tsconfig.e2e.json && tsc -p tsconfig.physics.json",
     "lint": "eslint . && node tools/check-text.ts",
