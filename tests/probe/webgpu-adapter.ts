@@ -3,16 +3,17 @@
 // adapter's info, timestamp-query and maxTextureDimension2D; a compute dispatch, read back and
 // checked; and a canvas cleared to a known colour for 60 animation frames, then compared with a
 // screenshot, which is what a page needs to show anything. Any loss of the device is recorded
-// with its reason, message and frame. With the hardware adapter it prints a second line with
-// --enable-unsafe-webgpu --ignore-gpu-blocklist, so one run shows whether a machine needs those
-// flags. The page comes from a route on an https origin, a secure context, so no server is
-// needed. Chrome logs to stderr; DEBUG=pw:browser shows it.
+// with its reason, message and frame. A second line shows whether the settings are still needed:
+// with the hardware adapter, the same with --enable-unsafe-webgpu --ignore-gpu-blocklist; with
+// SwiftShader on Linux, the same without Chrome's Vulkan driver. The page comes from a route on
+// an https origin, a secure context, so no server is needed. Chrome logs to stderr;
+// DEBUG=pw:browser shows it.
 //
 // npm run probe:webgpu [-- --require hardware,present]: exits 1 unless the first line found a
 // hardware adapter (hardware) or passed the compute and canvas checks (present); without
 // --require it exits 0 once Chrome has launched.
 import { chromium } from '@playwright/test';
-import { adapter, browserUse } from '../helpers/browser-env.ts';
+import { ADAPTER_ARGS, adapter, browserUse } from '../helpers/browser-env.ts';
 import { readPng } from '../helpers/png-read.ts';
 
 const REQUIREMENTS = ['hardware', 'present'];
@@ -209,8 +210,7 @@ const probe = async (p: { size: number; frames: number; clear: number[] }): Prom
   return out;
 };
 
-async function run(label: string, args: readonly string[]) {
-  const use = browserUse(args);
+async function run(label: string, use: ReturnType<typeof browserUse>) {
   const browser = await chromium.launch({
     channel: use.channel,
     headless: use.headless,
@@ -277,9 +277,18 @@ const presents = (p: Result) =>
   'mismatched' in p.screenshot &&
   p.screenshot.mismatched === 0;
 
-const main = await run(adapter(), []);
+const main = await run(adapter(), browserUse());
 if (adapter() === 'hardware') {
-  await run('hardware, diagnostic flags', ['--enable-unsafe-webgpu', '--ignore-gpu-blocklist']);
+  await run(
+    'hardware, diagnostic flags',
+    browserUse(['--enable-unsafe-webgpu', '--ignore-gpu-blocklist']),
+  );
+} else if (process.platform === 'linux') {
+  await run('swiftshader without the Linux Vulkan driver', {
+    channel: 'chrome',
+    headless: true,
+    launchOptions: { args: [...ADAPTER_ARGS.swiftshader] },
+  });
 }
 const failed = [
   required.includes('hardware') && !isHardware(main)
