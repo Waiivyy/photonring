@@ -91,6 +91,16 @@ describe('dist rules', () => {
     expect(check(files)).toEqual([]);
   });
 
+  it("ignores Finder's .DS_Store files, which macOS writes and .gitignore keeps out of CI", () => {
+    const files = {
+      ...clean(),
+      'public/.DS_Store': 'x',
+      'dist/.DS_Store': 'x',
+      'dist/assets/.DS_Store': 'x',
+    };
+    expect(check(files)).toEqual([]);
+  });
+
   it('markup inside a comment is not checked', () => {
     const files = withIndex((h) =>
       h.replace('</body>', '<!-- <script>alert(1)</script> --></body>'),

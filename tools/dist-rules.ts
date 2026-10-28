@@ -33,12 +33,14 @@ interface Tag {
   readonly attrs: ReadonlyMap<string, string>;
 }
 
-/** Every file below dir, as a POSIX path relative to it; dotfiles included. */
+/** Every file below dir, as a POSIX path relative to it; dotfiles included, except the .DS_Store
+ * files macOS Finder writes, which .gitignore keeps out of every checkout CI builds from. */
 function walk(dir: string): string[] {
   if (!existsSync(dir)) return [];
   const out: string[] = [];
   const visit = (d: string) => {
     for (const e of readdirSync(d, { withFileTypes: true })) {
+      if (e.name === '.DS_Store') continue;
       if (e.isDirectory()) visit(join(d, e.name));
       else out.push(relative(dir, join(d, e.name)).split(sep).join('/'));
     }
