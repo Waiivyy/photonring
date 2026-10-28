@@ -1,21 +1,25 @@
 # Design decisions
 
-Status: Stage 2 (GPU renderer without the disk). Every number below was measured unless it is labelled as an
-estimate. Machine for all measurements: Apple M5 (10-core GPU), 24 GB, macOS 27.0, Node 25.6.1.
-In sections 3 and 6 the f32 results come from an emulation (`Math.fround` after every operation);
-section 11 has the measurements on the GPU.
+Status: Stage 5 (build, deploy and CI). Every number below was measured unless it is labelled as an
+estimate. Machine for all measurements: Apple M5 (10-core GPU), 24 GB, macOS 27.0, Node 25.6.1,
+except the CI runs in sections 5 and 14, which name their runner. In sections 3 and 6 the f32
+results come from an emulation (`Math.fround` after every operation); section 11 has the
+measurements on the GPU.
 
-| Decision             | Choice                                                                                                                | Section |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------- | ------- |
-| Language and tooling | TypeScript 6.0 (strict), Vite, Vitest, Playwright, ESLint, Prettier                                                   | 2       |
-| GPU API              | Raw WebGPU with WGSL compute shaders, no rendering framework                                                          | 2       |
-| Integrator           | Planar Binet equation $u'' = 3Mu^2 - u$, classical RK4, fixed step $d\phi = 0.05$ (f32)                               | 3       |
-| Final direction      | Rotation recurrence instead of WGSL `sin`/`cos`                                                                       | 3       |
-| Fallback             | No WebGL2 renderer in the MVP; explanation page plus pre-rendered gallery                                             | 4       |
-| Star field           | Three cubic lattices in direction space hashed with pcg3d; profiles truncated at half a cell, so lookups are seamless | 10      |
-| Colour               | Planck spectrum against an analytic CIE 1931 fit (no CC BY-SA data in the repository), CSS Color 4 sRGB matrix        | 10      |
-| CPU reference        | f64, $d\phi = 0.0125$, own PNG codec on `node:zlib`, goldens at 160x90 with a documented tolerance                    | 10      |
-| CI                   | Physics, CPU renderer and page tests on Ubuntu; GPU parity job on a macOS runner, to be proven in Stage 2 or 5        | 5       |
+| Decision             | Choice                                                                                                                                                 | Section |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- |
+| Language and tooling | TypeScript 6.0 (strict), Vite, Vitest, Playwright, ESLint, Prettier                                                                                    | 2       |
+| GPU API              | Raw WebGPU with WGSL compute shaders, no rendering framework                                                                                           | 2       |
+| Integrator           | Planar Binet equation $u'' = 3Mu^2 - u$, classical RK4, fixed step $d\phi = 0.05$ (f32)                                                                | 3       |
+| Final direction      | Rotation recurrence instead of WGSL `sin`/`cos`                                                                                                        | 3       |
+| Fallback             | No WebGL2 renderer in the MVP; explanation page plus pre-rendered gallery                                                                              | 4       |
+| Star field           | Three cubic lattices in direction space hashed with pcg3d; profiles truncated at half a cell, so lookups are seamless                                  | 10      |
+| Colour               | Planck spectrum against an analytic CIE 1931 fit (no CC BY-SA data in the repository), CSS Color 4 sRGB matrix                                         | 10      |
+| CPU reference        | f64, $d\phi = 0.0125$, own PNG codec on `node:zlib`, goldens at 160x90 with a documented tolerance                                                     | 10      |
+| CI                   | Ubuntu: checks, build and the built page in Google Chrome with SwiftShader WebGPU; macOS arm64: GPU parity and the full page suite on the runner's GPU | 5, 14   |
+| Build                | Vite, every file but `index.html` and `favicon.svg` content-hashed, type check and structural checks of `dist/` in every build                         | 14      |
+| CSP                  | Meta tag in the built page only: `default-src 'none'`, `'self'` for scripts, styles and images, Trusted Types required                                 | 14      |
+| Hosting              | GitHub Pages through a workflow started by hand, actions pinned to commit SHAs                                                                         | 14      |
 
 ## 1. Positioning: what already exists
 
@@ -239,21 +243,61 @@ list of supported browsers, and a gallery of pre-rendered images.
 
 ## 5. CI and GPU testing
 
-Evidence gathered (third-party CI runs and project configurations, not yet reproduced here):
+Built in Stage 5 (`.github/workflows/ci.yml`; decisions in section 14). Every job uses the
+runner's preinstalled Google Chrome through Playwright's `channel: 'chrome'`, not Playwright's
+own Chromium, so nothing is downloaded. The Stage 0 evidence below was for Chromium; what the
+runners actually do was measured in the first CI runs on 2026-10-28 with
+`npm run probe:webgpu`, which reports the adapter, checks a compute dispatch, and presents 60
+frames to a canvas and compares a screenshot with the clear colour.
 
-- On `ubuntu-latest` (no GPU), Playwright's Chromium exposes a SwiftShader WebGPU adapter with
-  `--enable-unsafe-webgpu`, and compute shaders run; one project reports that SwiftShader WebGPU
-  "dies partway through a run". luma.gl and three.js run WebGPU tests on Ubuntu runners with
-  SwiftShader or Mesa lavapipe.
-- On GitHub's macOS arm64 runners, Playwright's new headless mode (`channel: 'chromium'`) exposes
-  an "Apple Paravirtual device" Metal adapter that computes correctly; the default headless shell
-  gets only SwiftShader.
+- **macOS: the GPU parity tests run on the runner's GPU.** On `macos-15` (arm64, image
+  20260907.0337.1), Chrome 152.0.7977.83 headless exposes the paravirtual Apple GPU with no
+  flags: vendor `apple`, architecture empty, no `timestamp-query` (so the page uses its
+  wall-clock timing path there), `maxTextureDimension2D` 16384. Compute and presentation pass.
+  The 13 parity tests and all 109 page tests against the build passed in every run in which
+  the job started (5 of 6 runs on 2026-10-28), and the GPU shadow measurement (validation mode
+  at six distances) came out byte for byte equal to the M5's. In the other run GitHub assigned
+  no macOS runner within 15 minutes and cancelled the job ("not acquired by Runner of type
+  hosted even after multiple attempts", with a notice that macOS arm64 runners have capacity
+  constraints).
+- **Ubuntu: the built page runs on SwiftShader, once Chrome has a Vulkan driver.** On
+  `ubuntu-24.04`, Chrome (155.0.8059.39 on image 20261012.334.1 and 156.0.8078.47 on image
+  20261025.353.1, both seen on 2026-10-28) offers SwiftShader with
+  `--enable-unsafe-webgpu --use-webgpu-adapter=swiftshader`, and compute works, but presenting a
+  WebGPU canvas fails: the device is lost with reason `destroyed` ("Device was destroyed.") within
+  the first frames, and the screenshot is white. In the first run every page test that renders
+  failed this way while the tests without WebGPU passed. The cause, read in the Chromium and Dawn
+  sources and matched by a public CI log of another project on the same Chrome build: with no Vulkan
+  driver, the GPU process cannot create the shared image a WebGPU canvas is composited from and
+  drops the page's GPU channel, and that teardown destroys every device on it, which is the only
+  path besides `device.destroy()` that a page can observe with this reason and message. Chrome ships
+  a SwiftShader Vulkan driver next to its binary; with
+  `VK_DRIVER_FILES=/opt/google/chrome/vk_swiftshader_icd.json`, `--enable-features=Vulkan,WebGPU`
+  and `--use-angle=swiftshader` (`tests/helpers/browser-env.ts`, Linux only), all 60 frames
+  presented with the right colour on both Chrome versions, and the offline test and the 14 smoke
+  tests passed. The full page suite, run once by hand (31 min 37 s), passed 108 of 109. The other
+  test asks for a save right after a zoom; on this runner the new image took 4.3 to 4.5 s of GPU
+  time for the first pass and 4.8 to 5.1 s for anti-aliasing (two attempts), 9.2 to 9.6 s of GPU
+  time alone, and was not complete within the 10 s the page waits before it gives up a save with
+  "Could not save: the image did not finish within 10 seconds" (the wall-clock time was not
+  measured; the message was reproduced on the M5 with SwiftShader at 3840 x 2160). The probe also
+  runs its checks without any of the Linux settings, and with the two flags but without the driver:
+  both lost the device within 3 frames (Chrome 156), so the driver is the part that is needed;
+  whether the flags are needed next to it was not tested. Every run prints these lines, so a run
+  shows when the settings stop being needed. GitHub's Ubuntu runners also vary in speed: of eight
+  runs started within seven minutes, six took 5.4 to 6.3 min for the 14 smoke tests instead of 2.8
+  to 2.9 min, and there the Validation panel in the offline test was not done within the 20 s the
+  tests then waited for SwiftShader; the wait is now 60 s. On macOS, SwiftShader presents without
+  any of this (Chrome 156 on the M5).
+- **Stage 0 evidence, for the record** (third-party CI runs, Playwright's Chromium): on
+  `ubuntu-latest` Chromium exposed SwiftShader with `--enable-unsafe-webgpu` and one project
+  reported that it "dies partway through a run"; on macOS arm64 runners the new headless mode
+  exposed an "Apple Paravirtual device" Metal adapter.
 
-**Plan:** CI runs typecheck, lint, format, unit, property and golden tests and the page smoke test
-on Ubuntu. GPU-versus-CPU parity tests run in a separate macOS job with Playwright's new headless
-Chromium, and locally through a documented command (`npm run test:gpu`, Stage 2). If the macOS job
-proves flaky, it becomes manual (`workflow_dispatch`) and the local command remains the source of
-truth. macOS arm64 runners are free for this public repository (section 9).
+If the macOS job fails for reasons that do not reproduce locally (no adapter, device loss, a
+runner image change), it becomes manual (`workflow_dispatch`) and `npm run test:gpu` on the
+local machine stays the source of truth. macOS arm64 runners are free for this public
+repository (section 9).
 
 ## 6. Proposed targets
 
@@ -542,3 +586,168 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
   it is complete; announcements go to one polite live region. NVDA and JAWS in browse mode may not
   pass arrow keys to the canvas; the Camera buttons are the documented path. No screen reader
   has been tested by hand yet.
+
+## 14. Stage 5 decisions
+
+- **Hashed assets.** Everything in `dist/` except `index.html` and `favicon.svg` carries a
+  content hash. Vite names the JS and the CSS; the four gallery images moved from `public/` to
+  `src/ui/gallery/` and are imported by `src/ui/unsupported.ts`, so the build hashes them too, and
+  a misspelt name fails the build (the `new URL(...)` form only warns). The favicon stays in
+  `public/` under its own name: Chrome fetches it by itself, and Chrome 156 asks for it again
+  after every change of the hash (measured), and GitHub Pages sends `cache-control: max-age=600`
+  for every file (measured on other github.io sites), so a hash would buy no caching. What hashing
+  does buy here: names change exactly when content changes, and `dist/` follows one rule that the
+  build checks. `PUBLIC_FILES` in `tools/dist-rules.ts` lists what may sit in `public/` (only
+  `favicon.svg`); Stage 6 adds the social preview image to it on purpose.
+- **No modulepreload polyfill** (`build.modulePreload: { polyfill: false }`). The build is one
+  chunk with no modulepreload links, so the polyfill had nothing to do, and every browser with
+  WebGPU supports modulepreload natively (browser-compat-data: Chrome 66, Firefox 115, Safari 17,
+  each before its WebGPU release). It held the bundle's only `fetch(`.
+- **The build type-checks and checks itself.** `npm run build` is
+  `tsc -p tsconfig.web.json && vite build && node tools/check-dist.ts`, because Vite does not
+  type-check. On the M5 the type check takes 0.7 s and the dist check 0.08 s. The dist rules
+  (`tools/dist-rules.ts`, each with a fixture in `tests/unit/dist-rules.test.ts` that asserts the
+  rule's own message) are structural:
+  - layout: the root holds exactly `index.html`, the `PUBLIC_FILES` and `assets/`; no source
+    maps; no hidden files, which `upload-pages-artifact` would leave out; `public/` holds exactly
+    `PUBLIC_FILES`;
+  - every file in `assets/` has a content hash and is named by `index.html` or by another built
+    JS or CSS file. The hash pattern alone accepts `disk-inclined.png` ("inclined" has 8
+    characters); the `public/` rule is what catches such a file;
+  - `index.html`: every `src` and `href` relative, present in `dist/` and hashed unless it is a
+    public file; no inline script, `<style>`, style or event handler attribute, `javascript:`
+    URL, resource hint or `<base>`;
+  - the CSP meta: exactly one, in head, preceded only by `<meta charset>`, its content equal to
+    `CSP_POLICY` once HTML entities are decoded, none of the directives a meta cannot enforce;
+    the charset element within the first 1024 bytes;
+  - in every built text file, absolute URLs only from an exact allowlist (the SVG namespace and
+    the two repository links in `src/ui/links.ts`), no `data:` URI in media-type form (a bare
+    `data:` also matches minified properties such as `{data:r}`), and in CSS no `@import` and
+    `url()` only to files in `dist/`.
+
+  Token scans for network APIs (`fetch(`, `sendBeacon` and so on) were considered and dropped: a
+  UI string could trip them and block every build, and the policy below blocks such calls at run
+  time anyway.
+
+- **The Content-Security-Policy** (`tools/csp.ts`, the single source):
+
+  ```
+  default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; worker-src 'none'; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'; trusted-types 'none'
+  ```
+
+  Measured in headless Chrome 156 against the build: without `script-src 'self'` nothing
+  renders; without `style-src 'self'` the stylesheet is blocked; without `img-src 'self'` the
+  gallery images and the favicon are blocked (img-src also governs Chrome's own favicon fetch).
+  `worker-src` must be explicit because it falls back to `child-src`, then `script-src` (CSP
+  Level 3, section 6.8.3), which would allow same-origin workers (measured); `base-uri` and
+  `form-action` do not fall back to `default-src` at all. Everything else (connect, font,
+  object, manifest, frame, media) falls back to `default-src 'none'`, so the page cannot fetch,
+  beacon or open a socket. Left out: `blob:`, `data:` and every `'unsafe-*'` source, which
+  nothing needs (no inline code, `assetsInlineLimit: 0`, WGSL arrives as strings and
+  `createShaderModule` is not governed by CSP); `upgrade-insecure-requests`, since an HTTPS page
+  with relative URLs has nothing to upgrade. Saving the image still works: `<a download>` with a
+  `blob:` URL is not blocked.
+
+- **Only in the built page.** The plugin runs at build time and puts the meta right after
+  `<meta charset>`. In the dev server the policy would block Vite's WebSocket and the inline
+  style of its error overlay, and a nonce needs a new value per response, which a static site
+  cannot give. Consequence: tests on the dev server never see the policy. The page tests also run
+  against the build (`npm run test:e2e:build`, and in CI), where every CSP or Trusted Types
+  violation is a console error that fails the test.
+- **What a policy in a meta tag cannot enforce**, and what that means here:
+
+  | Limit                                                                                                                              | Consequence                                                                                                                                                                                                                                            |
+  | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+  | `frame-ancestors` is ignored (CSP Level 3, section 6.4.2; measured: a page on another origin framed the build and its scripts ran) | Any site can frame the page. There are no accounts, forms or sensitive actions; the worst case is a tricked click on Save image, which downloads a file locally. Accepted. Pages' own response headers for this site are unknown until it is deployed. |
+  | `sandbox` is ignored (CSP Level 3, section 6.3.2)                                                                                  | Not needed.                                                                                                                                                                                                                                            |
+  | `report-uri` is ignored; `report-to` has no endpoint without a response header; Report-Only cannot be sent in a meta               | Production reports nothing, which also keeps the page free of requests. Violations are found only by the tests on the build.                                                                                                                           |
+  | The policy does not cover what comes before the meta, a meta outside head is ignored, and edits after parsing have no effect       | The dist rules require exactly one CSP meta in head, after nothing but `<meta charset>`. Measured in Chrome 156: a meta placed after the assets let them load despite `'none'`.                                                                        |
+  | One static policy for every response                                                                                               | No inline script or style anywhere, enforced by the dist rules.                                                                                                                                                                                        |
+  | `'self'` is the origin `https://waiivyy.github.io`, which every Pages project site of the account shares                           | Scripts from the account's other Pages sites would also be allowed; only the owner can publish there. A path-restricted source would tie the build to its deploy URL and break the local preview checks.                                               |
+
+  The three ignored directives are left out rather than written for documentation: Chrome logs
+  a console error for each, which would fail every test on the build.
+
+- **Trusted Types: adopted** (`require-trusted-types-for 'script'; trusted-types 'none'`), with
+  no code changes. Nothing in the page writes to a Trusted Types sink (`el()` and `svgEl()` set no
+  event handler attributes; `img.src` and `a.href` are not sinks). In Chrome 156 against the
+  build, string `innerHTML`, `script.textContent`, `new Worker(...)` and `eval` all threw, and
+  creating a policy was refused. Browser support for the meta form is from MDN browser-compat-data
+  (Chrome 83, Firefox 148, Safari 26) and wpt.fyi, not from runs of this page; Firefox 141 to 147
+  ignore the directives. Any future `innerHTML` with a string will throw, and the tests catch
+  only the paths they exercise.
+- **The offline test (item 15)**, `tests/dist/offline.spec.ts`, run with `npm run test:dist`, serves
+  a fresh build at `/photonring/`, like the Pages project site. Chrome runs with
+  `--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost`, so a regression still shows as a
+  failed request and nothing leaves the machine. A `securitypolicyviolation` listener is the
+  independent signal: a blocked `fetch` or `sendBeacon` raises no request event at all. The test
+  compares sets of paths, never counts, because Chrome asks for the favicon again after each hash
+  change; the favicon is allowed but never required, since whether headless Chrome fetches it
+  varies. A control test makes forbidden requests on purpose: ones the policy blocks, which the
+  violation listener must report, and two it allows, a same-origin file missing from `dist/` and a
+  navigation to another origin, which the request recorder must report, the navigation as a failed
+  lookup, which shows that the resolver rule is in effect.
+- **Browser test switches.** `PHOTONRING_SERVER` picks the dev server (default, port 5179, with
+  the GPU harness) or a fresh build served by `vite preview` (port 4173, page tests only, without
+  the one test tagged `@dev-server`, which needs the dev server's fallback for a path starting
+  with `//`). `PHOTONRING_ADAPTER` picks the machine's GPU (default) or SwiftShader
+  (`--enable-unsafe-webgpu --use-webgpu-adapter=swiftshader`, on Linux with Chrome's Vulkan
+  driver, below; with a 60 s expect timeout). The browser is always the installed Google Chrome
+  (`channel: 'chrome'`), so nothing is downloaded. The offline test uses its own port, 4174.
+  `@smoke` marks 14 page tests that cover loading, keyboard control, the unsupported page, the
+  URL state with hostile input, About, the Validation panel and saving.
+- **CI** (`.github/workflows/ci.yml`) runs on every push to `main`, on pull requests and by hand,
+  in three jobs on pinned runner labels (`ubuntu-24.04`, `macos-15`; the `-latest` labels move):
+  - `checks` (Ubuntu): typecheck, lint, format, the Vitest suites and `npm run build` with its
+    dist rules. The golden tests pass there too, on x64 with Node 24;
+  - `page` (Ubuntu, SwiftShader): the probe with `--require present`, the offline test and the
+    `@smoke` page tests against the build; a manual run can choose the full page suite;
+  - `gpu` (macOS arm64): the probe with `--require hardware,present`, the GPU parity tests on the
+    dev server with `--fail-on-flaky-tests` (parity is deterministic, so a pass on retry still
+    fails), and the full page suite against the build on the runner's GPU. The GPU shadow table is
+    kept as an artifact for 7 days.
+
+  Every third-party action is pinned to a full commit SHA with its release tag in a comment, the
+  workflow token can only read the repository, checkouts do not keep the token on disk, and every
+  job has a timeout (`tests/unit/workflows.test.ts` checks all of this). Node 24 (Maintenance
+  LTS) with the npm cache. Every step after `npm ci` runs even when an earlier one fails, unless
+  the install failed. Pull requests cancel their own superseded runs; every push to `main` gets a
+  complete run. Page tests retry once in CI; the offline test never retries. Test results and
+  traces are uploaded only when a job fails or is cancelled, as on a timeout.
+
+- **SwiftShader on Linux needs Chrome's own Vulkan driver** (section 5): on Linux,
+  `PHOTONRING_ADAPTER=swiftshader` also sets `VK_DRIVER_FILES` to the driver Chrome ships and turns
+  on its Vulkan path and ANGLE on SwiftShader, and fails with a named error if the file is missing,
+  since runner images update Chrome every week.
+- **A lost device fails a test at once.** The page tests and the offline test stop waiting as soon
+  as the page reports a lost device and fail with its message, instead of running into the 120 s
+  timeout (the first CI run took 43 minutes that way; in run 40718856034, with the change, each
+  failing test took 2.0 to 4.3 s). The restarted page installs a new debug hook and the disposed one
+  removes its own, so the tests that restart after a deliberate loss wait for the new page.
+- **The probe checks what a page needs.** `npm run probe:webgpu` requests the device as the app
+  does, runs a compute dispatch (timed with a timestamp query where the adapter has one) and checks
+  every value, then presents 60 frames to a canvas and compares a screenshot with the clear colour,
+  recording any loss with its reason and frame. Both CI probe steps require this
+  (`--require present`), so a runner that cannot show a WebGPU canvas fails in seconds with that
+  reason; later steps still run. The probe steps also print Chrome's own log (`DEBUG=pw:browser`
+  with `--enable-logging`).
+- **Deploys are manual** (`.github/workflows/pages.yml`): `workflow_dispatch` is the only
+  trigger, the workflow grants nothing by default, the build job can only read, and only the
+  deploy job, which runs only for `main`, gets `pages: write` and `id-token: write`. The build job
+  runs `npm run check` and the offline test, whose server builds the `dist/` that is uploaded, so
+  what is published is exactly what was checked. It uses no npm cache. The GPU tests and the full
+  page suite are not repeated there; the rule is to deploy only a commit whose CI run is green.
+  The owner's one-time setup: Settings > Pages > Source: GitHub Actions; check that the
+  `github-pages` environment allows only `main`.
+- **Defaults taken without asking** (the owner can change them): Node 24 in CI and no
+  `.node-version` file (local development runs Node 25.6.1); no Dependabot, so action pins are
+  updated by hand in the format the workflow test enforces; no size budget; the check after a
+  deploy is done by hand in a browser, so no automated run makes requests to github.io; the CSP
+  source is `'self'`, not a path.
+- **Not verified yet:**
+  - the Pages workflow has never run: the owner starts it, after setting Settings > Pages >
+    Source to GitHub Actions. So the Run workflow button, the `github-pages` environment's branch
+    rule and the response headers Pages sends for this site are unconfirmed;
+  - Safari and Firefox have not run against the policy and Trusted Types: Safari is checked by
+    hand at the Stage 5 check-in, and Firefox is not installed on the development machine;
+  - what GitHub Pages serves compressed, and whether builds are byte-identical across machines.

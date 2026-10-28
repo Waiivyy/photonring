@@ -1,8 +1,8 @@
 # Performance
 
 Every number here was measured. Machine for all of them: Apple M5 (10-core GPU), 24 GB, macOS
-27.0. Re-run with the commands given; results depend on the browser, the power state and what else
-the GPU is doing.
+27.0, except the CI run times, which name their GitHub runners. Re-run with the commands given;
+results depend on the browser, the power state and what else the GPU is doing.
 
 ## GPU renderer (Stage 3)
 
@@ -114,6 +114,54 @@ from the cache.
   image solve takes 54 microseconds on average over 1200 solves (observer at 5, 6, 30 and 200 M,
   rings at 2, 3 and 6 M, sweeps up to $4\pi$), and one curve 8.4 ms on average over 336 curves
   (7 distances, 12 elevations, 4 curves each), with at most 513 vertices.
+
+## Download size (Stage 5)
+
+`npm run build`, then `npm run size` (Node 25.6.1; gzip level 9 and brotli quality 11 from
+`node:zlib`). Bytes of the build at commit ea86cf4 (the bundle is the same from d491550 on):
+
+| Files                  | Raw     | gzip    | brotli  |
+| ---------------------- | ------- | ------- | ------- |
+| JS (one file)          | 102,151 | 36,091  | 32,212  |
+| CSS (one file)         | 5,917   | 1,926   | 1,648   |
+| `index.html`           | 887     | 488     | 348     |
+| `favicon.svg`          | 233     | 168     | 143     |
+| Gallery PNGs (4 files) | 408,789 | 408,411 | 408,335 |
+| Everything in `dist/`  | 517,977 | 447,084 | 442,686 |
+
+With WebGPU the page loads `index.html`, the JS and the CSS (and possibly the favicon):
+108,955 bytes, 38,505 with gzip. The gallery images load only on the page for browsers without
+WebGPU. What GitHub Pages actually sends compressed was not measured. There is no size budget.
+
+## CI run times (Stage 5)
+
+GitHub Actions on 2026-10-28, from the step start and end times GitHub reports (queue time not
+included). Run A is the first green push (eb4f2dc), run B a manual run with the full page suite
+on Ubuntu, run C the first push (2acad41), whose Ubuntu page job failed for the reason in
+`docs/DESIGN.md`, section 5.
+
+| Job and step                                   | Runner, browser                                                          | Run A                       | Run B                                                           | Run C      |
+| ---------------------------------------------- | ------------------------------------------------------------------------ | --------------------------- | --------------------------------------------------------------- | ---------- |
+| `checks`, whole job                            | ubuntu-24.04, Node 24                                                    | 33 s                        | 41 s                                                            | 52 s       |
+| `page`, the probe                              | ubuntu-24.04, Chrome 155.0.8059.39 (A) or 156.0.8078.47 (B), SwiftShader | 4 s                         | 9 s                                                             |            |
+| `page`, offline test (3 tests, with the build) | same                                                                     | 39 s                        | 37 s                                                            |            |
+| `page`, page tests on the build                | same                                                                     | 2 min 52 s (14 smoke tests) | 31 min 37 s (109 tests, one failing twice at the 120 s timeout) |            |
+| `gpu`, the probe                               | macos-15-arm64, Chrome 152.0.7977.83, Apple GPU                          | 16 s                        | 19 s                                                            |            |
+| `gpu`, GPU parity (13 tests)                   | same                                                                     | 3 min 39 s                  | 4 min 9 s                                                       | 2 min 9 s  |
+| `gpu`, page tests on the build (109 tests)     | same                                                                     | 4 min 31 s                  | 5 min 10 s                                                      | 3 min 12 s |
+| `gpu`, whole job                               | same                                                                     | 8 min 50 s                  | 10 min 1 s                                                      | 5 min 40 s |
+
+In run C the probe only listed the adapter (6 s on macOS); the compute and canvas checks came
+later, so its cells are left empty. The same macOS steps varied by up to a factor of 1.9 between
+runs, so these are single samples, not typical values. The Ubuntu runners vary as much: of eight
+later runs started within seven minutes, six took 5.4 to 6.3 min for the 14 smoke tests and two
+took 2.8 to 2.9 min.
+
+On the Ubuntu runner with SwiftShader, the default view at 1280 x 720, zoomed out to 33 M, took
+4349.4 and 4502.5 ms of GPU time for the first pass and 4818.0 and 5090.8 ms for anti-aliasing
+(timestamp queries, read from the page in the two attempts of one test in run B). On the M5's GPU
+the full image of the default view at the larger 1920 x 1080 takes 12.78 ms (table above). In one
+of the first six runs GitHub assigned no macOS runner within 15 minutes and cancelled the job.
 
 ## CPU reference renderer
 
