@@ -9,6 +9,7 @@
     "tests/gpu/*.spec.ts",
     "tests/gpu/page.ts",
     "tests/e2e",
+    "tests/dist",
     "tests/bench",
     "tests/gallery",
     "tests/helpers"

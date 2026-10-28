@@ -12,7 +12,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview --port 5179 --strictPort",
+    "preview": "vite preview -c vite.preview.config.ts --port 4173 --strictPort",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.web.json && tsc -p tsconfig.e2e.json && tsc -p tsconfig.physics.json",
     "lint": "eslint . && node tools/check-text.ts",
     "format": "prettier --write .",
@@ -21,6 +21,7 @@
     "test:watch": "vitest",
     "test:gpu": "playwright test --project=gpu",
     "test:e2e": "playwright test --project=e2e",
+    "test:dist": "playwright test -c playwright.dist.config.ts",
     "bench:gpu": "playwright test --project=bench",
     "gallery:gpu": "playwright test --project=gallery",
     "spike": "node tools/precision-spike.ts",
