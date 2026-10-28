@@ -10,6 +10,9 @@ export default defineConfig({
     // No data: URIs: every asset is a same-origin file, which keeps the CSP simple (Stage 5).
     assetsInlineLimit: 0,
     target: 'es2023',
+    // One chunk and no modulepreload links, and every browser with WebGPU supports modulepreload
+    // natively: the polyfill would never run, and it held the bundle's only fetch().
+    modulePreload: { polyfill: false },
   },
   server: { port: 5179, strictPort: true },
 });
