@@ -15,11 +15,12 @@ on:
 permissions:
   contents: read
 
-# Pull requests: a newer push cancels the older run. Pushes to main and manual runs have no
-# head_ref, so each gets a group of its own: every commit gets a complete run, and nothing
+# Pull requests: a newer push cancels the older run of the same pull request (grouped by its
+# number; branch names can repeat across forks). Pushes to main and manual runs have no pull
+# request, so each gets a group of its own: every commit gets a complete run, and nothing
 # cancels a manual full run.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 # Every check after npm ci runs even when an earlier one fails, unless the install failed.
