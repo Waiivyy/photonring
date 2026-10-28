@@ -34,11 +34,28 @@ canvas.view {
   cursor: grab;
 }
 
-/* Focus rings: the accent with a dark ring around it, so they read on any image. */
+/*
+ * Focus rings: the accent with a dark ring next to it, so they read on any image. The canvas's
+ * own outline and shadows would be painted under the WebGPU image, so its ring is a separate
+ * element drawn above the image.
+ */
 canvas.view:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-  box-shadow: inset 0 0 0 5px #000;
+  outline: none;
+}
+
+.focus-ring {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 0 2px var(--accent),
+    inset 0 0 0 5px #000;
+}
+
+canvas.view:focus-visible ~ .focus-ring {
+  display: block;
 }
 
 .bottom {
@@ -151,7 +168,8 @@ svg.overlay {
 }
 
 .legend {
-  margin: 0;
+  /* Stays at the right, also when it wraps onto its own line above the readouts. */
+  margin: 0 0 0 auto;
   padding: 0.4rem 0.6rem;
   border-radius: 0.3rem;
   background: var(--panel);
@@ -241,7 +259,8 @@ dialog :focus-visible {
   right: 0.75rem;
   width: 22rem;
   max-width: calc(100% - 1.5rem);
-  max-height: calc(100% - 5.5rem);
+  /* Ends above the readouts at the bottom left; the content scrolls inside. */
+  max-height: calc(100% - 10rem);
   box-sizing: border-box;
   overflow: auto;
   overscroll-behavior: contain;

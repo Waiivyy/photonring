@@ -109,8 +109,11 @@ export class OverlayLayer {
     return out;
   }
 
-  /** Called every animation frame. */
-  update(frame: OverlayFrame): void {
+  /**
+   * Called every animation frame. With `work` false it only brings the drawn state up to date
+   * (for a check between frames) and runs no solver slice.
+   */
+  update(frame: OverlayFrame, work = true): void {
     const vb = `0 0 ${frame.cssWidth} ${frame.cssHeight}`;
     if (vb !== this.viewBox) {
       this.svg.setAttribute('viewBox', vb);
@@ -165,7 +168,9 @@ export class OverlayLayer {
       this.setState('ready');
     } else {
       this.setState('pending');
-      if (now - this.keySince >= SETTLE_MS) this.work(key, missing, camera, frame.aspect, view);
+      if (work && now - this.keySince >= SETTLE_MS) {
+        this.work(key, missing, camera, frame.aspect, view);
+      }
     }
   }
 

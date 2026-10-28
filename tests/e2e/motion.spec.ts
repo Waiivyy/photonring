@@ -43,5 +43,13 @@ for (const reducedMotion of ['reduce', 'no-preference'] as const) {
     await page.getByRole('button', { name: 'About', exact: true }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
     expect(await still()).toBe('still');
+    // With the Controls panel closed, the legend is shown: sample with it on screen too.
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: 'Controls', exact: true }).click();
+    await view(page).focus();
+    await page.keyboard.press('t');
+    await expect(page.getByRole('list', { name: 'Legend' })).toBeVisible();
+    await waitForSettled(page);
+    expect(await still()).toBe('still');
   });
 }

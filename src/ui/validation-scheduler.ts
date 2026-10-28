@@ -1,8 +1,9 @@
 // When the Validation panel measures: only while it is open, once per presented camera, after
-// the image is complete, one measurement at a time. A result that arrives after the presented
-// camera changed (or after the panel closed) is discarded: not shown, counted or announced. A
-// return to the camera last measured shows its result again. Pure: the GPU measurement and the
-// panel are injected.
+// the image is complete, one measurement at a time. A result that arrives after the camera
+// changed (or after the panel closed) is discarded: not shown, counted or announced. The camera
+// asked for counts, not only the one presented, because a readback usually resolves before the
+// next frame presents a new camera. A return to the camera last measured shows its result again.
+// Pure: the GPU measurement, the panel and the requested camera are injected.
 import type { CameraParams } from '../physics/index.ts';
 import type { ShadowResult } from './validation.ts';
 
@@ -13,6 +14,8 @@ export interface SchedulerDeps {
   done(result: ShadowResult, fresh: boolean): void;
   failed(): void;
   now(): number;
+  /** The camera the page is showing or about to show (what the controls asked for). */
+  current(): CameraParams | null;
 }
 
 export interface ValidationScheduler {
@@ -36,6 +39,11 @@ export function createValidationScheduler(deps: SchedulerDeps): ValidationSchedu
   let runs = 0;
   let lastMs = 0;
 
+  /** Whether a result for `key` still describes the view. */
+  const stillCurrent = (g: number, key: string) => {
+    const c = deps.current();
+    return g === gen && key === presentedKey && c !== null && keyOf(c) === key;
+  };
   const show = (key: string, camera: CameraParams) => {
     shown = key;
     if (last && last.key === key) deps.done(last.result, false);
@@ -56,7 +64,7 @@ export function createValidationScheduler(deps: SchedulerDeps): ValidationSchedu
       deps.measure(camera).then(
         (result) => {
           measuring = '';
-          if (g !== gen || key !== presentedKey) return;
+          if (!stillCurrent(g, key)) return;
           runs++;
           lastMs = deps.now() - t0;
           last = { key, result };
@@ -65,16 +73,16 @@ export function createValidationScheduler(deps: SchedulerDeps): ValidationSchedu
         },
         () => {
           measuring = '';
-          if (g !== gen || key !== presentedKey) return;
+          if (!stillCurrent(g, key)) return;
           deps.failed();
         },
       );
     },
     close() {
+      // Discards a measurement in flight; the last result stays (shown again for its camera).
       gen++;
       shown = '';
       presentedKey = '';
-      last = null;
     },
     get runs() {
       return runs;

@@ -2,6 +2,7 @@
 // obscured): panels never hide each other, the toolbar or the device-loss alert; nothing scrolls
 // sideways at 320 CSS px; the readouts and the legend never overlap; focus rings read on any image.
 import type { Locator } from '@playwright/test';
+import { readPng } from '../helpers/png-read.ts';
 import { expect, openApp, test, view, waitForSettled } from './fixtures.ts';
 
 const full = (patch: Record<string, string> = {}) => {
@@ -88,6 +89,25 @@ for (const width of [660, 700, 760, 768, 800, 1000]) {
   });
 }
 
+for (const [width, height] of [
+  [1280, 720],
+  [1000, 600],
+  [1920, 1080],
+] as const) {
+  test(`at ${width} x ${height} the panels leave the readouts visible`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await openApp(page, full({ val: '1' }));
+    await page.getByRole('button', { name: 'Controls', exact: true }).click();
+    await expect(page.locator('#validation-panel')).toHaveAttribute('data-state', 'done');
+    for (const panel of ['#controls-panel', '#validation-panel']) {
+      const p = (await page.locator(panel).boundingBox())!;
+      for (const sel of ['.hud', '.help']) {
+        expect(overlap(p, (await page.locator(sel).boundingBox())!), `${panel} ${sel}`).toBe(false);
+      }
+    }
+  });
+}
+
 test('on a phone with a sheet open, the legend is shown above the sheet', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openApp(page, full({ val: '1', view: 'termination' }));
@@ -132,12 +152,48 @@ test('at 320 CSS px nothing scrolls sideways and the readouts do not overlap', a
 test('focus rings have a dark ring as well, so they read on the bright disk and the blue sky', async ({
   page,
 }) => {
-  await openApp(page);
+  await page.setViewportSize({ width: 800, height: 500 });
+  // The termination view fills the frame with the escaped colour, close to the accent.
+  await openApp(page, full({ view: 'termination' }));
   await page.keyboard.press('Tab');
   await expect(view(page)).toBeFocused();
-  expect(await view(page).evaluate((c) => getComputedStyle(c).boxShadow)).toMatch(/rgb\(0, 0, 0\)/);
+  // Rendered pixels along the left edge of the view, from the outside in: accent, then black.
+  const png = readPng(await page.screenshot({ clip: { x: 0, y: 250, width: 8, height: 1 } }));
+  const px = (i: number) => [...png.rgba.subarray(4 * i, 4 * i + 3)];
+  const near = (a: number[], b: number[]) => a.every((v, k) => Math.abs(v - b[k]!) <= 12);
+  expect(near(px(0), [138, 180, 255]), `edge pixel ${px(0).join(',')}`).toBe(true);
+  expect(near(px(1), [138, 180, 255])).toBe(true);
+  for (const i of [2, 3, 4])
+    expect(near(px(i), [0, 0, 0]), `pixel ${i}: ${px(i).join(',')}`).toBe(true);
   await page.keyboard.press('Tab');
   const button = page.getByRole('button', { name: 'Controls', exact: true });
   await expect(button).toBeFocused();
   expect(await button.evaluate((b) => getComputedStyle(b).boxShadow)).toMatch(/rgb\(0, 0, 0\)/);
+});
+
+for (const width of [770, 800, 846]) {
+  test(`at ${width} px the legend stays at the right, clear of the Validation panel`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 700 });
+    await openApp(page, full({ val: '1', ov: 'edge,isco', view: 'termination' }));
+    await expect(page.locator('#validation-panel')).toHaveAttribute('data-state', 'done');
+    const legend = (await page.getByRole('list', { name: 'Legend' }).boundingBox())!;
+    const panel = (await page.locator('#validation-panel').boundingBox())!;
+    expect(overlap(legend, panel)).toBe(false);
+    expect(legend.x + legend.width).toBeGreaterThan(width - 40);
+  });
+}
+
+test('narrowing the window with focus in the older panel moves focus to its button', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openApp(page);
+  await view(page).focus();
+  await page.keyboard.press('c');
+  await page.keyboard.press('v');
+  await page.getByRole('checkbox', { name: 'Accretion disk', exact: true }).focus();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole('button', { name: 'Controls', exact: true })).toBeFocused();
 });

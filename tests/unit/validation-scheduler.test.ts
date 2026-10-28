@@ -18,6 +18,8 @@ const cam = (distance: number): CameraParams => ({
 
 function setup() {
   const log: string[] = [];
+  /** The camera the page is about to show (what the controls asked for). */
+  const requested = { camera: cam(30) as CameraParams | null };
   const pendingMeasures: {
     camera: CameraParams;
     resolve: (r: ShadowResult) => void;
@@ -32,10 +34,11 @@ function setup() {
     done: (result, fresh) => log.push(`done ${result.distance}${fresh ? ' fresh' : ''}`),
     failed: () => log.push('failed'),
     now: () => 0,
+    current: () => requested.camera,
   });
   const result = (distance: number) => ({ distance }) as ShadowResult;
   const flush = () => new Promise((r) => setTimeout(r, 0));
-  return { s, log, pendingMeasures, result, flush };
+  return { s, log, pendingMeasures, result, flush, requested };
 }
 
 describe('validation scheduler', () => {
@@ -75,8 +78,9 @@ describe('validation scheduler', () => {
   });
 
   it('discards a result for a camera the view has left, then measures the new one', async () => {
-    const { s, log, pendingMeasures, result, flush } = setup();
+    const { s, log, pendingMeasures, result, flush, requested } = setup();
     s.update(true, cam(30), true);
+    requested.camera = cam(33);
     s.update(true, cam(33), false); // moved during the measurement
     pendingMeasures[0]!.resolve(result(30));
     await flush();
@@ -90,6 +94,30 @@ describe('validation scheduler', () => {
     await flush();
     expect(log.at(-1)).toBe('done 33 fresh');
     expect(s.runs).toBe(1);
+  });
+
+  it('discards a result when the camera changed before the next frame (the usual timing)', async () => {
+    const { s, log, pendingMeasures, result, flush, requested } = setup();
+    s.update(true, cam(30), true);
+    requested.camera = cam(33); // a key press during the measurement; no frame presented yet
+    pendingMeasures[0]!.resolve(result(30));
+    await flush();
+    expect(log).toEqual(['waiting 30', 'measuring 30']);
+    expect(s.runs).toBe(0);
+    s.update(true, cam(33), false);
+    expect(log.at(-1)).toBe('waiting 33');
+  });
+
+  it('keeps the last result for the debug interface after closing, and shows it again', async () => {
+    const { s, log, pendingMeasures, result, flush } = setup();
+    s.update(true, cam(30), true);
+    pendingMeasures[0]!.resolve(result(30));
+    await flush();
+    s.close();
+    expect(s.last?.distance).toBe(30);
+    s.update(true, cam(30), true);
+    expect(log.at(-1)).toBe('done 30');
+    expect(pendingMeasures).toHaveLength(1);
   });
 
   it('returning to the camera being measured shows it as measuring', async () => {

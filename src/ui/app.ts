@@ -258,6 +258,7 @@ class App {
         }
       },
       now: () => performance.now(),
+      current: () => viewCamera(this.view.orbit),
     });
     this.controls = createControlsPanel({
       action: (a) => this.dispatch(a, 'button'),
@@ -285,6 +286,7 @@ class App {
       el('h1', { class: 'sr-only' }, 'photonring'),
       this.canvas,
       this.overlay.svg,
+      el('div', { class: 'focus-ring', 'aria-hidden': 'true' }),
       this.toolbar.element,
       this.controls.element,
       this.validation.element,
@@ -319,7 +321,11 @@ class App {
       'change',
       () => {
         if (!narrow.matches) return;
-        for (const p of this.panels.slice(0, -1)) this.closePanel(p, false);
+        for (const p of this.panels.slice(0, -1)) {
+          // Focus inside a panel that closes goes to its toolbar button, as with Escape.
+          const inside = this.panelParts(p).panel.contains(document.activeElement);
+          this.closePanel(p, inside);
+        }
       },
       { signal: this.life.signal },
     );
@@ -759,7 +765,7 @@ class App {
   /** Everything visible is complete: the image, any pending brightness change, the rings. */
   private readyToSave(): boolean {
     // Overlays switched on since the last frame must count as pending, not as off.
-    this.overlay.update(this.overlayFrame());
+    this.overlay.update(this.overlayFrame(), false);
     return (
       this.state === 'rendering' &&
       this.plan.done &&
