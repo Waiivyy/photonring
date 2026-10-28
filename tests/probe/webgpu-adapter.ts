@@ -3,17 +3,22 @@
 // adapter's info, timestamp-query and maxTextureDimension2D; a compute dispatch, read back and
 // checked; and a canvas cleared to a known colour for 60 animation frames, then compared with a
 // screenshot, which is what a page needs to show anything. Any loss of the device is recorded
-// with its reason, message and frame. A second line shows whether the settings are still needed:
+// with its reason, message and frame. More lines show whether the settings are still needed:
 // with the hardware adapter, the same with --enable-unsafe-webgpu --ignore-gpu-blocklist; with
-// SwiftShader on Linux, the same without Chrome's Vulkan driver. The page comes from a route on
-// an https origin, a secure context, so no server is needed. Chrome logs to stderr;
-// DEBUG=pw:browser shows it.
+// SwiftShader on Linux, the same without any of the Linux settings, and with the Linux flags but
+// without Chrome's Vulkan driver. The page comes from a route on an https origin, a secure
+// context, so no server is needed. Chrome logs to stderr; DEBUG=pw:browser shows it.
 //
 // npm run probe:webgpu [-- --require hardware,present]: exits 1 unless the first line found a
 // hardware adapter (hardware) or passed the compute and canvas checks (present); without
 // --require it exits 0 once Chrome has launched.
 import { chromium } from '@playwright/test';
-import { ADAPTER_ARGS, adapter, browserUse } from '../helpers/browser-env.ts';
+import {
+  ADAPTER_ARGS,
+  LINUX_SWIFTSHADER_ARGS,
+  adapter,
+  browserUse,
+} from '../helpers/browser-env.ts';
 import { readPng } from '../helpers/png-read.ts';
 
 const REQUIREMENTS = ['hardware', 'present'];
@@ -284,11 +289,13 @@ if (adapter() === 'hardware') {
     browserUse(['--enable-unsafe-webgpu', '--ignore-gpu-blocklist']),
   );
 } else if (process.platform === 'linux') {
-  await run('swiftshader without the Linux Vulkan driver', {
-    channel: 'chrome',
-    headless: true,
-    launchOptions: { args: [...ADAPTER_ARGS.swiftshader] },
-  });
+  const without = (label: string, args: readonly string[]) =>
+    run(label, { channel: 'chrome', headless: true, launchOptions: { args: [...args] } });
+  await without('swiftshader without the Linux settings', ADAPTER_ARGS.swiftshader);
+  await without('swiftshader with the Linux flags, without the Vulkan driver', [
+    ...ADAPTER_ARGS.swiftshader,
+    ...LINUX_SWIFTSHADER_ARGS,
+  ]);
 }
 const failed = [
   required.includes('hardware') && !isHardware(main)
