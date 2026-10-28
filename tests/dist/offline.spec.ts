@@ -6,6 +6,7 @@
 // that the recorder and the policy catch what they must. Run with npm run test:dist.
 import { readdirSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import { CSP_POLICY } from '../../tools/csp.ts';
 
@@ -15,7 +16,7 @@ const DIST = new URL('../../dist/', import.meta.url);
 let FILES = new Set<string>();
 
 test.beforeAll(() => {
-  const root = DIST.pathname;
+  const root = fileURLToPath(DIST);
   const walk = (d: string): string[] =>
     readdirSync(d, { withFileTypes: true }).flatMap((e) =>
       e.isDirectory() ? walk(join(d, e.name)) : [relative(root, join(d, e.name)).split(sep).join('/')],
