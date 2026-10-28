@@ -1,0 +1,148 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      e2e:
+        description: Page tests on Ubuntu (SwiftShader)
+        type: choice
+        options: [smoke, full]
+        default: smoke
+
+permissions:
+  contents: read
+
+# Pull requests: a newer push cancels the older run. Pushes to main and manual runs have no
+# head_ref, so each gets a group of its own: every commit gets a complete run, and nothing
+# cancels a manual full run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+# Every check after npm ci runs even when an earlier one fails, unless the install failed.
+jobs:
+  checks:
+    name: Typecheck, lint, format, unit, property and golden tests, build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - id: install
+        run: npm ci
+      - name: Typecheck
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run typecheck
+      - name: Lint
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run lint
+      - name: Format
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run format:check
+      - name: Unit, property and golden tests
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm test
+      - name: Build and check dist
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run build
+
+  page:
+    name: Built page in Chrome with SwiftShader (Ubuntu)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      PHOTONRING_ADAPTER: swiftshader
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - id: install
+        run: npm ci
+      - name: Chrome version and WebGPU adapter (information only)
+        run: npm run probe:webgpu
+      - name: No requests beyond same-origin files (item 15)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npx playwright test -c playwright.dist.config.ts --output test-results/dist
+        env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/dist
+      - name: Page tests against the build
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: |
+          if [ "$E2E" = full ]; then
+            npx playwright test --project=e2e --output test-results/e2e
+          else
+            npx playwright test --project=e2e --grep @smoke --output test-results/e2e
+          fi
+        env:
+          PHOTONRING_SERVER: preview
+          E2E: ${{ inputs.e2e || 'smoke' }}
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/e2e
+      - name: Keep the test results
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: page-test-results
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  gpu:
+    name: GPU parity and page tests on the Apple GPU (macOS)
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - id: install
+        run: npm ci
+      - name: Chrome version and a hardware WebGPU adapter
+        run: npm run probe:webgpu -- --require hardware
+      # Parity is deterministic: a pass on retry still fails the job.
+      - name: GPU against CPU parity
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npx playwright test --project=gpu --fail-on-flaky-tests --output test-results/gpu
+        env:
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/gpu
+      - name: Page tests against the build on the GPU
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npx playwright test --project=e2e --output test-results/e2e
+        env:
+          PHOTONRING_SERVER: preview
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/e2e
+      - name: Keep the GPU shadow measurement
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: shadow-gpu
+          path: artifacts/stage4/shadow-gpu.json
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Keep the test results
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: gpu-test-results
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore
