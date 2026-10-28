@@ -160,8 +160,9 @@ took 2.8 to 2.9 min.
 On the Ubuntu runner with SwiftShader, the default view at 1280 x 720, zoomed out to 33 M, took
 4349.4 and 4502.5 ms of GPU time for the first pass and 4818.0 and 5090.8 ms for anti-aliasing
 (timestamp queries, read from the page in the two attempts of one test in run B). On the M5's GPU
-the full image of the default view at the larger 1920 x 1080 takes 12.78 ms (table above). In one
-of the first six runs GitHub assigned no macOS runner within 15 minutes and cancelled the job.
+the full image of the default view at the larger 1920 x 1080 takes 12.78 ms (table above). In 4 of
+the 17 runs on 2026-10-28 GitHub assigned no macOS runner within 15 to 25 minutes and cancelled the
+job.
 
 ## CPU reference renderer
 

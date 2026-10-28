@@ -251,15 +251,14 @@ runners actually do was measured in the first CI runs on 2026-10-28 with
 frames to a canvas and compares a screenshot with the clear colour.
 
 - **macOS: the GPU parity tests run on the runner's GPU.** On `macos-15` (arm64, image
-  20260907.0337.1), Chrome 152.0.7977.83 headless exposes the paravirtual Apple GPU with no
-  flags: vendor `apple`, architecture empty, no `timestamp-query` (so the page uses its
-  wall-clock timing path there), `maxTextureDimension2D` 16384. Compute and presentation pass.
-  The 13 parity tests and all 109 page tests against the build passed in every run in which
-  the job started (5 of 6 runs on 2026-10-28), and the GPU shadow measurement (validation mode
-  at six distances) came out byte for byte equal to the M5's. In the other run GitHub assigned
-  no macOS runner within 15 minutes and cancelled the job ("not acquired by Runner of type
-  hosted even after multiple attempts", with a notice that macOS arm64 runners have capacity
-  constraints).
+  20260907.0337.1), Chrome 152.0.7977.83 headless exposes the paravirtual Apple GPU with no flags:
+  vendor `apple`, architecture empty, no `timestamp-query` (so the page uses its wall-clock timing
+  path there), `maxTextureDimension2D` 16384. Compute and presentation pass. The 13 parity tests and
+  all 109 page tests against the build passed in all 13 of the 17 runs on 2026-10-28 in which the
+  job started, and the GPU shadow measurement (validation mode at six distances) came out byte for
+  byte equal to the M5's in each of them. In the other 4 runs GitHub assigned no macOS runner within
+  15 to 25 minutes and cancelled the job ("not acquired by Runner of type hosted even after multiple
+  attempts", with a notice that macOS arm64 runners have capacity constraints).
 - **Ubuntu: the built page runs on SwiftShader, once Chrome has a Vulkan driver.** On
   `ubuntu-24.04`, Chrome (155.0.8059.39 on image 20261012.334.1 and 156.0.8078.47 on image
   20261025.353.1, both seen on 2026-10-28) offers SwiftShader with
@@ -287,8 +286,8 @@ frames to a canvas and compares a screenshot with the clear colour.
   shows when the settings stop being needed. GitHub's Ubuntu runners also vary in speed: of eight
   runs started within seven minutes, six took 5.4 to 6.3 min for the 14 smoke tests instead of 2.8
   to 2.9 min, and there the Validation panel in the offline test was not done within the 20 s the
-  tests then waited for SwiftShader; the wait is now 60 s. On macOS, SwiftShader presents without
-  any of this (Chrome 156 on the M5).
+  tests then waited for SwiftShader; the wait is now 60 s, and the page job passed in both runs
+  since. On macOS, SwiftShader presents without any of this (Chrome 156 on the M5).
 - **Stage 0 evidence, for the record** (third-party CI runs, Playwright's Chromium): on
   `ubuntu-latest` Chromium exposed SwiftShader with `--enable-unsafe-webgpu` and one project
   reported that it "dies partway through a run"; on macOS arm64 runners the new headless mode
