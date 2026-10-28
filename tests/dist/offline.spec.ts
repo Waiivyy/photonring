@@ -190,11 +190,27 @@ test('control: the recorder and the policy catch requests the page must never ma
       img.src = src;
       document.body.append(img);
     }
-    await new Promise((r) => setTimeout(r, 500));
+    // The policy allows these two, so only the recorder can catch them: a same-origin file that
+    // is not in dist/, and a navigation to another origin (which the resolver rule stops).
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = './missing.css';
+    document.head.append(link);
+    window.open('https://example.com/x', '_blank');
+    await new Promise((r) => setTimeout(r, 1000));
   });
   const v = await rec.violations();
   // Without the policy the fetches would be requests; with it they are blocked before that.
   expect(v.filter((x) => x.startsWith('connect-src'))).toHaveLength(3);
   expect(v.filter((x) => x.startsWith('img-src'))).toHaveLength(2);
   expect(rec.problems.some((p) => p.startsWith('console error'))).toBe(true);
+  const missing = new URL('missing.css', baseURL).href;
+  expect(rec.problems).toEqual(
+    expect.arrayContaining([
+      `request for a file that is not in dist: ${missing}`,
+      `HTTP 404 for ${missing}`,
+      'request to another origin: https://example.com/x',
+      'request failed: https://example.com/x (net::ERR_NAME_NOT_RESOLVED)',
+    ]),
+  );
 });
