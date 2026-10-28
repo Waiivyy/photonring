@@ -23,15 +23,22 @@ async function expectFallback(page: Page, reason: RegExp) {
   }
 }
 
-test('without WebGPU the page explains why and shows pre-rendered images', async ({ page }) => {
-  await page.addInitScript(() => {
-    Object.defineProperty(Navigator.prototype, 'gpu', { get: () => undefined, configurable: true });
-  });
-  await page.goto('/');
-  await expectFallback(page, /does not expose WebGPU/);
-});
+test(
+  'without WebGPU the page explains why and shows pre-rendered images',
+  { tag: '@smoke' },
+  async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(Navigator.prototype, 'gpu', {
+        get: () => undefined,
+        configurable: true,
+      });
+    });
+    await page.goto('/');
+    await expectFallback(page, /does not expose WebGPU/);
+  },
+);
 
-test('without a suitable adapter the page says so', async ({ page }) => {
+test('without a suitable adapter the page says so', { tag: '@smoke' }, async ({ page }) => {
   await page.addInitScript(() => {
     const gpu = navigator.gpu;
     if (gpu) Object.defineProperty(gpu, 'requestAdapter', { value: () => Promise.resolve(null) });
@@ -40,7 +47,7 @@ test('without a suitable adapter the page says so', async ({ page }) => {
   await expectFallback(page, /no suitable GPU adapter/);
 });
 
-test('when the device cannot be created the page says so', async ({ page }) => {
+test('when the device cannot be created the page says so', { tag: '@smoke' }, async ({ page }) => {
   await page.addInitScript(() => {
     const gpu = navigator.gpu;
     if (!gpu) return;
@@ -61,7 +68,7 @@ test('when the device cannot be created the page says so', async ({ page }) => {
   await expectFallback(page, /could not be created/);
 });
 
-test('a hostile hash on the fallback page causes no error', async ({ page }) => {
+test('a hostile hash on the fallback page causes no error', { tag: '@smoke' }, async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(Navigator.prototype, 'gpu', { get: () => undefined, configurable: true });
   });

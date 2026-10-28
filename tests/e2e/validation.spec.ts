@@ -26,19 +26,23 @@ async function recordAnnouncements(page: Page) {
 const announcements = (page: Page) =>
   page.evaluate(() => (window as unknown as { announcements: string[] }).announcements);
 
-test('V and the Validation button open and close the panel', async ({ page }) => {
-  await openApp(page);
-  const button = page.getByRole('button', { name: 'Validation', exact: true });
-  await view(page).focus();
-  await page.keyboard.press('v');
-  await expect(button).toHaveAttribute('aria-expanded', 'true');
-  await expect(panel(page)).toBeVisible();
-  await expect(view(page)).toBeFocused();
-  await button.click();
-  await expect(button).toHaveAttribute('aria-expanded', 'false');
-  await expect(panel(page)).toBeHidden();
-  await expect.poll(() => page.evaluate(() => location.hash)).toContain('val=0');
-});
+test(
+  'V and the Validation button open and close the panel',
+  { tag: '@smoke' },
+  async ({ page }) => {
+    await openApp(page);
+    const button = page.getByRole('button', { name: 'Validation', exact: true });
+    await view(page).focus();
+    await page.keyboard.press('v');
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+    await expect(panel(page)).toBeVisible();
+    await expect(view(page)).toBeFocused();
+    await button.click();
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
+    await expect(panel(page)).toBeHidden();
+    await expect.poll(() => page.evaluate(() => location.hash)).toContain('val=0');
+  },
+);
 
 for (const r of [5, 10, 30, 100, 200]) {
   test(`measured within tolerance at ${r} M, against the analytic radius`, async ({ page }) => {

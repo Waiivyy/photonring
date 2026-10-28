@@ -32,7 +32,7 @@ const canonical = (patch: Record<string, string> = {}) => {
 const hash = (page: Page) => page.evaluate(() => location.hash);
 const elementCount = (page: Page) => page.evaluate(() => document.querySelectorAll('*').length);
 
-test('a shared link opens the view it describes', async ({ page }) => {
+test('a shared link opens the view it describes', { tag: '@smoke' }, async ({ page }) => {
   await openApp(
     page,
     `/${canonical({ r: '12.5', az: '45', el: '-30', disk: '0', aa: '0', view: 'termination', ov: 'edge,isco' })}`,
@@ -51,29 +51,33 @@ test('a shared link opens the view it describes', async ({ page }) => {
   await expect(page.getByRole('checkbox', { name: 'ISCO ring', exact: true })).toBeChecked();
 });
 
-test('changes reach the hash in canonical form and survive a reload exactly', async ({ page }) => {
-  await openApp(page);
-  await view(page).focus();
-  await page.keyboard.press('ArrowLeft');
-  await page.keyboard.press('Shift+Equal');
-  await page.keyboard.press('d');
-  await page.keyboard.press('e');
-  const expected = canonical({ r: '27.273', az: '5', disk: '0', ov: 'edge' });
-  await expect.poll(() => hash(page)).toBe(expected);
-  const before = await stats(page);
-  await page.reload();
-  await waitForFullImage(page);
-  const after = await stats(page);
-  expect([after.distance, after.azimuthDeg, after.elevationDeg]).toEqual([
-    before.distance,
-    before.azimuthDeg,
-    before.elevationDeg,
-  ]);
-  expect(after.distance).toBe(27.273);
-  expect(after.disk).toBe(false);
-  expect(after.overlays).toEqual(['edge']);
-  expect(await hash(page)).toBe(expected);
-});
+test(
+  'changes reach the hash in canonical form and survive a reload exactly',
+  { tag: '@smoke' },
+  async ({ page }) => {
+    await openApp(page);
+    await view(page).focus();
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('Shift+Equal');
+    await page.keyboard.press('d');
+    await page.keyboard.press('e');
+    const expected = canonical({ r: '27.273', az: '5', disk: '0', ov: 'edge' });
+    await expect.poll(() => hash(page)).toBe(expected);
+    const before = await stats(page);
+    await page.reload();
+    await waitForFullImage(page);
+    const after = await stats(page);
+    expect([after.distance, after.azimuthDeg, after.elevationDeg]).toEqual([
+      before.distance,
+      before.azimuthDeg,
+      before.elevationDeg,
+    ]);
+    expect(after.distance).toBe(27.273);
+    expect(after.disk).toBe(false);
+    expect(after.overlays).toEqual(['edge']);
+    expect(await hash(page)).toBe(expected);
+  },
+);
 
 test('editing the hash applies it at once, with every missing key at its default', async ({
   page,
@@ -107,19 +111,20 @@ test('a plain visit keeps an empty hash until something changes', async ({ page 
   await expect.poll(() => hash(page)).toBe(canonical({ az: '5' }));
 });
 
-test('the hash is rewritten even when the path starts with two slashes', async ({
-  page,
-  baseURL,
-}) => {
-  // A path like //host/ would turn an absolute-path URL into another origin; the page must
-  // write a fragment-only URL instead.
-  await openApp(page, `${baseURL}//x.example/#v=1&r=1e999&view=%3Cimg%3E`);
-  await expect.poll(() => hash(page)).toBe(canonical());
-  expect(await page.evaluate(() => location.pathname)).toBe('//x.example/');
-  await view(page).focus();
-  await page.keyboard.press('ArrowLeft');
-  await expect.poll(() => hash(page)).toBe(canonical({ az: '5' }));
-});
+test(
+  'the hash is rewritten even when the path starts with two slashes',
+  { tag: '@dev-server' },
+  async ({ page, baseURL }) => {
+    // A path like //host/ would turn an absolute-path URL into another origin; the page must
+    // write a fragment-only URL instead.
+    await openApp(page, `${baseURL}//x.example/#v=1&r=1e999&view=%3Cimg%3E`);
+    await expect.poll(() => hash(page)).toBe(canonical());
+    expect(await page.evaluate(() => location.pathname)).toBe('//x.example/');
+    await view(page).focus();
+    await page.keyboard.press('ArrowLeft');
+    await expect.poll(() => hash(page)).toBe(canonical({ az: '5' }));
+  },
+);
 
 test('unknown keys are dropped from the canonical hash', async ({ page }) => {
   await openApp(page, '/#v=1&r=40&future=1&zz=2');
@@ -168,35 +173,39 @@ const HOSTILE: [string, string, boolean][] = [
 
 for (const [input, expected, notice] of HOSTILE) {
   const name = input.length > 40 ? `${input.slice(0, 40)}... (${input.length} characters)` : input;
-  test(`hostile hash ${name}: rendered safely and canonicalised`, async ({ page, context }) => {
-    const clean = await context.newPage();
-    await openApp(clean, `/${expected}`);
-    await waitForSettled(clean);
-    const cleanCount = await elementCount(clean);
-    await clean.close();
+  test(
+    `hostile hash ${name}: rendered safely and canonicalised`,
+    { tag: input.startsWith('#view=') ? '@smoke' : [] },
+    async ({ page, context }) => {
+      const clean = await context.newPage();
+      await openApp(clean, `/${expected}`);
+      await waitForSettled(clean);
+      const cleanCount = await elementCount(clean);
+      await clean.close();
 
-    // Loaded directly.
-    await openApp(page, `/${input}`);
-    let s = await stats(page);
-    expect(s.state).toBe('rendering');
-    expect(s.distance).toBeGreaterThanOrEqual(5);
-    expect(s.distance).toBeLessThanOrEqual(200);
-    await expect.poll(() => hash(page)).toBe(expected);
-    await waitForSettled(page);
-    expect(await elementCount(page)).toBe(cleanCount);
-    if (notice) await expect(page.locator('#announcer')).toHaveText(NOTICE);
-    await expect(page.locator('img[src="x"]')).toHaveCount(0);
+      // Loaded directly.
+      await openApp(page, `/${input}`);
+      let s = await stats(page);
+      expect(s.state).toBe('rendering');
+      expect(s.distance).toBeGreaterThanOrEqual(5);
+      expect(s.distance).toBeLessThanOrEqual(200);
+      await expect.poll(() => hash(page)).toBe(expected);
+      await waitForSettled(page);
+      expect(await elementCount(page)).toBe(cleanCount);
+      if (notice) await expect(page.locator('#announcer')).toHaveText(NOTICE);
+      await expect(page.locator('img[src="x"]')).toHaveCount(0);
 
-    // Applied by a live hashchange.
-    await page.evaluate(() => (location.hash = '#v=1&r=77'));
-    await expect.poll(async () => (await stats(page)).distance).toBe(77);
-    await page.evaluate((h) => (location.hash = h), input);
-    await expect.poll(() => hash(page)).toBe(expected);
-    await waitForSettled(page);
-    s = await stats(page);
-    expect(s.state).toBe('rendering');
-    expect(await elementCount(page)).toBe(cleanCount);
-  });
+      // Applied by a live hashchange.
+      await page.evaluate(() => (location.hash = '#v=1&r=77'));
+      await expect.poll(async () => (await stats(page)).distance).toBe(77);
+      await page.evaluate((h) => (location.hash = h), input);
+      await expect.poll(() => hash(page)).toBe(expected);
+      await waitForSettled(page);
+      s = await stats(page);
+      expect(s.state).toBe('rendering');
+      expect(await elementCount(page)).toBe(cleanCount);
+    },
+  );
 }
 
 test('after a restart following device loss, a new hash is applied once by the new page', async ({

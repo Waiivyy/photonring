@@ -1,19 +1,23 @@
 // App behaviour in headless Chrome (spec section 10, item 14 and the Stage 2 parts of the UI).
 import { expect, openApp, stats, test, view, waitForFullImage } from './fixtures.ts';
 
-test('page loads: title, heading, toolbar and a full image', async ({ page }) => {
-  const t0 = Date.now();
-  await page.goto('/');
-  await expect(page).toHaveTitle(/photonring/);
-  await expect(page.getByRole('heading', { level: 1, name: 'photonring' })).toBeAttached();
-  await expect(page.getByRole('group', { name: 'Tools' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Controls' })).toBeVisible();
-  await page.waitForFunction(() => (window.photonring?.debug.stats().frames ?? 0) > 0);
-  const firstFrame = Date.now() - t0;
-  await waitForFullImage(page);
-  // Environment dependent, so logged rather than asserted.
-  console.log(`first frame after ${firstFrame} ms, full image after ${Date.now() - t0} ms`);
-});
+test(
+  'page loads: title, heading, toolbar and a full image',
+  { tag: '@smoke' },
+  async ({ page }) => {
+    const t0 = Date.now();
+    await page.goto('/');
+    await expect(page).toHaveTitle(/photonring/);
+    await expect(page.getByRole('heading', { level: 1, name: 'photonring' })).toBeAttached();
+    await expect(page.getByRole('group', { name: 'Tools' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Controls' })).toBeVisible();
+    await page.waitForFunction(() => (window.photonring?.debug.stats().frames ?? 0) > 0);
+    const firstFrame = Date.now() - t0;
+    await waitForFullImage(page);
+    // Environment dependent, so logged rather than asserted.
+    console.log(`first frame after ${firstFrame} ms, full image after ${Date.now() - t0} ms`);
+  },
+);
 
 test('renders the black hole and finishes every tile', async ({ page }) => {
   await page.setViewportSize({ width: 960, height: 540 });
@@ -25,25 +29,27 @@ test('renders the black hole and finishes every tile', async ({ page }) => {
   await page.screenshot({ path: 'artifacts/stage3/e2e-default-view.png' });
 });
 
-test('keyboard controls orbit, zoom and toggle the disk and the termination view', async ({
-  page,
-}) => {
-  await openApp(page);
-  await view(page).focus();
-  const before = await stats(page);
-  expect(before.disk).toBe(true);
-  await page.keyboard.press('ArrowLeft');
-  await page.keyboard.press('Minus');
-  await page.keyboard.press('t');
-  await page.keyboard.press('d');
-  const after = await stats(page);
-  expect(after.azimuthDeg).not.toBe(before.azimuthDeg);
-  expect(after.distance).toBeGreaterThan(before.distance);
-  // Disk and termination view share the brightness limiter, so the second change can arrive up
-  // to 500 ms after the first.
-  await expect.poll(async () => (await stats(page)).mode).toBe('termination');
-  await expect.poll(async () => (await stats(page)).disk).toBe(false);
-});
+test(
+  'keyboard controls orbit, zoom and toggle the disk and the termination view',
+  { tag: '@smoke' },
+  async ({ page }) => {
+    await openApp(page);
+    await view(page).focus();
+    const before = await stats(page);
+    expect(before.disk).toBe(true);
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('Minus');
+    await page.keyboard.press('t');
+    await page.keyboard.press('d');
+    const after = await stats(page);
+    expect(after.azimuthDeg).not.toBe(before.azimuthDeg);
+    expect(after.distance).toBeGreaterThan(before.distance);
+    // Disk and termination view share the brightness limiter, so the second change can arrive up
+    // to 500 ms after the first.
+    await expect.poll(async () => (await stats(page)).mode).toBe('termination');
+    await expect.poll(async () => (await stats(page)).disk).toBe(false);
+  },
+);
 
 test('a camera move previews at reduced resolution, then refines with anti-aliasing', async ({
   page,
@@ -99,7 +105,7 @@ test('a change made just before Restart survives it', async ({ page }) => {
   expect((await stats(page)).antialias).toBe(false);
 });
 
-test('device loss shows a recoverable message', async ({ page }) => {
+test('device loss shows a recoverable message', { tag: '@smoke' }, async ({ page }) => {
   await page.goto('/');
   await waitForFullImage(page);
   await page.evaluate(() => window.photonring!.debug.destroyDevice());

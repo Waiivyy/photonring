@@ -34,18 +34,20 @@ function sameRegion(a: Uint8Array, b: Uint8Array, w: number, x0: number, y0: num
   return true;
 }
 
-test('S saves the settled image, named after the view, at the internal resolution', async ({
-  page,
-}) => {
-  await openApp(page);
-  await view(page).focus();
-  const { download, png } = await save(page, () => page.keyboard.press('s'));
-  expect(download.suggestedFilename()).toBe('photonring-r30-az0-el12.png');
-  const s = await stats(page);
-  expect([png.width, png.height]).toEqual([s.internalWidth, s.internalHeight]);
-  const shown = await presented(page);
-  expect(Buffer.from(png.rgba).equals(Buffer.from(shown))).toBe(true);
-});
+test(
+  'S saves the settled image, named after the view, at the internal resolution',
+  { tag: '@smoke' },
+  async ({ page }) => {
+    await openApp(page);
+    await view(page).focus();
+    const { download, png } = await save(page, () => page.keyboard.press('s'));
+    expect(download.suggestedFilename()).toBe('photonring-r30-az0-el12.png');
+    const s = await stats(page);
+    expect([png.width, png.height]).toEqual([s.internalWidth, s.internalHeight]);
+    const shown = await presented(page);
+    expect(Buffer.from(png.rgba).equals(Buffer.from(shown))).toBe(true);
+  },
+);
 
 test('the Save image button saves too, and visible overlays and their legend are included', async ({
   page,

@@ -11,22 +11,26 @@ test.beforeEach(async ({ page }) => {
   await openApp(page);
 });
 
-test('the About button opens a modal dialog with the honesty note first', async ({ page }) => {
-  await page.getByRole('button', { name: 'About', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'About photonring' });
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole('heading', { name: 'About photonring' })).toBeFocused();
-  await expect(dialog.locator('.honesty')).toHaveText(HONESTY);
-  // First: right after the heading.
-  await expect(dialog.locator('h2 + p.honesty')).toHaveCount(1);
-  await expect(dialog).toContainText('runs entirely in your browser');
-  await expect(dialog).toContainText('no analytics, telemetry or cookies');
-  await expect(dialog).toContainText(/after #/);
-  await expect(dialog).toContainText('Schwarzschild');
-  await expect(dialog).toContainText(
-    /apparent outline of both the event horizon and the photon sphere/,
-  );
-});
+test(
+  'the About button opens a modal dialog with the honesty note first',
+  { tag: '@smoke' },
+  async ({ page }) => {
+    await page.getByRole('button', { name: 'About', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'About photonring' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('heading', { name: 'About photonring' })).toBeFocused();
+    await expect(dialog.locator('.honesty')).toHaveText(HONESTY);
+    // First: right after the heading.
+    await expect(dialog.locator('h2 + p.honesty')).toHaveCount(1);
+    await expect(dialog).toContainText('runs entirely in your browser');
+    await expect(dialog).toContainText('no analytics, telemetry or cookies');
+    await expect(dialog).toContainText(/after #/);
+    await expect(dialog).toContainText('Schwarzschild');
+    await expect(dialog).toContainText(
+      /apparent outline of both the event horizon and the photon sphere/,
+    );
+  },
+);
 
 test('the controls table has one row per key binding', async ({ page }) => {
   await view(page).focus();
@@ -36,18 +40,24 @@ test('the controls table has one row per key binding', async ({ page }) => {
   await expect(dialog.locator('table.keys tbody tr')).toHaveCount(KEYMAP.length);
 });
 
-test('documentation links go to GitHub, marked as such, without a referrer', async ({ page }) => {
-  await page.getByRole('button', { name: 'About', exact: true }).click();
-  const links = page.getByRole('dialog').getByRole('link');
-  const n = await links.count();
-  expect(n).toBeGreaterThanOrEqual(5);
-  for (let i = 0; i < n; i++) {
-    const link = links.nth(i);
-    expect(await link.getAttribute('href')).toMatch(/^https:\/\/github\.com\/Waiivyy\/photonring/);
-    expect(await link.getAttribute('rel')).toBe('noopener noreferrer');
-    await expect(link).toContainText('(GitHub)');
-  }
-});
+test(
+  'documentation links go to GitHub, marked as such, without a referrer',
+  { tag: '@smoke' },
+  async ({ page }) => {
+    await page.getByRole('button', { name: 'About', exact: true }).click();
+    const links = page.getByRole('dialog').getByRole('link');
+    const n = await links.count();
+    expect(n).toBeGreaterThanOrEqual(5);
+    for (let i = 0; i < n; i++) {
+      const link = links.nth(i);
+      expect(await link.getAttribute('href')).toMatch(
+        /^https:\/\/github\.com\/Waiivyy\/photonring/,
+      );
+      expect(await link.getAttribute('rel')).toBe('noopener noreferrer');
+      await expect(link).toContainText('(GitHub)');
+    }
+  },
+);
 
 test('focus stays in the dialog, Escape closes it and focus returns to the opener', async ({
   page,
