@@ -1,12 +1,17 @@
 // Shown when WebGPU is missing or no device can be created: why, where it works, and a gallery
-// of images rendered beforehand by the CPU reference renderer (tools/render-gallery.ts).
+// of images rendered beforehand by the CPU reference renderer (tools/render-gallery.ts). The
+// images are imported, so the build gives them hashed names and a missing one fails the build.
 import { el } from './dom.ts';
+import closeUp from './gallery/close-up-5M.png';
+import diskFaceOn from './gallery/disk-face-on.png';
+import diskInclined from './gallery/disk-inclined.png';
+import shadowAndStars from './gallery/shadow-and-stars.png';
 
 const GALLERY = [
-  { file: 'shadow-and-stars.png', caption: 'The shadow and lensed stars, 30 M away, no disk.' },
-  { file: 'disk-inclined.png', caption: 'Thin disk seen 12 degrees above its plane.' },
-  { file: 'disk-face-on.png', caption: 'The same disk seen from above its axis.' },
-  { file: 'close-up-5M.png', caption: 'From 5 M, with the field of view widened to 120 degrees.' },
+  { src: shadowAndStars, caption: 'The shadow and lensed stars, 30 M away, no disk.' },
+  { src: diskInclined, caption: 'Thin disk seen 12 degrees above its plane.' },
+  { src: diskFaceOn, caption: 'The same disk seen from above its axis.' },
+  { src: closeUp, caption: 'From 5 M, with the field of view widened to 120 degrees.' },
 ] as const;
 
 const BROWSERS = [
@@ -33,7 +38,7 @@ export function showUnsupported(root: HTMLElement, message: string): void {
   for (const item of GALLERY) {
     const figure = el('figure');
     const img = el('img');
-    img.src = `./gallery/${item.file}`;
+    img.src = item.src;
     img.alt = item.caption;
     img.width = 640;
     img.height = 360;
