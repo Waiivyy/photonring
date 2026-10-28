@@ -1,7 +1,9 @@
 // The ISCO overlay against the shipped WGSL (Stage 4): the f64 curves must lie on the edge of the
-// disk the f32 GPU tracer renders. For vertices of the direct (n = 0) and secondary (n = 1)
-// images, the GPU crossing radius half a pixel inside and outside along the image radius must
-// bracket 6M. Run with npm run test:gpu.
+// disk the f32 GPU tracer renders. For on-screen vertices of the direct (n = 0) and secondary
+// (n = 1) images, the GPU crossing radius 0.05 px inside and outside along the image radius must
+// bracket 6M (measured: 0.01 px holds in every view). Far off screen, at view angles near 89
+// degrees, the gnomonic projection magnifies f32 direction rounding to most of a pixel, so those
+// vertices are not checked. Run with npm run test:gpu.
 import { expect, test } from '@playwright/test';
 import { DEFAULT_DISK } from '../../src/cpu-renderer/scenes.ts';
 import {
@@ -16,6 +18,8 @@ import { openHarness } from './page.ts';
 
 const M = 1;
 const H = 1080;
+/** Bracket half-width in pixels at 1080 rows. */
+const PX = 0.05;
 const ASPECT = 16 / 9;
 /**
  * Crossings are logged only while a disk is set; the parity entry point never stops at an opaque
@@ -31,7 +35,9 @@ const VIEWS = [
   { name: '200 M, elevation 12', distance: 200, azimuthDeg: 0, elevationDeg: 12 },
 ];
 
-test('ISCO overlay vertices lie within half a pixel of the GPU disk edge', async ({ page }) => {
+test('on-screen ISCO overlay vertices lie within 0.05 px of the GPU disk edge', async ({
+  page,
+}) => {
   test.setTimeout(300_000);
   await openHarness(page);
   for (const v of VIEWS) {
@@ -56,11 +62,12 @@ test('ISCO overlay vertices lie within half a pixel of the GPU disk edge', async
         tanHalfFovY: t,
         aspect: ASPECT,
       });
-      const points = curve.segments.flat().filter((_, i) => i % 8 === 0);
+      const onScreen = (p: TanPoint) => Math.abs(p[0]) <= ASPECT * t && Math.abs(p[1]) <= t;
+      const points = curve.segments.flat().filter((p, i) => i % 4 === 0 && onScreen(p));
       const rays: HarnessRay[] = [];
       for (const p of points) {
         const rho = Math.hypot(p[0], p[1]);
-        for (const px of [-0.5, 0.5]) {
+        for (const px of [-PX, PX]) {
           const k = (rho + (px * 2 * t) / H) / rho;
           rays.push({ origin: f.position, direction: direction([p[0] * k, p[1] * k]) });
         }
@@ -77,7 +84,7 @@ test('ISCO overlay vertices lie within half a pixel of the GPU disk edge', async
       };
       let checked = 0;
       for (let i = 0; i < points.length; i++) {
-        const where = `${v.name}, n = ${order}, vertex ${8 * i}`;
+        const where = `${v.name}, n = ${order}, on-screen vertex ${i}`;
         expect(radius(2 * i), where).toBeLessThan(6);
         expect(radius(2 * i + 1), where).toBeGreaterThan(6);
         checked++;
