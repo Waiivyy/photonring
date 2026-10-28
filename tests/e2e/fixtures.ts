@@ -49,12 +49,22 @@ export const test = base.extend<{ allowConsole: RegExp[]; guard: void }>({
 export const stats = (page: Page): Promise<AppStats> =>
   page.evaluate(() => window.photonring!.debug.stats());
 
-/** Waits until the full-quality image is presented and nothing is left to render. */
+/**
+ * Waits until the full-quality image is presented and nothing is left to render. Fails at once,
+ * with the page's message, if the GPU device is lost first. (A restart removes the old page's
+ * debug hook, so after Restart this waits for the new one.)
+ */
 export async function waitForFullImage(page: Page): Promise<void> {
-  await page.waitForFunction(() => {
+  const result = await page.waitForFunction(() => {
     const s = window.photonring?.debug.stats();
-    return s !== undefined && s.state === 'rendering' && s.frames > 0 && s.stage === 'done';
+    if (s === undefined) return false;
+    if (s.state === 'lost') return 'lost';
+    return s.state === 'rendering' && s.frames > 0 && s.stage === 'done' ? 'done' : false;
   });
+  if ((await result.jsonValue()) === 'lost') {
+    const alert = (await page.getByRole('alert').locator('p').textContent()) ?? '';
+    throw new Error(`The GPU device was lost before the image was complete: ${alert.trim()}`);
+  }
 }
 
 /** Opens the page at `path` and waits for the first full image. */

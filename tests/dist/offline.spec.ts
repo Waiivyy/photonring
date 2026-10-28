@@ -103,10 +103,14 @@ test('WebGPU path: load, change the view, open every panel and save the image', 
 }) => {
   const rec = await record(page, context, baseURL!);
   await page.goto('./');
-  await page.waitForFunction(() => {
+  const result = await page.waitForFunction(() => {
     const s = window.photonring?.debug.stats();
+    if (s?.state === 'lost') return 'lost';
     return s !== undefined && s.state === 'rendering' && s.frames > 0 && s.stage === 'done';
   });
+  if ((await result.jsonValue()) === 'lost') {
+    throw new Error(`GPU device lost: ${(await page.getByRole('alert').locator('p').textContent())?.trim()}`);
+  }
   expect(
     await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content'),
   ).toBe(CSP_POLICY);

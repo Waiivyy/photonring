@@ -168,6 +168,7 @@ class App {
   private readonly device: GPUDevice;
   private readonly renderer: GpuRenderer;
   private readonly timestampQuery: boolean;
+  private debugHook: Window['photonring'];
 
   constructor(
     root: HTMLElement,
@@ -332,7 +333,7 @@ class App {
     void this.device.lost.then((info) => {
       if (!this.life.disposed) this.showLost(info.reason, info.message);
     });
-    window.photonring = {
+    this.debugHook = {
       debug: {
         stats: () => this.stats(),
         destroyDevice: () => this.device.destroy(),
@@ -340,6 +341,7 @@ class App {
         validation: () => this.validationScheduler.last,
       },
     };
+    window.photonring = this.debugHook;
     this.state = 'rendering';
     this.applyScene();
     this.life.frame(this.frame);
@@ -867,6 +869,8 @@ class App {
     this.urlSync.flush();
     for (const w of this.saveWaiters) w.reject(new Error('the GPU device was lost'));
     this.saveWaiters = [];
+    // The debug hook belongs to the live page; the restarted one installs its own.
+    if (window.photonring === this.debugHook) delete window.photonring;
     this.life.dispose();
     this.renderer.destroy();
   }
