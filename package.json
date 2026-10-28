@@ -30,6 +30,7 @@
     "measure": "rm -rf artifacts/measured && MEASURE=1 vitest run && node tools/measured-report.ts",
     "spike": "node tools/precision-spike.ts",
     "render:cpu": "node tools/render-cpu.ts",
+    "render:hero": "node tools/render-hero.ts",
     "golden:update": "node tools/update-goldens.ts",
     "gallery": "node tools/render-gallery.ts",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm test"
