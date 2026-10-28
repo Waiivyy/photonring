@@ -33,8 +33,12 @@ export const LINUX_SWIFTSHADER_ARGS: readonly string[] = [
   '--use-angle=swiftshader',
 ];
 
-/** A software adapter renders more slowly, so expectations wait longer for it. */
-export const expectTimeout = (): number => (adapter() === 'swiftshader' ? 20_000 : 5_000);
+/**
+ * A software adapter renders more slowly, so expectations wait longer for it. GitHub's Ubuntu
+ * runners also differ in speed by a factor of about 2 (docs/PERFORMANCE.md): on the slow ones the
+ * Validation panel was not done within 20 s.
+ */
+export const expectTimeout = (): number => (adapter() === 'swiftshader' ? 60_000 : 5_000);
 
 export const browserUse = (extraArgs: readonly string[] = []) => {
   const linuxVulkan = adapter() === 'swiftshader' && process.platform === 'linux';
