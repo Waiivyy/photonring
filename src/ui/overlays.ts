@@ -35,8 +35,8 @@ export type RingsState = 'off' | 'pending' | 'ready';
 
 /** Quiet time of the presented view before ring curves are computed (the renderer's settle). */
 const SETTLE_MS = 120;
-/** Main-thread time per animation frame given to the ring solver. */
-const SLICE_MS = 4;
+/** Main-thread time per animation frame given to the ring solver (half of a 60 Hz frame). */
+const SLICE_MS = 8;
 const CACHE_SIZE = 8;
 
 const RINGS: Readonly<Partial<Record<OverlayId, readonly [RingRadius, ImageOrder][]>>> = {
@@ -70,6 +70,7 @@ export class OverlayLayer {
   /** Main-thread ms spent on the rings of the current key, and of the last complete set. */
   private spent = 0;
   private lastRingMs = 0;
+  private lastLatency = 0;
   private readyWaiters: (() => void)[] = [];
   private readonly now: () => number;
 
@@ -87,6 +88,11 @@ export class OverlayLayer {
 
   get ringMs(): number {
     return this.lastRingMs;
+  }
+
+  /** Wall-clock ms from the end of the settle time to the last computed rings being drawn. */
+  get ringLatencyMs(): number {
+    return this.lastLatency;
   }
 
   /** Path data of the visible overlays in an image box (for saved images). */
@@ -152,7 +158,10 @@ export class OverlayLayer {
 
     if (!anyRing) this.setState('off');
     else if (!missing) {
-      if (this.state !== 'ready' && this.spent > 0) this.lastRingMs = this.spent;
+      if (this.state !== 'ready' && this.spent > 0) {
+        this.lastRingMs = this.spent;
+        this.lastLatency = now - (this.keySince + SETTLE_MS);
+      }
       this.setState('ready');
     } else {
       this.setState('pending');

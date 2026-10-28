@@ -372,6 +372,7 @@ class App {
       hashApplies: this.hashApplies,
       ringsState: this.overlay.ringsState,
       ringMs: this.overlay.ringMs,
+      ringLatencyMs: this.overlay.ringLatencyMs,
       validationOpen: this.view.validationOpen,
       validationRuns: this.validationScheduler.runs,
       validationMs: this.validationScheduler.lastMs,

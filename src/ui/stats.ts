@@ -43,6 +43,8 @@ export interface AppStats {
   ringsState: 'off' | 'pending' | 'ready';
   /** Main-thread milliseconds spent computing the last complete set of ring curves. */
   ringMs: number;
+  /** Wall-clock ms from the end of the settle time to those rings being drawn. */
+  ringLatencyMs: number;
   validationOpen: boolean;
   /** Completed shadow measurements, and the wall-clock ms of the last (request to result). */
   validationRuns: number;
