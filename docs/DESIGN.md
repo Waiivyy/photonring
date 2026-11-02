@@ -1,25 +1,27 @@
 # Design decisions
 
-Status: Stage 5 (build, deploy and CI). Every number below was measured unless it is labelled as an
+Status: Stage 6 (README and docs). Every number below was measured unless it is labelled as an
 estimate. Machine for all measurements: Apple M5 (10-core GPU), 24 GB, macOS 27.0, Node 25.6.1,
-except the CI runs in sections 5 and 14, which name their runner. In sections 3 and 6 the f32
-results come from an emulation (`Math.fround` after every operation); section 11 has the
-measurements on the GPU.
+except the CI runs in sections 5 and 14, which name their runner. In section 3, and where section
+6 says "emulated", the f32 results come from an emulation (`Math.fround` after every operation);
+sections 6 and 11 have the measurements on the GPU.
 
-| Decision             | Choice                                                                                                                                                 | Section |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- |
-| Language and tooling | TypeScript 6.0 (strict), Vite, Vitest, Playwright, ESLint, Prettier                                                                                    | 2       |
-| GPU API              | Raw WebGPU with WGSL compute shaders, no rendering framework                                                                                           | 2       |
-| Integrator           | Planar Binet equation $u'' = 3Mu^2 - u$, classical RK4, fixed step $d\phi = 0.05$ (f32)                                                                | 3       |
-| Final direction      | Rotation recurrence instead of WGSL `sin`/`cos`                                                                                                        | 3       |
-| Fallback             | No WebGL2 renderer in the MVP; explanation page plus pre-rendered gallery                                                                              | 4       |
-| Star field           | Three cubic lattices in direction space hashed with pcg3d; profiles truncated at half a cell, so lookups are seamless                                  | 10      |
-| Colour               | Planck spectrum against an analytic CIE 1931 fit (no CC BY-SA data in the repository), CSS Color 4 sRGB matrix                                         | 10      |
-| CPU reference        | f64, $d\phi = 0.0125$, own PNG codec on `node:zlib`, goldens at 160x90 with a documented tolerance                                                     | 10      |
-| CI                   | Ubuntu: checks, build and the built page in Google Chrome with SwiftShader WebGPU; macOS arm64: GPU parity and the full page suite on the runner's GPU | 5, 14   |
-| Build                | Vite, every file but `index.html` and `favicon.svg` content-hashed, type check and structural checks of `dist/` in every build                         | 14      |
-| CSP                  | Meta tag in the built page only: `default-src 'none'`, `'self'` for scripts, styles and images, Trusted Types required                                 | 14      |
-| Hosting              | GitHub Pages through a workflow started by hand, actions pinned to commit SHAs                                                                         | 14      |
+| Decision             | Choice                                                                                                                                                           | Section |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| Language and tooling | TypeScript 6.0 (strict), Vite, Vitest, Playwright, ESLint, Prettier                                                                                              | 2       |
+| GPU API              | Raw WebGPU with WGSL compute shaders, no rendering framework                                                                                                     | 2       |
+| Integrator           | Planar Binet equation $u'' = 3Mu^2 - u$, classical RK4, fixed step $d\phi = 0.05$ (f32)                                                                          | 3       |
+| Final direction      | Rotation recurrence instead of WGSL `sin`/`cos`                                                                                                                  | 3       |
+| Fallback             | No WebGL2 renderer in the MVP; explanation page plus pre-rendered gallery                                                                                        | 4       |
+| Star field           | Three cubic lattices in direction space hashed with pcg3d; profiles truncated at half a cell, so lookups are seamless                                            | 10      |
+| Colour               | Planck spectrum against an analytic CIE 1931 fit (no CIE table in the repository; four sample values quoted in tests, with attribution), CSS Color 4 sRGB matrix | 10      |
+| CPU reference        | f64, $d\phi = 0.0125$, own PNG codec on `node:zlib`, goldens at 160x90 with a documented tolerance                                                               | 10      |
+| CI                   | Ubuntu: checks, build and the built page in Google Chrome with SwiftShader WebGPU; macOS arm64: GPU parity and the full page suite on the runner's GPU           | 5, 14   |
+| Build                | Vite, every file but `index.html` and `favicon.svg` content-hashed, type check and structural checks of `dist/` in every build                                   | 14      |
+| CSP                  | Meta tag in the built page only: `default-src 'none'`, `'self'` for scripts, styles and images, Trusted Types required                                           | 14      |
+| Hosting              | GitHub Pages through a workflow started by hand, actions pinned to commit SHAs                                                                                   | 14      |
+| Measured values      | Recorded by the physics, camera, overlay and contrast unit tests (not every check) and printed by `npm run measure`                                              | 15      |
+| README image         | CPU reference render at 1600 x 900 (`npm run render:hero`); social preview and Open Graph tags after the owner's pick and the deploy                             | 15      |
 
 ## 1. Positioning: what already exists
 
@@ -47,7 +49,9 @@ What could still set this project apart, for the check-in decision:
 - Image-level comparison of the GPU render against the CPU reference renderer, with documented
   tolerances, plus measured error budgets per pixel (section 3 already has the f32 one).
 - Two independent reference methods for the deflection (quadrature and elliptic integrals) that
-  agree to $10^{-15}$, and an integrator chosen by measurement with the comparison published.
+  agree to about $10^{-15}$ near $b_c$ ($1.05\times10^{-15}$ relative at the test's values up to
+  $1.1\,b_c$, `npm run measure`), and an integrator chosen by measurement with the comparison
+  published.
 - A narrow, finished, documented Schwarzschild scope rather than a broad Kerr feature list.
 
 ## 2. Stack
@@ -60,10 +64,12 @@ typescript-eslint supports 7. A second config (`tsconfig.physics.json`) compiles
 with no DOM and no Node types, so the library cannot accidentally depend on either.
 
 **Vite, Vitest, Playwright, ESLint, Prettier.** Vite 8 gives a dev server and a production build
-with hashed assets; Vitest 5 shares its configuration; Playwright drives Chromium for page tests
-and GPU parity tests. No objections to the proposal. Current dev dependency tree: 98 packages,
-92 MB in `node_modules`, zero runtime dependencies planned. Node scripts in `tools/` run with
-Node's built-in TypeScript type stripping (Node 22.18 or later), so no `tsx` dependency.
+with hashed assets; Vitest 5 shares its configuration; Playwright drives the installed Google
+Chrome for page tests and GPU parity tests (section 11). No objections to the proposal. Dev
+dependency tree on 2026-11-02: 135 packages besides the root (`npm ls --all --parseable`), 117 MB
+in `node_modules` (`du -sh`; the lockfile is unchanged since 2026-10-26); no runtime dependencies
+(`package.json` has none). Node scripts in `tools/` run with Node's built-in TypeScript type
+stripping (Node 22.18 or later), so no `tsx` dependency.
 
 **Raw WebGPU rather than three.js.** The renderer needs one compute pipeline, a storage texture, a
 blit pass, timestamp queries, device-loss handling and explicit limit checks: a few hundred lines
@@ -79,8 +85,8 @@ shaders are WGSL either way. CPU speed is not a bottleneck: the whole precision 
 
 **UI: plain DOM and CSS.** A handful of controls, overlays and a panel do not justify a framework.
 
-**PNG output for goldens: decide in Stage 1.** A minimal encoder on `node:zlib` (deflate plus
-CRC-32, about 60 lines) gives byte-exact deterministic output with no dependency.
+**PNG output for goldens:** a minimal encoder on `node:zlib` (deflate plus CRC-32, about 60
+lines), decided in Stage 1 (section 10): byte-exact, deterministic output with no dependency.
 
 ## 3. Integrator decision
 
@@ -122,17 +128,16 @@ WGSL only guarantees correct rounding for $+, -, \times$ (see `docs/PHYSICS.md`,
 Perturbing every f32 result by a random amount up to about 2 ULP (worst of five random seeds;
 a single draw varied by up to a factor of 3):
 
-| Method        | Step | Max error, correctly rounded (px), 5 / 30 / 200 M | Max error, perturbed (px) | Misclassified |
-| ------------- | ---- | ------------------------------------------------- | ------------------------- | ------------- |
-| Binet RK4     | 0.05 | 0.052 / 0.044 / 0.002                             | 0.285 / 0.263 / 0.042     | 0             |
-| Cartesian RK4 | 0.1  | 0.199 / 0.171 / 0.060                             | 1.384 / 0.465 / 0.086     | 0             |
+| Method        | Step | Max error, rounded to nearest (px), 5 / 30 / 200 M | Max error, perturbed (px) | Misclassified |
+| ------------- | ---- | -------------------------------------------------- | ------------------------- | ------------- |
+| Binet RK4     | 0.05 | 0.052 / 0.044 / 0.002                              | 0.285 / 0.263 / 0.042     | 0             |
+| Cartesian RK4 | 0.1  | 0.199 / 0.171 / 0.060                              | 1.384 / 0.465 / 0.086     | 0             |
 
 **Measured on the GPU in Stage 2** (section 11): over 6196 escaped rays the largest escape
-direction error is 0.058 px, so the real GPU sits at the correctly rounded level, not at the
-pessimistic one. This model is pessimistic: it also perturbs $+, -, \times$, which WGSL rounds correctly, and the
-Binet inner loop uses nothing else, so on a GPU it should sit closer to the correctly rounded
-column. Even so, its worst case (0.285 px) slightly exceeds the 0.25 px target proposed in
-section 6. Stage 2 measures this on hardware.
+direction error is 0.058 px, so the real GPU sits at the round-to-nearest level. The perturbation
+model above was pessimistic, as expected: it also perturbs $+, -, \times$, which WGSL rounds
+correctly, and the Binet inner loop uses nothing else; its worst case (0.285 px) would have
+slightly exceeded the 0.25 px target of section 6.
 
 ### Deflection against the reference integrals
 
@@ -191,10 +196,10 @@ $6.7\times10^{-12}$ at $d\phi = 0.0125$.
 - **Radial rays** ($\sin\psi = 0$) have no ray plane and $u' = \infty$; they are handled
   analytically as straight lines (below $|\sin\psi| = 10^{-7}$).
 - **Built-in `sin`/`cos`:** WGSL allows $2^{-11}$ rad of absolute error, about 0.5 px and ten
-  times the integrator error. The direction $(\cos\phi_\infty, \sin\phi_\infty)$ will instead be
-  built by rotating a unit vector by the precomputed $(\cos d\phi, \sin d\phi)$ each step (f32
-  emulation: $2.2\times10^{-6}$ rad, 0.002 px, after 250 steps), plus a short Taylor series for
-  the final partial step.
+  times the integrator error. The shader instead builds the direction
+  $(\cos\phi_\infty, \sin\phi_\infty)$ by rotating a unit vector by the precomputed
+  $(\cos d\phi, \sin d\phi)$ each step (f32 emulation: $2.2\times10^{-6}$ rad, 0.002 px, after 250
+  steps), plus a short Taylor series for the final partial step (section 11).
 
 ### Decision
 
@@ -213,33 +218,89 @@ Stage 3 lookup-table experiment is a one-dimensional table.
 operations, about $3\times10^9$ per frame at 1920x1080 before supersampling. Neighbouring pixels
 should take similar step counts except near the photon ring, but SIMD groups run as long as their
 slowest ray (up to 155 to 251 steps against a mean of 33), so real cost depends on divergence and
-memory traffic. Stage 2 measures it with timestamp queries.
+memory traffic. Stage 2 measures it with timestamp queries. Measured in Stage 3: 5.31 ms of GPU
+time for the 1920 x 1080 first pass with the disk (`docs/PERFORMANCE.md`).
 
 ## 4. Browser support and fallback
 
-WebGPU status in October 2026 (from the gpuweb implementation-status wiki, MDN browser-compat-data,
-and the vendors' release notes):
+WebGPU status on 2026-11-02, re-checked for Stage 6 against MDN browser-compat-data (BCD), the
+gpuweb implementation-status wiki, the Chrome, Mozilla, WebKit and Microsoft release notes and
+blogs, WebKit's source and the Mozilla and WebKit bug trackers (sources below). This is the
+vendors' status, not testing: the page has only run in Google Chrome (section 15).
 
-| Browser                                   | Status                                                                                |
-| ----------------------------------------- | ------------------------------------------------------------------------------------- |
-| Chrome and Edge, Windows, macOS, ChromeOS | On by default since 113                                                               |
-| Chrome, Linux                             | Since 144 for Intel Gen12+, since 147 for NVIDIA on Wayland; other GPUs behind a flag |
-| Chrome, Android                           | Since 121 on Android 12+ with Qualcomm or ARM GPUs; others partial                    |
-| Safari, macOS and iOS/iPadOS              | On by default in Safari 26, but only on macOS Tahoe 26, iOS 26 and later              |
-| Firefox, Windows                          | Since 141                                                                             |
-| Firefox, macOS                            | Since 147 on Apple Silicon; not on Intel Macs                                         |
-| Firefox, Linux and Android                | Not shipped (Nightly or flags only)                                                   |
+| Browser                    | Status                                                                                                                                                                      |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Chrome, Windows and macOS  | On by default since 113                                                                                                                                                     |
+| Chrome, ChromeOS           | On by default since 113 (devices with Vulkan)                                                                                                                               |
+| Edge, Windows and macOS    | On by default since 113 (Edge has no ChromeOS version; Linux is not stated by Microsoft)                                                                                    |
+| Chrome, Linux              | Since 144 for Intel Gen12+, since 147 for NVIDIA under Wayland (gpuweb wiki); other GPUs behind flags                                                                       |
+| Chrome, Android            | Since 121 on Android 12+ with Qualcomm or ARM GPUs (Intel too, per the gpuweb wiki), since 139 on Android 16+ with Imagination; not yet with Samsung Xclipse and other GPUs |
+| Safari                     | Safari 26 or later, on macOS Tahoe 26, iOS 26, iPadOS 26 and visionOS 26 or later; not on Sequoia or Sonoma                                                                 |
+| Firefox, Windows           | Since 141                                                                                                                                                                   |
+| Firefox, macOS             | Apple silicon only: since 145 on macOS Tahoe, since 147 on older macOS; not on Intel Macs                                                                                   |
+| Firefox, Linux and Android | Not shipped (Nightly or flags only)                                                                                                                                         |
 
-`timestamp-query` is available in Chrome, quantised by default; Safari and Firefox support is
-unconfirmed, so frame timing must work without it. (Stage 0 noted a 100 microsecond step from
-secondary sources; in Chrome 156 on the Apple M5 every measured value is a multiple of
-65.536 microseconds, that is $2^{16}$ ns, Stage 3.)
+Against the Stage 0 survey (October 2026), the re-check corrected four things: Edge does not run
+on ChromeOS (Microsoft: Edge does not support Chromebooks; BCD's Edge data mirrors Chrome's);
+Firefox shipped on macOS Tahoe on Apple silicon in 145, two versions before older macOS; visionOS
+was missing; and Android with Imagination GPUs was not listed. The Safari row stands: Safari 26
+also installs on Sequoia and Sonoma, but a WebKit WebGPU engineer wrote in WebKit bug 299237 that
+`navigator.gpu` requires macOS Tahoe, iOS 26, visionOS 26 or later, and WebKit's
+`PlatformEnable.h` turns WebGPU on by default on macOS only from macOS 26. The NVIDIA clause is
+not in BCD, which lists only Intel Gen12+ on Linux; its sources are the gpuweb wiki ("NVIDIA
+(driver 535.183.01+) Wayland: 147") and Chrome's post for 147 and 148, which names modern NVIDIA
+drivers on Wayland without saying which of the two versions. Also from these sources: Chrome
+calls its Linux launch in 144 a careful rollout, so a given Chrome 144 or later on Intel Gen12+
+may not have WebGPU yet; on Windows on ARM64 Chrome's WebGPU is behind a flag per the gpuweb wiki;
+and WebKit turns WebGPU off in Lockdown Mode.
 
-**Fallback: no WebGL2 renderer in the MVP** (stretch goal, as proposed). Desktop Chrome, Edge,
-current Safari and Firefox on Windows and Apple Silicon cover most visitors. A WebGL2 port would be
-a second renderer, not a second shader: no compute shaders, a fragment-shader architecture, GLSL
-instead of WGSL, and its own parity tests. Unsupported browsers get a clear explanation, a short
-list of supported browsers, and a gallery of pre-rendered images.
+Sources, all fetched on 2026-11-02:
+
+- MDN browser-compat-data,
+  [`api/GPU.json`](https://github.com/mdn/browser-compat-data/blob/main/api/GPU.json) and
+  `api/GPUSupportedFeatures.json`.
+- gpuweb,
+  [Implementation Status](https://github.com/gpuweb/gpuweb/wiki/Implementation-Status) (wiki
+  revision of 2026-10-02).
+- Chrome for Developers: ["Chrome ships WebGPU"](https://developer.chrome.com/blog/webgpu-release)
+  (113) and "What's New in WebGPU" for
+  [120](https://developer.chrome.com/blog/new-in-webgpu-120),
+  [121](https://developer.chrome.com/blog/new-in-webgpu-121),
+  [144](https://developer.chrome.com/blog/new-in-webgpu-144) and
+  [147 and 148](https://developer.chrome.com/blog/new-in-webgpu-147-148).
+- Microsoft Learn,
+  ["Microsoft Edge Supported Operating Systems"](https://learn.microsoft.com/en-us/deployedge/microsoft-edge-supported-operating-systems).
+- WebKit:
+  ["WebKit Features in Safari 26.0"](https://webkit.org/blog/17333/webkit-features-in-safari-26-0/),
+  [bug 299237](https://bugs.webkit.org/show_bug.cgi?id=299237), and
+  [`Source/WTF/wtf/PlatformEnable.h`](https://github.com/WebKit/WebKit/blob/main/Source/WTF/wtf/PlatformEnable.h)
+  with `UnifiedWebPreferences.yaml` and `Source/WebGPU/WebGPU/HardwareCapabilities.mm`.
+- Mozilla: the Firefox
+  [141](https://www.firefox.com/en-US/firefox/141.0/releasenotes/),
+  [145](https://www.firefox.com/en-US/firefox/145.0/releasenotes/) and
+  [147](https://www.firefox.com/en-US/firefox/147.0/releasenotes/) release notes (148 to 159 add
+  no platform), Bugzilla 1992212 and 1993341 (fixed in 145 and 147), and the open bugs
+  [2004105](https://bugzilla.mozilla.org/show_bug.cgi?id=2004105) (Intel Macs) and
+  [2006676](https://bugzilla.mozilla.org/show_bug.cgi?id=2006676) (Linux); `dom/webgpu/Adapter.cpp`
+  at the 141, 145, 147 and 159 release tags.
+
+`timestamp-query` is optional in WebGPU, so frame timing must work without it (the page then uses
+its wall-clock path). Chrome has offered it since 121, quantised by default, but not on every
+adapter (the macOS CI runner's paravirtual GPU has none, section 5). BCD lists it in Safari 26
+(WebKit offers it only when the Metal GPU can sample timestamps, never on Intel GPUs) and not in
+Firefox, although Firefox's source has exposed it since 141 when wgpu reports it. This page has
+not been run in Safari or Firefox. (Chrome's announcement for 120 gives a resolution of 100
+microseconds, which Stage 0 had from secondary sources; in Chrome 156 on the Apple M5 every
+measured value is a multiple of 65.536 microseconds, that is $2^{16}$ ns, Stage 3.)
+
+**Fallback: no WebGL2 renderer in the MVP** (stretch goal, as proposed). Desktop Chrome and Edge,
+Safari 26, and Firefox on Windows and Apple silicon ship WebGPU (table above); no visitor
+statistics were consulted. A WebGL2 port would be a second renderer, not a second shader: no
+compute shaders, a fragment-shader architecture, GLSL instead of WGSL, and its own parity tests.
+Unsupported browsers get a clear explanation, a short list of supported browsers, and a gallery of
+pre-rendered images. The list (`src/ui/unsupported.ts`) follows the table above since b310128,
+with the Android row shortened to Qualcomm and ARM GPUs; until then the page showed the Stage 0
+list, which named Edge on ChromeOS.
 
 ## 5. CI and GPU testing
 
@@ -293,23 +354,36 @@ frames to a canvas and compares a screenshot with the clear colour.
   reported that it "dies partway through a run"; on macOS arm64 runners the new headless mode
   exposed an "Apple Paravirtual device" Metal adapter.
 
-If the macOS job fails for reasons that do not reproduce locally (no adapter, device loss, a
-runner image change), it becomes manual (`workflow_dispatch`) and `npm run test:gpu` on the
-local machine stays the source of truth. macOS arm64 runners are free for this public
-repository (section 9).
+In 4 of the first 17 runs on 2026-10-28 GitHub assigned no macOS runner and cancelled the job
+(above). Such a run is not green: re-run the cancelled job before relying on it, for example
+before a deploy. The job stays automatic; if cancellations become frequent, or the job fails for
+reasons that do not reproduce locally (no adapter, device loss, a runner image change), it can
+become manual (`workflow_dispatch`), with `npm run test:gpu` on the local machine as the source
+of truth. macOS arm64 runners are free for this public repository (section 9).
 
-## 6. Proposed targets
+## 6. Targets: proposed, tested and measured
 
-| Quantity                                                                                             | Brief's guess                   | Proposed                                   | Evidence                                                                           |
-| ---------------------------------------------------------------------------------------------------- | ------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------- |
-| Deflection, f64 library, $b$ = 1.02 to 100 $b_c$                                                     | $< 10^{-6}$ relative            | Keep $< 10^{-6}$                           | Reference methods agree to $10^{-11}$; Binet at $d\phi = 0.0125$: $8\times10^{-8}$ |
-| Deflection, f32 path, same range                                                                     | $< 10^{-3}$ relative            | $< 10^{-4}$ relative                       | Emulated $2.8\times10^{-6}$; margin for GPU arithmetic; confirm in Stage 2         |
-| Escape direction, f32, all directions outside $\lvert b/b_c - 1\rvert < 10^{-3}$, $r_o$ = 5 to 200 M | (new)                           | $\le 0.25$ px at 1080 rows, 60 degree FOV  | Emulated 0.052 px; 0.285 px with the pessimistic 2-ULP perturbation (section 3)    |
-| Capture or escape classification outside that band                                                   | (new)                           | Zero errors; f32 $b_c$ within $10^{-6}$    | 0 of 9000 per configuration; $2.4\times10^{-7}$                                    |
-| Step-limit hits                                                                                      | "investigate"                   | Zero, with a cap of 1000 steps             | 0 observed; longest ray 251 steps                                                  |
-| Shadow radius                                                                                        | 1 px or 0.5 %, whichever larger | Keep until Stage 1 measures the CPU render |                                                                                    |
-| Frame rate                                                                                           | 30 fps at 1920x1080 with disk   | Keep as target; measure in Stage 2 and 3   | Estimate only (section 3)                                                          |
-| Camera distance                                                                                      | 5 to 200 M, default 30 M        | See open question 2                        | Errors are within target at both ends                                              |
+"Proposed" is the Stage 0 proposal as recorded. Its evidence was the precision spike of section 3
+(for example 0 of 9000 rays misclassified per configuration and a longest ray of 251 steps). The
+Stage 0 check-in (section 9) recorded no decision on these targets; it decided open question 2,
+the camera distance (section 9, item 2). "Tolerance in the tests" is what the tests assert at
+Stage 6, and "Measured" is the worst value they found: Node-side test values from
+`npm run measure` at 8c374bd, the CPU shadow from `npm run render:cpu`, and GPU test values from
+`npm run test:gpu` re-run at 0123428 and at afd9fd5 on the M5 (headless Chrome 156.0.8078.48 and
+156.0.8078.74; the 13 tests that existed before Stage 6 gave the same values as their earlier
+runs). The frame-rate row is not a test: it is the Stage 3 benchmark. Details are in
+`docs/VALIDATION.md` and `docs/PERFORMANCE.md`.
+
+| Quantity                                                                                             | Brief's guess                   | Proposed                                   | Tolerance in the tests                                                                                                                                                                                                                    | Measured                                                                                                                                                                                                                                                                                           |
+| ---------------------------------------------------------------------------------------------------- | ------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Deflection, f64 library, $b$ = 1.02 to 100 $b_c$                                                     | $< 10^{-6}$ relative            | Keep $< 10^{-6}$                           | $10^{-6}$ relative for each integrator at its fine step ($d\phi = 0.005$ for Binet), $b$ = 1.01 to 1000 $b_c$ (`integrators.test.ts`)                                                                                                     | Binet RK4 $1.8\times10^{-8}$ (Cartesian RK4 $1.4\times10^{-10}$, leapfrog $7.3\times10^{-7}$); Binet at the CPU renderer's $d\phi = 0.0125$: $8.0\times10^{-8}$ over 1.02 to 100 $b_c$ (Stage 0 spike, section 3)                                                                                  |
+| Deflection, f32 path, same range                                                                     | $< 10^{-3}$ relative            | $< 10^{-4}$ relative                       | f32 emulation at the renderer steps: $10^{-3}$ relative, $b$ = 1.01 to 1000 $b_c$ (`integrators.test.ts`); GPU: $10^{-4}$ relative, $b$ = 1.02 to 100 $b_c$ (`parity.spec.ts`)                                                            | Emulated Binet $3.7\times10^{-4}$ over 1.01 to 1000 $b_c$ (section 3's table has $3.7\times10^{-4}$ at 1000 $b_c$, where $\alpha$ is small, and $2.8\times10^{-6}$ over 1.02 to 100 $b_c$); Cartesian RK4 $2.9\times10^{-4}$, leapfrog $7.8\times10^{-4}$; GPU $2.8\times10^{-5}$                  |
+| Escape direction, f32, all directions outside $\lvert b/b_c - 1\rvert < 10^{-3}$, $r_o$ = 5 to 200 M | (new)                           | $\le 0.25$ px at 1080 rows, 60 degree FOV  | GPU: 0.25 px ($2.4\times10^{-4}$ rad) against the f64 library, 6912 pixel-centre rays at 5, 30 and 200 M (`parity.spec.ts`)                                                                                                               | GPU 0.058 px ($5.6\times10^{-5}$ rad) over the 6196 that escape outside the band                                                                                                                                                                                                                   |
+| Capture or escape classification outside that band                                                   | (new)                           | Zero errors; f32 $b_c$ within $10^{-6}$    | Zero errors (f64 outside $\lvert b/b_c - 1\rvert < 10^{-6}$, f32 emulation outside $10^{-3}$, at 5, 30 and 200 M; GPU over the 6912 rays); $b_c$ by bisection within $10^{-6}$ (f64) and $10^{-4}$ (f32 emulation), all three integrators | 0 errors; $b_c$: Binet $4.1\times10^{-12}$ (f64) and $2.4\times10^{-7}$ (emulated f32), worst in emulated f32 leapfrog $6.1\times10^{-6}$. The f32 bisection test has used $10^{-4}$ since it was written (2de4b1f), not the proposed $10^{-6}$                                                    |
+| Step-limit hits                                                                                      | "investigate"                   | Zero, with a cap of 1000 steps             | Zero in the integrator, CPU render, GPU parity, robustness and validation tests                                                                                                                                                           | 0 everywhere, including 3296 GPU results at the hole, on the polar axis and at both distance limits (section 15)                                                                                                                                                                                   |
+| Shadow radius                                                                                        | 1 px or 0.5 %, whichever larger | Keep until Stage 1 measures the CPU render | 1 px or 0.5 %, whichever is larger, on the CPU render and on the GPU validation render                                                                                                                                                    | CPU at most 0.11 px; GPU 0.006 to 0.027 px at 5 to 200 M                                                                                                                                                                                                                                           |
+| Frame rate                                                                                           | 30 fps at 1920x1080 with disk   | Keep as target; measure in Stage 2 and 3   | None: benchmarked (`npm run bench:gpu`), not asserted                                                                                                                                                                                     | GPU time 5.31 ms for the 1920 x 1080 first pass with the disk and 12.78 ms for the anti-aliased image (headless Chrome 156.0.8078.48, timestamp queries; `npm run bench:gpu` on 2026-10-27, on the code of commit 8783558 as inferred in `docs/PERFORMANCE.md`); presented frame rate not measured |
+| Camera distance                                                                                      | 5 to 200 M, default 30 M        | See open question 2                        | Links clamp the distance to 5 to 200 M (`url-state.test.ts`); the shadow, parity and robustness tests run at both ends                                                                                                                    | The shadow, parity and robustness checks pass at both ends                                                                                                                                                                                                                                         |
 
 ## 7. Formulas from the brief: verified or corrected
 
@@ -320,7 +394,7 @@ Derivations and references are in `docs/PHYSICS.md`.
 | Horizon 2M, photon sphere 3M, ISCO 6M, $b_c = 3\sqrt3 M$                             | Verified (derivation; Bardeen, Press and Teukolsky 1972; tests)                                                                                                                                                                                                                                      |
 | $(du/d\phi)^2 = 1/b^2 - u^2(1-2Mu)$, $u'' + u = 3Mu^2$                               | Verified                                                                                                                                                                                                                                                                                             |
 | $\mathbf{x}'' = -3Mh^2\mathbf{x}/r^5$, $h$ conserved                                 | Verified. $\lambda$ is affine (scaled by $h/L$). Clarification: $\lvert\mathbf{x}'\rvert^2 = h^2(1/b^2 + 2M/r^3)$ is not constant, and the initial velocity must shrink the radial component of the view direction by $\sqrt{1-2M/r_o}$; a unit vector along the pixel direction gives the wrong $b$ |
-| $\alpha(b) = 2\int_0^{u_0} du/\sqrt{1/b^2 - u^2 + 2Mu^3} - \pi$                      | Verified (two independent methods agree to $10^{-15}$)                                                                                                                                                                                                                                               |
+| $\alpha(b) = 2\int_0^{u_0} du/\sqrt{1/b^2 - u^2 + 2Mu^3} - \pi$                      | Verified (two independent methods agree to $1.05\times10^{-15}$ relative at the test's values up to $1.1\,b_c$, `npm run measure`)                                                                                                                                                                   |
 | Weak field $\alpha \approx 4M/b$                                                     | Verified, with the next five coefficients (Keeton and Petters 2005)                                                                                                                                                                                                                                  |
 | Strong field, Bozza 2002                                                             | Verified: $\bar a = 1$, $\bar b = \ln[216(7-4\sqrt3)] - \pi \approx -0.4002$                                                                                                                                                                                                                         |
 | $\sin\psi_{sh} = (3\sqrt3 M/r_o)\sqrt{1-2M/r_o}$                                     | Verified (Perlick and Tsupko 2022, Synge 1966); the angle is $\pi - \arcsin$ inside $3M$                                                                                                                                                                                                             |
@@ -345,8 +419,11 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
   Functions for GPU Rendering", implemented here from the paper's description.
 - Blackbody colours use the CIE 1931 colour-matching fit of Wyman, Sloan and Shirley (2013) and
   the sRGB matrix and transfer function from the W3C CSS Color 4 sample code (constants only).
-- If the Stage 3 lookup-table experiment is adopted, credit Bruneton (2020) for precomputed
-  tables in a real-time black hole shader.
+- Precomputed tables in a real-time black hole shader (Bruneton 2020, section 1) were not
+  adopted: the Stage 3 lookup-table experiment was not run (section 12).
+- The overlay colours are the Okabe-Ito palette: M. Okabe and K. Ito (2002, modified 2008),
+  "Color Universal Design (CUD): how to make figures and presentations that are friendly to
+  colorblind people", https://jfly.uni-koeln.de/color/, Fig. 16 (`src/ui/overlay-style.ts`).
 
 ## 9. Decisions at the Stage 0 check-in (2026-10-26)
 
@@ -377,11 +454,15 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
 - **Star field.** A cube map would need `atan` for an equal-area warp, and WGSL allows large
   errors in it; lattice cells in direction space need only `floor`, integer hashing and chord
   distances. Truncating each star's profile at half a cell makes the 27-cell lookup seamless
-  even where the CPU and the GPU floor to different cells. No nebula band yet (optional in the
-  brief); it can come with the Stage 3 look.
+  even where the CPU and the GPU floor to different cells. No nebula band: optional in the brief
+  and not implemented.
 - **Colour.** The CIE 1931 tables are CC BY-SA 4.0, so instead of committing them the code uses
-  the Wyman-Sloan-Shirley analytic fit. Its chromaticity error against the CIE-derived Planckian
-  locus is at most 0.0002 from 6500 K up and 0.0046 at 1500 K.
+  the Wyman-Sloan-Shirley analytic fit; the tests quote four sample values of the dataset, with
+  its DOI and licence (`tests/unit/colour.test.ts`). The fit is within 0.0093 of those sample
+  values (tolerance 0.025). Its chromaticity differs from the CIE-derived Planckian locus by at
+  most 0.00023 at 6500 K (0.00011 at 10000 K and 20000 K), 0.0012 at 3000 K and 0.0046 at
+  1500 K, and from CIE illuminant A (2856 K) by 0.0013 (`npm run measure`; tolerance 0.002, and
+  0.005 at 1500 K).
 - **Disk defaults:** inner edge at the ISCO, outer edge at $20M$, 6500 K at the hottest radius,
   exposure 1, and opaque (opacity 1), which the user confirmed at the Stage 1 visual check-in
   after comparing it with a 0.6-opacity render.
@@ -421,7 +502,7 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
   to the canvas, whose backing store has the internal resolution, so nothing is resampled.
 - **Limits:** the internal resolution is CSS size x device pixel ratio, reduced to fit
   `maxTextureDimension2D` and a 3840 x 2160 pixel budget, keeping the aspect ratio. Everything else
-  fits the default limits by a wide margin (uniforms 128 bytes, colour table 32 KB, at most
+  fits the default limits by a wide margin (frame uniforms 160 bytes, colour table 32 KB, at most
   32 x 32 workgroups per tile), so the device is requested with default limits. `?maxdim=N` lowers
   the texture limit for testing; it can only reduce the size.
 - **Tiling and time budget:** 256 x 256 tiles, centre first, each submitted separately with its own
@@ -430,14 +511,17 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
   step cap, no single tile can run away.
 - **Device loss** shows a message with the reason and a Restart button that creates a new adapter
   and device. `device.destroy()` from the debug hook exercises this path in the tests.
-- **Unsupported browsers** get the reason, the supported browsers and versions (section 4), and
-  four 640 x 360 images from the CPU reference renderer (88 to 128 KB each, `npm run gallery`).
+- **Unsupported browsers** get the reason, the supported browsers and versions (the section 4
+  table, corrected on the page in b310128 after the Stage 6 re-check), and four 640 x 360 images
+  from the CPU reference renderer (88 to 128 KB each, `npm run gallery`).
 - **Measured** (`docs/VALIDATION.md` item 11, `docs/PERFORMANCE.md`): escape directions within
   0.058 px of the f64 reference over 6196 rays with no termination mismatches; deflection within
   $2.8\times10^{-5}$; a 1920 x 1080 frame without the disk in 6.2 ms of GPU time in headless
-  Chrome.
-- **Production build** already works (35 KB of JavaScript, 13 KB gzipped, hashed assets, relative
-  paths); the CSP and deployment come in Stage 5.
+  Chrome 156.0.8078.47 (Stage 2; Stage 3 measured 6.36 ms for the same first pass,
+  `docs/PERFORMANCE.md`).
+- **Production build** already worked in Stage 2 (35 KB of JavaScript, 13 KB gzipped at the time,
+  hashed assets, relative paths; current sizes in `docs/PERFORMANCE.md`); the CSP and deployment
+  came in Stage 5.
 
 ## 12. Stage 3 decisions
 
@@ -487,9 +571,10 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
   termination view in Stage 2). Anti-aliasing is off in the termination view and in validation
   renders, which must show single samples.
 - **Lookup-table experiment: not run.** The brief makes it optional and asks for it only if it
-  could show a measured benefit. Direct integration already meets the frame-rate target with a
-  wide margin: the 1920 x 1080 first pass with the disk takes 5.3 ms of GPU time against 33 ms for
-  30 frames per second, and the anti-aliased image is complete after 12.8 ms. A table of
+  could show a measured benefit. Direct integration leaves a wide margin in GPU time: the
+  1920 x 1080 first pass with the disk takes 5.3 ms of GPU time against the 33 ms of a frame at 30
+  frames per second, and the anti-aliased image needs 12.8 ms of GPU time (headless; the frame
+  rate in a visible window was not measured). A table of
   $r(\psi; b)$ curves would add an interpolation error that needs its own validation, most of it
   near $b_c$, where the curves are steepest. It can still be run if wanted.
 - **Measured** (`docs/VALIDATION.md` items 7 and 11, `docs/PERFORMANCE.md`): GPU images with the
@@ -560,7 +645,10 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
   or Alt are always left to the browser, toggles ignore auto-repeat, and Escape closes the most
   recently opened panel first. One key map (`src/ui/keymap.ts`) drives the handler, the canvas's
   `aria-keyshortcuts`, the key hints and the About table. Panels are bottom sheets, one at a time,
-  up to 760 CSS px wide; above that, two 22rem panels fit side by side below the toolbar and end above the readouts. Focus rings pair the accent with a dark ring so they read on any image; the view's ring is an element drawn above the canvas, because a canvas's own outline shadow is painted under its WebGPU content.
+  up to 760 CSS px wide; above that, two 22rem panels fit side by side below the toolbar and end
+  above the readouts. Focus rings pair the accent with a dark ring so they read on any image; the
+  view's ring is an element drawn above the canvas, because a canvas's own outline shadow is
+  painted under its WebGPU content.
 - **Photosensitivity.** The two toggles that change the brightness of the whole image (disk and
   termination view) share one limiter, whether they come from keys, checkboxes or the URL: a
   change from rest applies at once, and later ones are coalesced so that consecutive changes are
@@ -584,7 +672,9 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
 - **Screen readers.** The canvas is an image whose accessible name summarises the drawn view once
   it is complete; announcements go to one polite live region. NVDA and JAWS in browse mode may not
   pass arrow keys to the canvas; the Camera buttons are the documented path. No screen reader
-  has been tested by hand yet.
+  has been tested by hand: the VoiceOver and Safari touch checks requested at the Stage 4
+  check-in were not reported. Touch is tested only in Chrome's mobile emulation
+  (`tests/e2e/touch.spec.ts`, 390 x 844 CSS px).
 
 ## 14. Stage 5 decisions
 
@@ -597,7 +687,8 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
   for every file (measured on other github.io sites), so a hash would buy no caching. What hashing
   does buy here: names change exactly when content changes, and `dist/` follows one rule that the
   build checks. `PUBLIC_FILES` in `tools/dist-rules.ts` lists what may sit in `public/` (only
-  `favicon.svg`); Stage 6 adds the social preview image to it on purpose.
+  `favicon.svg`; the social preview image would join it, but it waits for the owner's pick and
+  the deploy, section 15).
 - **No modulepreload polyfill** (`build.modulePreload: { polyfill: false }`). The build is one
   chunk with no modulepreload links, so the polyfill had nothing to do, and every browser with
   WebGPU supports modulepreload natively (browser-compat-data: Chrome 66, Firefox 115, Safari 17,
@@ -693,8 +784,8 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
   (`--enable-unsafe-webgpu --use-webgpu-adapter=swiftshader`, on Linux with Chrome's Vulkan
   driver, below; with a 60 s expect timeout). The browser is always the installed Google Chrome
   (`channel: 'chrome'`), so nothing is downloaded. The offline test uses its own port, 4174.
-  `@smoke` marks 14 page tests that cover loading, keyboard control, the unsupported page, the
-  URL state with hostile input, About, the Validation panel and saving.
+  `@smoke` marks 14 page tests that cover loading, keyboard control, device loss, the unsupported
+  page, the URL state with hostile input, About, the Validation panel and saving.
 - **CI** (`.github/workflows/ci.yml`) runs on every push to `main`, on pull requests and by hand,
   in three jobs on pinned runner labels (`ubuntu-24.04`, `macos-15`; the `-latest` labels move):
   - `checks` (Ubuntu): typecheck, lint, format, the Vitest suites and `npm run build` with its
@@ -747,6 +838,95 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
   - the Pages workflow has never run: the owner starts it, after setting Settings > Pages >
     Source to GitHub Actions. So the Run workflow button, the `github-pages` environment's branch
     rule and the response headers Pages sends for this site are unconfirmed;
-  - Safari and Firefox have not run against the policy and Trusted Types: Safari is checked by
-    hand at the Stage 5 check-in, and Firefox is not installed on the development machine;
+  - Safari and Firefox have not run against the policy and Trusted Types: a manual Safari check
+    was requested at the Stage 5 check-in and no result has been reported, and Firefox is not
+    installed on the development machine;
+  - screen readers and real touch devices: the VoiceOver and Safari touch checks requested at the
+    Stage 4 check-in were not reported;
   - what GitHub Pages serves compressed, and whether builds are byte-identical across machines.
+
+## 15. Stage 6 decisions
+
+- **Measured values come from the tests.** The Stage 6 design planned a separate tool,
+  `npm run measure:physics`, to print the Node-side numbers at settings shared with the tests.
+  Instead the unit tests pass values they check against tolerances through `measured()`
+  (`tests/helpers/measured.ts`), which returns each unchanged and keeps the worst value per key,
+  and `npm run measure` runs Vitest with `MEASURE=1` and prints, for each key, the worst value,
+  whether that is the largest or the smallest, and the test file, but not the tolerance
+  (`tools/measured-report.ts`). 0ff1b63 did this for the orbit, deflection, integrator, redshift
+  and shadow tests (`analytic.test.ts`, `integrators.test.ts`), the camera test and the contrast
+  test; 8c374bd added the ray-tracing, lensing, overlay-geometry, star-field, numerics
+  (Gauss-Legendre and Carlson) and colour tests. Not every check is recorded: for example the
+  disk-crossing radii and the plane deviation of the Cartesian path in `raytrace.test.ts` are
+  not, and the GPU tests record nothing. Why: the printed numbers are the values the tests check,
+  at the tests' own settings, so they cannot drift from the tests, and there is no second copy of
+  the settings to keep in step. `docs/VALIDATION.md` is written by hand from that output, the GPU
+  test logs (`npm run test:gpu`) and `npm run render:cpu`. Numbers in these documents that cite
+  `npm run measure` come from its output at 8c374bd (Apple M5, macOS 27.0, Node 25.6.1), which
+  repeats every value printed at 0ff1b63 unchanged.
+- **The deflection rows span the brief's range.** The integrated deflection test (item 2) had
+  rows at 1.02, 1.1, 2, 10 and 100 $b_c$; 7d7f9b1 added 1.01 and 1000 $b_c$, the ends of the
+  range in brief item 2. No tolerance changed. Worst values over the range (`npm run measure`):
+  in f64 at each integrator's fine step, Binet RK4 $1.8\times10^{-8}$, Cartesian RK4
+  $1.4\times10^{-10}$ and leapfrog $7.3\times10^{-7}$ (tolerance $10^{-6}$); in the f32 emulation
+  at the renderer steps, $3.7\times10^{-4}$, $2.9\times10^{-4}$ and $7.8\times10^{-4}$ (tolerance
+  $10^{-3}$). The GPU deflection test still covers 1.02 to 100 $b_c$ (section 6).
+- **A GPU test for robustness (brief item 10).** Item 10 was checked only in Node
+  (`tests/unit/raytrace.test.ts`, and the f32 emulation in `tests/unit/integrators.test.ts`).
+  `tests/gpu/robustness.spec.ts` (0123428) sends rays through the shipped WGSL: one aimed at the
+  exact centre of the hole and one straight away from it; eight from 30 M on the polar axis,
+  straight out, straight in, and tilted by $10^{-12}$, by the shader's radial threshold
+  $10^{-6}$ and by $10^{-5}$; and 21 x 13 rays through the pixel corners of a 20 x 12 image, from
+  edge to edge and through the exact centre, from cameras at 5 M and 200 M at elevations 20, 90
+  and -90 degrees with the automatic field of view. Every set runs with and without the default
+  disk. All 3296 results are finite and none reached the step limit; the ray at the hole is
+  captured with no disk crossing, and on the polar axis the ray straight out escapes and the ray
+  straight in is captured. The GPU suite now has 14 tests; the re-runs at 0123428 and afd9fd5 on
+  the M5 (headless Chrome 156.0.8078.48 and 156.0.8078.74) passed all 14, and the 13 earlier tests
+  logged the same values as before.
+- **The README image is a CPU reference render.** `docs/images/hero.png` shows the page's opening
+  view: 30 M, azimuth 0, elevation 12 degrees, a 60 degree field of view, the default disk, the
+  star sky and tone mapping, at 1600 x 900 with 3 x 3 samples per pixel. `npm run render:hero`
+  (`tools/render-hero.ts`, views in `tools/hero-views.ts`, afd9fd5) rendered it in 75.8 s (75.0 s
+  for the identical image in the candidates run below) on one thread of the M5 in Node 25.6.1:
+  377,204 bytes, with none of the 12,960,000 samples at the step limit or non-finite. Why the CPU
+  renderer: its bytes are deterministic, it needs no GPU or browser, and it is the reference the
+  page is tested against (at 160 x 90 the GPU images with
+  the disk are within 1 level of it in five of six views, and at 5 M 3 of 43,200 channels differ
+  by more than 2 levels, `docs/VALIDATION.md` item 11). The README caption says it is a CPU
+  render. Each candidate view is an orbit the page can show, quantised like the page's own and
+  rendered with the page's scene (`tests/unit/hero-views.test.ts`); this one opens on the page at
+  `#v=1&r=30&az=0&el=12&disk=1&aa=1&view=colour&ov=none&val=0`. The script writes nothing and
+  exits 1 if a sample is not finite or the file is over 600,000 bytes.
+- **Four candidates; the owner's choice is pending.** `npm run render:hero -- --candidates`
+  renders four views at 1600 x 900 and at 1280 x 640 into the gitignored `artifacts/stage6/`,
+  with a contact sheet, in 6 min 58 s for the whole command on the M5. At 1600 x 900: the default
+  view above (377,204 bytes, 75.0 s), nearly edge-on at 30 M and elevation 2 degrees (446,638
+  bytes, 64.0 s), close at 5 M and elevation 20 degrees with the automatic 120 degree field of
+  view (568,429 bytes, 67.7 s), and wide at 60 M and elevation 8 degrees (402,160 bytes, 60.1 s).
+  Every image has 0 step-limit and 0 non-finite samples. The owner may pick another view at the
+  Stage 6 check-in; until then `HERO_VIEW` in `tools/hero-views.ts` is the default view.
+- **No social preview or Open Graph tags in Stage 6.** `npm run render:hero -- --social` writes
+  `public/social-preview.png` at 1280 x 640, GitHub's recommended size for a repository's social
+  preview (248,032 bytes in 41.7 s for the default view in the candidates run), but the image and
+  the tags wait. Why: the owner picks the view first, and an Open Graph `og:image` needs an
+  absolute URL, which for this site will not answer until the first deploy. Until the image is
+  listed in `PUBLIC_FILES`, the dist rules reject it (section 14), and a plain
+  `npm run render:hero` writes only the README image. For the same reason the README's line for
+  the live page is a placeholder until the deploy, not a link.
+- **CHANGELOG.** `CHANGELOG.md` follows Keep a Changelog 1.1.0 and Semantic Versioning 2.0.0,
+  with one Unreleased section that has "Added" and one "Fixed" entry. There is no version heading:
+  nothing is tagged, `package.json` says 0.0.0 and nothing is deployed, so a version would
+  announce a release that has not happened, and "Changed" would describe differences from a
+  release that does not exist. The one "Fixed" entry is the browser list on the page shown
+  without WebGPU (b310128): that page had shown the Stage 0 list on `main` since eeef81c, which
+  named Edge on ChromeOS. When the owner tags the first release, the section gets its version and
+  date, and a new empty Unreleased section opens.
+- **Open for the owner:** four values of the CIE 1931 dataset (CC BY-SA 4.0) are quoted as test
+  expectations in this MIT-licensed repository, with the dataset's DOI and licence
+  (`tests/unit/colour.test.ts`). They are treated as insubstantial, but brief section 11 leaves
+  unclear licence questions to the owner, so this needs the owner's confirmation.
+- **Not verified:** Safari, Firefox and Edge (the page has run only in Google Chrome: 156 on the
+  M5, 152 on the macOS runner, 155 and 156 with SwiftShader on the Ubuntu runner); VoiceOver and
+  other screen readers; real touch devices (only Chrome's mobile emulation); the deployed site,
+  including the headers GitHub Pages sends for it; the frame rate presented in a visible window.
