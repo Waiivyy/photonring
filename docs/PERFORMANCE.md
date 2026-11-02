@@ -1,8 +1,13 @@
 # Performance
 
 Every number here was measured. Machine for all of them: Apple M5 (10-core GPU), 24 GB, macOS
-27.0, except the CI run times, which name their GitHub runners. Re-run with the commands given;
-results depend on the browser, the power state and what else the GPU is doing.
+27.0, except the CI run times, which name their GitHub runners. Every browser number is from
+Google Chrome; Safari, Firefox and Edge were not measured. The macOS CI runner has no
+`timestamp-query`, so CI gives no GPU times on a hardware GPU; the only GPU times from CI are the
+SwiftShader ones at the end of the CI section. The power source, Low Power Mode and background
+load were not recorded. Re-run with the commands given (two measurements, marked where they
+appear, have no script in the repository); results depend on the browser, the power state and
+what else the GPU is doing.
 
 ## GPU renderer (Stage 3)
 
@@ -12,10 +17,17 @@ $6M$ to $20M$), $d\phi = 0.05$, step cap 1000, 256 x 256 tiles submitted back to
 mapping on. Each cell is the median of nine runs after a warm-up run. All times are GPU
 milliseconds from timestamp queries.
 
+Measured on 2026-10-27 on the code of commit 8783558 (inferred: `artifacts/stage3/benchmark.json`
+was written 16 s before that commit). The image path changed afterwards only in two refactors
+(6def8d9, the termination colours from one constant; bde3726, tile submission) and was not
+re-measured. The harness renders offscreen at the stated sizes.
+
 Stages of one image (section 12 of `docs/DESIGN.md`): the **first pass** traces one sample per
 pixel; **anti-aliasing** adds a 3 x 3 grid of samples where the image needs it; a **preview** is
 a whole frame at reduced resolution, shown while the view changes when a full-resolution first
-pass does not fit the page's 12 ms frame budget.
+pass does not fit the page's 12 ms frame budget. **Full image** is the sum of the first-pass and
+anti-aliasing medians. **Frame while moving** is derived, not measured: the page's rule
+(`choosePreviewScale` with the 12 ms budget) applied to the measured first pass.
 
 Default view (30 M, elevation 12 degrees, 60 degree field of view):
 
@@ -32,25 +44,28 @@ Default view (30 M, elevation 12 degrees, 60 degree field of view):
 
 Other views, disk on:
 
-| View                                | Resolution  | First pass | Anti-aliasing | Refined pixels | Full image |
-| ----------------------------------- | ----------- | ---------- | ------------- | -------------- | ---------- |
-| Close: 5 M, 20 degrees, 120 degrees | 1920 x 1080 | 6.23       | 14.35         | 12.1 %         | 20.58      |
-| Close: 5 M, 20 degrees, 120 degrees | 3840 x 2160 | 23.20      | 42.99         | 9.1 %          | 66.19      |
-| Far: 200 M, 12 degrees, 60 degrees  | 1920 x 1080 | 6.62       | 7.80          | 7.7 %          | 14.42      |
-| Far: 200 M, 12 degrees, 60 degrees  | 3840 x 2160 | 25.43      | 21.63         | 4.3 %          | 47.05      |
+| View                                | Resolution  | First pass | Anti-aliasing | Refined pixels | Full image | Frame while moving |
+| ----------------------------------- | ----------- | ---------- | ------------- | -------------- | ---------- | ------------------ |
+| Close: 5 M, 20 degrees, 120 degrees | 1920 x 1080 | 6.23       | 14.35         | 12.1 %         | 20.58      | full resolution    |
+| Close: 5 M, 20 degrees, 120 degrees | 3840 x 2160 | 23.20      | 42.99         | 9.1 %          | 66.19      | preview 1/2        |
+| Far: 200 M, 12 degrees, 60 degrees  | 1920 x 1080 | 6.62       | 7.80          | 7.7 %          | 14.42      | full resolution    |
+| Far: 200 M, 12 degrees, 60 degrees  | 3840 x 2160 | 25.43      | 21.63         | 4.3 %          | 47.05      | preview 1/2        |
 
 The full table (every view, disk on and off, four resolutions) is printed by the benchmark and
 saved to `artifacts/stage3/benchmark.json`.
 
 What the numbers mean:
 
-- **Frame-rate target** (30 frames per second at 1920 x 1080 with the disk): met with a wide
-  margin in this setting. While the view changes, each frame is a full-resolution first pass,
-  5.3 ms of GPU time; the page is then limited by the display's refresh rate, not by the GPU.
-  The anti-aliased image is complete 12.8 ms of GPU time after the view stops, spread over two
-  or three frames by the budget.
-- **The disk makes the first pass cheaper**: an opaque disk ends many rays at their first
-  crossing.
+- **Frame-rate target** (30 frames per second at 1920 x 1080 with the disk, 33 ms per frame).
+  What was measured is GPU time, not frames: while the view changes, each frame is a
+  full-resolution first pass, 5.31 ms of GPU time in this setting. Once the view has been still
+  for the page's 120 ms settle time, the full-resolution first pass and the anti-aliasing (12.78
+  ms of GPU time together) are spread over frames by the 12 ms budget. The frame rate in a
+  visible browser window, and how many frames the refinement takes, were not measured.
+- **The disk changes the first pass's cost by view.** An opaque disk ends many rays at their
+  first crossing: at 1920 x 1080 the first pass is cheaper with the disk in the default view
+  (5.31 against 6.36 ms) and in the close view (6.23 against 6.36 ms), but dearer in the far view
+  (6.62 against 5.96 ms). The other three resolutions in `benchmark.json` show the same pattern.
 - **Adaptive against uniform anti-aliasing.** Refining every pixel (uniform 3 x 3
   supersampling) takes 10.75, 40.37, 70.12 and 155.39 ms for the four resolutions of the default
   view with the disk, against 2.75, 7.47, 10.62 and 20.19 ms.
@@ -71,11 +86,17 @@ Caveats:
 
 ## Overlays and the Validation panel (Stage 4)
 
-Apple M5, macOS 27.0, Chrome 156 (headless), `npm run bench:gpu`.
+Apple M5, macOS 27.0, Chrome 156.0.8078.48 (headless), `npm run bench:gpu`, except the one-off
+measurement that gives its own setup below. Measured on 2026-10-27 (shadow measurement, code of
+commit 5decbee) and 2026-10-28 (ring overlays, code of commit 106e9e3), inferred from the times of
+the result files. Neither was re-measured: the classification later also counts white pixels that
+the termination render captured (2a2b0f3), and the ring computation has not changed since (f7714e6
+only added a refresh of the overlays that runs no solver slice).
 
 **Shadow measurement** (`tests/bench/validation.spec.ts`): two 1024 x 1024 passes per
 measurement, median of 9 after a warm-up. Pass times are GPU time from timestamp queries;
-readback (`mapAsync`) and classification (in the page) are wall-clock.
+readback (`mapAsync`) and classification (in the page) are wall-clock, from `performance.now()`,
+whose values here come in steps of 0.1 ms; that limits the readback figures (0.6 to 0.7 ms).
 
 | Distance | Colour pass ms | Termination pass ms | Readback ms | Classification ms |
 | -------- | -------------- | ------------------- | ----------- | ----------------- |
@@ -85,11 +106,15 @@ readback (`mapAsync`) and classification (in the page) are wall-clock.
 
 - Classification first decoded each half float with arithmetic: 20.7, 25.7 and 26.2 ms at the
   three distances. Decoding through a table of all 65,536 values brought it to 5.1 to 5.8 ms
-  (identical counts). Pass times vary between runs by up to about 1 ms (the first run measured
+  (identical counts). Pass times vary between runs by up to about 1.4 ms (the first run measured
   4.46, 4.98 and 4.26 ms for the colour pass).
-- In the page (1280 x 720 window, 5 loads per distance), the panel's wall-clock time from request
-  to result, `stats().validationMs`, has a median of 33.8 ms at 5 M, 38.1 ms at 30 M and 27.8 ms
-  at 200 M; it includes waiting for the GPU queue and is measured only while the panel is open.
+- A one-off measurement on 2026-10-28 on the code of commit 106e9e3 (inferred from the file
+  times), made with a local Playwright script that is not in the repository, so it cannot be
+  re-run from it, against the Vite dev server in headless Google Chrome 156 (patch version not
+  recorded by that run): in the page (1280 x 720 window, 5 loads per distance), the panel's
+  wall-clock time from request to result, `stats().validationMs`, has a median of 33.8 ms at 5 M,
+  38.1 ms at 30 M and 27.8 ms at 200 M; it includes waiting for the GPU queue and is measured only
+  while the panel is open.
 - Memory while the panel is open: an 8 MB `rgba16float` render and a 16 MiB readback buffer,
   freed when it closes.
 
@@ -103,6 +128,9 @@ from the cache.
 | Close: 5 M, 20 deg    | 51.9                              | 163                           | 298                         |
 | Far: 200 M, 12 deg    | 40.4                              | 130                           | 266                         |
 
+- All three are wall-clock. The first two come from `performance.now()` in the page; the key
+  press column is timed in the test process with `Date.now()` and includes Playwright's polling
+  for the drawn state.
 - The computation runs in slices of 8 ms per frame after the 120 ms settle time. With 4 ms slices
   the same benchmark measured 50.0, 46.8 and 53.0 ms of computation and 247, 246 and 230 ms from
   the settle time to the rings, just under the 250 ms at which the design would have added a
@@ -115,22 +143,24 @@ from the cache.
   rings at 2, 3 and 6 M, sweeps up to $4\pi$), and one curve 8.4 ms on average over 336 curves
   (7 distances, 12 elevations, 4 curves each), with at most 513 vertices.
 
-## Download size (Stage 5)
+## Download size (Stage 6)
 
 `npm run build`, then `npm run size` (Node 25.6.1; gzip level 9 and brotli quality 11 from
-`node:zlib`). Bytes of the build at commit ea86cf4 (the bundle is the same from d491550 on):
+`node:zlib`). Bytes of the build at commit b310128, which changed the browser list of the page
+for browsers without WebGPU. The Stage 6 comment change in `src/physics/colour.ts` builds to the
+same files, byte for byte (checked by building it).
 
 | Files                  | Raw     | gzip    | brotli  |
 | ---------------------- | ------- | ------- | ------- |
-| JS (one file)          | 102,151 | 36,091  | 32,212  |
+| JS (one file)          | 102,412 | 36,199  | 32,247  |
 | CSS (one file)         | 5,917   | 1,926   | 1,648   |
-| `index.html`           | 887     | 488     | 348     |
+| `index.html`           | 887     | 485     | 348     |
 | `favicon.svg`          | 233     | 168     | 143     |
 | Gallery PNGs (4 files) | 408,789 | 408,411 | 408,335 |
-| Everything in `dist/`  | 517,977 | 447,084 | 442,686 |
+| Everything in `dist/`  | 518,238 | 447,189 | 442,721 |
 
 With WebGPU the page loads `index.html`, the JS and the CSS (and possibly the favicon):
-108,955 bytes, 38,505 with gzip. The gallery images load only on the page for browsers without
+109,216 bytes, 38,610 with gzip. The gallery images load only on the page for browsers without
 WebGPU. What GitHub Pages actually sends compressed was not measured. There is no size budget.
 
 ## CI run times (Stage 5)
@@ -157,15 +187,42 @@ runs, so these are single samples, not typical values. The Ubuntu runners vary a
 later runs started within seven minutes, six took 5.4 to 6.3 min for the 14 smoke tests and two
 took 2.8 to 2.9 min.
 
-On the Ubuntu runner with SwiftShader, the default view at 1280 x 720, zoomed out to 33 M, took
-4349.4 and 4502.5 ms of GPU time for the first pass and 4818.0 and 5090.8 ms for anti-aliasing
-(timestamp queries, read from the page in the two attempts of one test in run B). On the M5's GPU
-the full image of the default view at the larger 1920 x 1080 takes 12.78 ms (table above). In 4 of
-the first 17 runs on 2026-10-28 GitHub assigned no macOS runner within 15 to 25 minutes and
-cancelled the job.
+On the Ubuntu runner with SwiftShader, in Chrome 156.0.8078.47, the default view at 1280 x 720,
+zoomed out to 33 M, took 4349.4 and 4502.5 ms of GPU time for the first pass and 4818.0 and
+5090.8 ms for anti-aliasing (timestamp queries, read from the page in the two attempts of one
+test in run B). On the M5's GPU the full image of the default view at the larger 1920 x 1080
+takes 12.78 ms (table above). In 4 of the first 17 runs on 2026-10-28 GitHub assigned no macOS
+runner within 15 to 25 minutes and cancelled the job.
 
 ## CPU reference renderer
 
 `npm run render:cpu`: Node 25.6.1, one thread, f64, $d\phi = 0.0125$. A 320 x 180 image with 3 x 3
 samples (518,400 rays) takes 1.0 s without gravity and 2.4 to 3.5 s with the black hole, with or
 without the disk. The 640 x 360 gallery images (2.07 million rays each) take 9 to 14 s.
+
+### README image (CPU reference renderer)
+
+`npm run render:hero` (`tools/render-hero.ts`, views in `tools/hero-views.ts`, commit afd9fd5),
+measured on 2026-10-28: Node 25.6.1, one thread, f64, $d\phi = 0.0125$, at most 4000 steps per
+ray, 3 x 3 samples per pixel, the page's scene (star sky, the default disk, exposure 1, tone
+mapping) and its automatic field of view. `docs/images/hero.png` is the first row, the page's
+opening view (`#v=1&r=30&az=0&el=12&disk=1&aa=1&view=colour&ov=none&val=0`). All eight rows come
+from one run of `npm run render:hero -- --candidates`, which writes them to the gitignored
+`artifacts/stage6/`; the 1280 x 640 images are candidates for a social preview, which is not in
+the build.
+
+| Candidate            | Distance, elevation, field of view | Size       | Time   | PNG bytes |
+| -------------------- | ---------------------------------- | ---------- | ------ | --------- |
+| `01-hero-default`    | 30 M, 12 degrees, 60 degrees       | 1600 x 900 | 75.0 s | 377,204   |
+| `02-hero-edge-on`    | 30 M, 2 degrees, 60 degrees        | 1600 x 900 | 64.0 s | 446,638   |
+| `03-hero-close-5M`   | 5 M, 20 degrees, 120 degrees       | 1600 x 900 | 67.7 s | 568,429   |
+| `04-hero-wide-60M`   | 60 M, 8 degrees, 60 degrees        | 1600 x 900 | 60.1 s | 402,160   |
+| `01-social-default`  | 30 M, 12 degrees, 60 degrees       | 1280 x 640 | 41.7 s | 248,032   |
+| `02-social-edge-on`  | 30 M, 2 degrees, 60 degrees        | 1280 x 640 | 35.9 s | 284,740   |
+| `03-social-close-5M` | 5 M, 20 degrees, 120 degrees       | 1280 x 640 | 39.7 s | 352,565   |
+| `04-social-wide-60M` | 60 M, 8 degrees, 60 degrees        | 1280 x 640 | 33.8 s | 251,822   |
+
+A 1600 x 900 image traces 12,960,000 samples and a 1280 x 640 one 7,372,800; in all eight, every
+sample was finite and none reached the step limit. The eight images and a contact sheet took
+6 min 58 s in all. A separate `npm run render:hero` wrote `docs/images/hero.png` in 75.8 s, with
+the same bytes as `01-hero-default` (identical SHA-256).
