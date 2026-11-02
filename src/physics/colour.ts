@@ -1,5 +1,5 @@
 // Blackbody colour for the disk and the stars, in linear sRGB.
-// - Planck's law with the second radiation constant c2 = 1.438776877e-2 m K (exact, CODATA).
+// - Planck's law with c2 = 1.438776877e-2 m K (exact as hc/k; 10 significant digits, CODATA).
 // - CIE 1931 2-degree colour-matching functions: the multi-lobe piecewise Gaussian fit of Wyman,
 //   Sloan and Shirley (2013), JCGT 2(2), eq. (4) and table 1.
 // - XYZ to linear sRGB: the matrix of the W3C CSS Color Module Level 4 sample code (D65), which

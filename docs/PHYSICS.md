@@ -1,9 +1,11 @@
 # Physics specification and derivations
 
 Every formula the code relies on is derived here, checked against a primary source, and covered by
-a test in `tests/unit/`. References at the end list only sources whose text was read (journal
-scans, arXiv full text, publisher or DLMF pages). Where a source could not be confirmed, this
-document says so.
+a test in `tests/`. The references at the end were read in full or at the cited pages (journal
+scans, arXiv full text, publisher, DLMF, NIST, CIE and W3C pages), except Darwin (1959), Figueroa
+(1995) and Lindquist (1966), whose entries say so, and IEC 61966-2-1, named only as the basis of
+the CSS Color 4 sample code. Papers read on arXiv are cited with the equation numbers of the arXiv
+version their entry names; the journal versions were not compared.
 
 ## 1. Conventions
 
@@ -29,9 +31,10 @@ $$u'^2 = P(u) \equiv \frac{1}{b^2} - u^2 + 2Mu^3, \qquad u'' + u = 3Mu^2 .$$
 
 **Photon sphere and $b_c$.** Turning points satisfy $V(r) = 1/b^2$ with the photon potential
 $V(r) = (1-2M/r)/r^2$. $V'(r) = 0$ at $r = 3M$, $V(3M) = 1/(27M^2)$, so $b_c = 3\sqrt{3}\,M
-\approx 5.196\,M$. $V''(3M) < 0$: the circular null orbit is a maximum of $V$ and is unstable.
-Equivalently $P(1/3M) = P'(1/3M) = 0$ at $b = b_c$ (a double root). Tested numerically by a
-golden-section search for the maximum of $V$.
+\approx 5.196\,M$. The photon orbit is Bardeen, Press and Teukolsky (1972), eq. (2.18) with
+$a = 0$, and $b_c$ is Perlick and Tsupko (2022), eq. (8). $V''(3M) < 0$: the circular null orbit
+is a maximum of $V$ and is unstable. Equivalently $P(1/3M) = P'(1/3M) = 0$ at $b = b_c$ (a double
+root). Tested numerically by a golden-section search for the maximum of $V$.
 
 **Instability rate.** Linearising $u'' = 3Mu^2 - u$ about $u = 1/(3M)$ gives
 $\delta u'' = (6Mu - 1)\,\delta u = \delta u$: perturbations grow as $e^{\phi}$, a factor
@@ -48,7 +51,8 @@ render because the disk ends at the ISCO, outside $3M$.
 
 ## 3. Massive particles: circular orbits and the ISCO
 
-For circular timelike orbits, $L^2 = Mr^2/(r-3M)$ (`circularOrbitAngularMomentumSq`), and
+For circular timelike orbits, $L^2 = Mr^2/(r-3M)$ (`circularOrbitAngularMomentumSq`; Bardeen,
+Press and Teukolsky 1972, eq. 2.13 with $a = 0$), and
 
 $$\frac{d L^2}{dr} = \frac{M r (r-6M)}{(r-3M)^2},$$
 
@@ -127,6 +131,9 @@ $\psi$ from the radial direction satisfies
 
 $$\sin\psi = \frac{b}{r}\sqrt{1-\frac{2M}{r}} .$$
 
+This is Synge (1966), eqs. (8) to (11), in his variables $\rho = r/2M$ and $\beta = 2M/b$: his
+eq. (11), $\sin^2\psi = (\rho - 1)/(\rho^3\beta^2)$, expands to $(b^2/r^2)(1 - 2M/r)$.
+
 **Shadow.** Rays with $b < b_c$ traced backwards are captured, so the shadow edge is at
 
 $$
@@ -139,7 +146,8 @@ $r^3 - 27M^2r + 54M^3 = (r-3M)^2(r+6M)$; its sign selects $\psi_{sh} > \pi/2$ in
 sphere, and `shadowAngularRadius` uses `atan2` of the pair, which stays accurate at $r_o = 3M$.
 This matches Perlick and Tsupko (2022), eqs. (6) and (7), and Synge's escape-cone result (1966,
 eq. 14; Synge treats emitters inside $3M$). It differs from the naive $\arcsin(b_c/r_o)$: at
-$r_o = 30M$ it is $9.633°$ against $9.974°$, 3.5 % smaller. The brief's formula is confirmed.
+$r_o = 30M$ it is $9.633°$ against $9.974°$, 3.4 % smaller (`npm run measure`). The brief's
+formula is confirmed.
 
 **Local direction to Euclidean velocity.** A local unit direction $d$ has coordinate velocity
 proportional to $(\sqrt{1-2M/r}\,d_{\hat r},\ d_{\hat\theta}/r,\ d_{\hat\phi}/(r\sin\theta))$, so
@@ -357,27 +365,32 @@ U_{12} = \frac{X_1X_2Y_3 + Y_1Y_2X_3}{x-y},\quad U_{13} = \frac{X_1X_3Y_2 + Y_1Y
 U_{14} = \frac{X_1Y_2Y_3 + Y_1X_2X_3}{x-y},
 $$
 
-which is DLMF 19.29.4 with the fourth factor set to 1. $R_F$ uses Carlson's duplication algorithm
-(Carlson 1995, with his check values as tests). Sanity check: as $b \to \infty$ the formula
-reduces to $\frac{2}{\sqrt2}R_C(\tfrac12, 1) = \pi/2$ for $M = 1$, the straight-line value.
+which is DLMF 19.29.4 with the fourth factor set to 1 and the $U_{\alpha\beta}$ of 19.29.5 (DLMF
+release 1.2.8). $R_F$ uses Carlson's duplication algorithm (Carlson 1995, with his check values as
+tests). Sanity check: as $b \to \infty$ the formula reduces to
+$\frac{2}{\sqrt2}R_C(\tfrac12, 1) = \pi/2$ for $M = 1$, the straight-line value.
 
 Darwin (1959) is the classic source for the exact deflection, but its full text could not be
-read, so the elliptic form here is cited to DLMF and Carlson instead; Iyer and Petters (2007,
-eq. 8) give an equivalent closed form in Legendre integrals.
+read, so the elliptic form here is cited to DLMF and Carlson instead; Luminet (1979, eq. 6) and
+Iyer and Petters (2007, eq. 8) give equivalent closed forms in Legendre integrals.
 
-**Agreement (measured, Apple M5, Node 25.6.1).** Relative difference at most $7.5 \times 10^{-16}$
-for $1 + 10^{-10} \le b/b_c \le 1.1$; at large $b$ the relative difference grows only because
-$2I - \pi$ cancels: about $2 \times 10^{-15}$ rad absolute, which is $2.9\times10^{-12}$ relative
-at $1000\,b_c$. The test tolerance is $10^{-11}$ relative up to $1000\,b_c$.
+**Agreement (measured, Apple M5, macOS 27, Node 25.6.1, `npm run measure`).** At the test's
+values of $b/b_c$ from $1 + 10^{-8}$ to 1.1, with $M = 1$ and 2.5, the relative difference is at
+most $1.05\times10^{-15}$. Beyond 1.1, up to $1000\,b_c$, it is at most $2.9\times10^{-12}$. The
+larger value is cancellation in $2I - \pi$, not a disagreement of the two integrals: the
+deflection falls to about $4M/b = 7.7\times10^{-4}$ rad at $1000\,b_c$, so a rounding-level
+difference in $2I \approx \pi$ is a much larger fraction of it. The test tolerance is $10^{-11}$
+relative up to $1000\,b_c$.
 
 **Weak field.** $\alpha = \sum A_n (M/b)^n$ with $A_1 = 4$, $A_2 = 15\pi/4$, $A_3 = 128/3$,
 $A_4 = 3465\pi/64$, $A_5 = 3584/5$, $A_6 = 255255\pi/256$ (Keeton and Petters 2005, eqs. 24 and
-25). The brief's $\alpha \approx 4M/b$ is the first term. Measured: after three terms the remainder
-equals the fourth term to within 0.4 % at $b = 1000M$ (ratio 1.0042, falling as $1/b$ as expected
-from $A_5/A_4$).
+25). The brief's $\alpha \approx 4M/b$ is the first term. Measured (`npm run measure`): the
+remainder after three terms over the fourth term is 1.044, 1.022, 1.009 and 1.004 at
+$b = 100$, 200, 500 and $1000M$. The excess falls as $1/b$, as expected from the next term,
+$(A_5/A_4)(M/b) = 4.2\times10^{-3}$ at $1000M$ (test bounds 0.95 to 1.06).
 
 **Strong field.** Bozza (2002) eq. (50), with $\bar a = 1$ and
-$\bar b = \ln[216(7-4\sqrt3)] - \pi \approx -0.4002$ (his eqs. 47 and 48; the paper uses units
+$\bar b = \ln[216(7-4\sqrt3)] - \pi \approx -0.4002$ (his eqs. 47 to 49; the paper uses units
 $2M = 1$ and $u_m = 3\sqrt3/2$ there), written in the impact parameter:
 
 $$
@@ -385,9 +398,24 @@ $$
 O\big((b-b_c)\ln(b-b_c)\big).
 $$
 
-The brief's "logarithmic divergence, coefficients from Bozza 2002" is confirmed. Measured: the
-difference from the exact value is $\varepsilon(0.28\ln(1/\varepsilon) + 1.2)$ for
-$\varepsilon = b/b_c - 1$ from $10^{-2}$ to $10^{-8}$.
+The brief's "logarithmic divergence, coefficients from Bozza 2002" is confirmed. Bozza keeps only
+the zeroth-order terms in the closest-approach distance $x_0$ and gives the remainder as
+$O(x_0 - x_m)$, with $x_m$ the photon sphere radius (his eqs. 25 and 29); the error term above comes
+from the series of Iyer and Petters (2007), eq. (25), in $b' = 1 - b_c/b$. With
+$\varepsilon = b/b_c - 1$ and $\ln(1/b') = \ln(1/\varepsilon) + \varepsilon + O(\varepsilon^2)$, its
+first correction gives the exact value minus the formula above as
+
+$$
+\varepsilon\left[\tfrac{5}{18}\ln\tfrac{1}{\varepsilon} + 1 + \tfrac{4\sqrt3 - 17}{18} +
+\tfrac{5}{18}\ln[216(7-4\sqrt3)]\right] = \varepsilon\left(0.2778\ln\tfrac{1}{\varepsilon} +
+1.2019\right),
+$$
+
+up to $O(\varepsilon^2\ln\varepsilon)$. Measured (`npm run measure`, test at
+$\varepsilon = 10^{-3}$ to $10^{-7}$): the difference is $5.7\times10^{-7}$ rad at
+$\varepsilon = 10^{-7}$ (test bound $10^{-5}$ rad), the value this series gives, and its log-log
+slope against $\varepsilon$ is 0.935 (test bounds 0.8 to 1.2), the slope of the series at the same
+five points.
 
 ## 8a. Swept angle of plunging photons
 
@@ -409,8 +437,8 @@ $$
 a smooth, bounded integrand for any interval, evaluated by composite Gauss-Legendre with panels
 of width $0.5$ in $\tau$ (at least four): `sweptAnglePlunging`. Checks: agreement with an
 independent adaptive Simpson quadrature in $\ln|v|$ to $10^{-10}$ relative for
-$b/b_c$ from $0.3$ to $0.999999$, with the section 8 quadrature where both apply, and continuity
-with the Carlson form across $b_c$.
+$b/b_c$ from $0.3$ to $0.999999$ (measured at most $3.4\times10^{-15}$, `npm run measure`), with
+the section 8 quadrature where both apply, and continuity with the Carlson form across $b_c$.
 
 ## 9. Redshift
 
@@ -435,7 +463,8 @@ Cunningham (1975) eq. (2).
   backwards, so the physical photon's $L_z$ is minus the traced one.
 - **Intensity and colour.** $I_\nu/\nu^3$ is invariant along a ray (Lindquist 1966; Cunningham
   1975 eq. 6 uses it), so a blackbody at $T$ is observed as a blackbody at $gT$ and the
-  bolometric intensity scales as $g^4$. Confirmed.
+  bolometric intensity scales as $g^4$. Luminet (1979, p. 233) states the same inverse fourth
+  power of $1 + z$ for the observed bolometric flux. Confirmed.
 
 ## 10. Disk (toy model)
 
@@ -446,15 +475,18 @@ $Q = \sigma T^4$:
 $$T(r) \propto r^{-3/4}\left(1 - \sqrt{r_{in}/r}\right)^{1/4},$$
 
 as in the brief, with its maximum at $r = (49/36)\,r_{in} \approx 8.17M$ for $r_{in} = 6M$
-(`diskTemperature`, normalised to 1 at the peak). This is the Newtonian profile, not the
-relativistic Page and Thorne (1974) solution, and the disk has no thickness, no radiative transfer,
-no self-illumination and no magnetic fields. It is a toy for demonstration and must not be
-presented as a model of any real observation.
+(`diskTemperature`, normalised to 1 at the peak); Shakura and Sunyaev (1973, p. 344) give the
+maximum of the flux at $R = 1.36\,R_0$. This is the Newtonian profile, not the relativistic Page
+and Thorne (1974) solution, and the disk has no thickness, no radiative transfer, no
+self-illumination and no magnetic fields. It is a toy for demonstration and must not be presented
+as a model of any real observation.
 
 ## 10a. Colour
 
 - **Spectrum.** Planck's law $B_\lambda \propto \lambda^{-5}/(e^{c_2/\lambda T} - 1)$ with
-  $c_2 = 1.438776877\times10^{-2}$ m K (exact since the 2019 SI; NIST CODATA).
+  $c_2 = hc/k$, exact since the 2019 SI because $h$, $c$ and $k$ are; its decimal expansion does
+  not end, and the code uses the 10 significant digits $1.438776877\times10^{-2}$ m K (NIST
+  CODATA), a relative difference of $3.5\times10^{-10}$.
 - **Colour matching.** The CIE 1931 2-degree functions are approximated by the multi-lobe
   piecewise Gaussian fit of Wyman, Sloan and Shirley (2013), eq. (4) and table 1, integrated at
   1 nm steps from 360 to 830 nm (`blackbodyXYZ`). The fit avoids redistributing the CIE dataset,
@@ -468,9 +500,16 @@ presented as a model of any real observation.
   the Rayleigh-Jeans regime (measured ratio 2.027 between $10^6$ and $5\times10^5$ K).
   Deep-red blackbodies lie outside the sRGB gamut and get a slightly negative blue channel; the
   renderer clamps negative emission to zero.
-- **Accuracy (measured).** Chromaticity against the Planckian locus computed from the CIE data:
-  within 0.0002 at 6500 K and above, 0.0013 at 2856 K (illuminant A), 0.0046 at 1500 K, where the
-  fit's red tail dominates.
+- **Accuracy (measured, `npm run measure`).** Chromaticity against the Planckian locus computed
+  from the CIE data, the larger of the differences in $x$ and $y$: 0.00023 at 6500 K, 0.00011 at
+  10000 K and 20000 K, 0.0012 at 3000 K, 0.0013 at 2856 K (illuminant A) and 0.0046 at 1500 K, where
+  the fit's red tail dominates (test bounds 0.002, and 0.005 at 1500 K). At the four sample
+  wavelengths the fit itself differs from the CIE data by at most 0.0093 in any of the three
+  functions (test bound 0.025). The locus values in `tests/unit/colour.test.ts` were computed once
+  from the CIE 1931 dataset at 1 nm steps, by a script that was not kept. The test's illuminant A
+  chromaticity, (0.44757, 0.40745), agrees to about $10^{-5}$ with the one computed from the CIE
+  standard illuminant A dataset (CIE 2018) and the 1931 functions (a one-off check for the Stage 6
+  reference audit, script not kept).
 - **Tone mapping.** $1 - e^{-kx}$ per channel, $k$ the exposure: linear near 0, saturating
   smoothly below 1. Validation and debug renders skip it and clamp to $[0, 1]$ instead.
 
@@ -539,69 +578,98 @@ which the GPU tests check.
 
 ## 11. Floating point
 
-- **f32 emulation.** `Math.fround(a op b)` on f32 inputs gives the correctly rounded f32 result for
-  $+, -, \times, \div$ and square root, because rounding first to binary64 is innocuous when the
-  intermediate precision (53 bits) is at least $2 \times 24 + 2$ (Figueroa 1995).
-- **WGSL is looser** (WGSL spec, section "Floating Point Accuracy"): $+, -, \times$ are correctly
-  rounded; $x/y$ is 2.5 ULP; `sqrt` is inherited from `1.0 / inverseSqrt(x)` (2 ULP plus the
-  division); `sin` and `cos` have absolute error up to $2^{-11}$ only on $[-\pi, \pi]$ and are
-  undefined outside it; implementations may reassociate and fuse operations. The emulation is
-  therefore optimistic for division, `sqrt` and transcendentals. Consequences for the renderer:
-  the Binet inner loop uses only $+, -, \times$; the final direction is computed without the
-  built-in `sin`/`cos` (rotation recurrence, see `docs/DESIGN.md`); and the GPU result is checked
-  against the CPU reference on real hardware in Stage 2.
+- **f32 emulation.** `Math.fround(a op b)` on f32 inputs gives the f32 result rounded to nearest
+  (ties to even) for $+, -, \times, \div$ and square root, because rounding first to binary64 is
+  innocuous when the intermediate precision (53 bits) is at least $2 \times 24 + 2$ (Figueroa 1995,
+  as restated and proved for binary32 inside binary64, underflow included, by Roux 2014).
+- **No 64-bit floats in a running shader.** WGSL's concrete (run-time) floating-point types are f32
+  and f16 (WGSL, section 6.2.4); its 64-bit AbstractFloat cannot be named in WGSL source and exists
+  only for expressions evaluated when the shader is created (section 6.2.1). The renderer is
+  therefore designed for f32.
+- **WGSL is looser** (WGSL, section 15.7.4 "Floating Point Accuracy"): $+, -, \times$ are correctly
+  rounded in WGSL's sense, which allows the representable value on either side of the exact result
+  (section 15.7.4 specifies no rounding mode), so up to 1 ULP where `Math.fround` rounds to nearest;
+  $x/y$ is 2.5 ULP for $|y|$ in $[2^{-126}, 2^{126}]$; `sqrt` is inherited from
+  `1.0 / inverseSqrt(x)` (2 ULP plus the division); `sin` and `cos` have absolute error up to
+  $2^{-11}$ on $[-\pi, \pi]$, and the spec leaves their accuracy undefined outside that range.
+  Implementations may reassociate operations (section 15.7.5), which can change the rounding, and
+  may flush subnormal inputs and outputs of these operations to zero (section 15.7.2); the emulation
+  models neither. Fusion is allowed only where the result is at least as accurate (section 15.7.5).
+  The emulation is therefore optimistic for the rounding direction of $+, -, \times$, for division,
+  `sqrt` and transcendentals, and wherever reassociation or flushing to zero applies. Consequences
+  for the renderer: the Binet inner loop uses only $+, -, \times$, and the Stage 0 study in
+  `docs/DESIGN.md` (section 3, "Robustness to GPU arithmetic") perturbed every f32 result by up to
+  about 2 ULP, more than the 1 ULP the spec allows for them; the final direction is computed without
+  the built-in `sin`/`cos` (rotation recurrence, see `docs/DESIGN.md`); and the GPU result is
+  checked against the CPU reference on hardware (`docs/VALIDATION.md`, items 7 and 11).
 
 ## References
 
-All entries were confirmed from the source text or publisher metadata.
+Each entry was confirmed from its text, or, where the entry says so, from publisher metadata only.
 
-- CIE (2019). CIE 1931 colour-matching functions, 2 degree observer. Dataset,
-  doi:10.25039/CIE.DS.xvudnb9b, licence CC BY-SA 4.0 (four sample values quoted in tests)
 - Bardeen, J. M., Press, W. H. and Teukolsky, S. A. (1972). Rotating black holes: locally
   nonrotating frames, energy extraction, and scalar synchrotron radiation. ApJ 178, 347-369.
-  doi:10.1086/151796
+  doi:10.1086/151796 (eqs. 2.13, 2.16, 2.18 and 2.21)
 - Bozza, V. (2002). Gravitational lensing in the strong field limit. Phys. Rev. D 66, 103001.
-  doi:10.1103/PhysRevD.66.103001, arXiv:gr-qc/0208075
+  doi:10.1103/PhysRevD.66.103001, arXiv:gr-qc/0208075 (eqs. 25, 29 and 47 to 50, numbered as in
+  arXiv v3)
 - Cardoso, V., Miranda, A. S., Berti, E., Witek, H. and Zanchin, V. T. (2009). Geodesic
-  stability, Lyapunov exponents and quasinormal modes. Phys. Rev. D 79, 064016. arXiv:0812.1806
+  stability, Lyapunov exponents, and quasinormal modes. Phys. Rev. D 79, 064016.
+  doi:10.1103/PhysRevD.79.064016, arXiv:0812.1806 (eqs. 49 and 50, numbered as in arXiv v3)
 - Carlson, B. C. (1995). Numerical computation of real or complex elliptic integrals. Numer.
-  Algorithms 10, 13-26. doi:10.1007/BF02198293, arXiv:math/9409227
-- Cunningham, C. T. (1975). The effects of redshifts and focusing on the spectrum of an accretion
-  disk around a Kerr black hole. ApJ 202, 788-802. doi:10.1086/154033
+  Algorithms 10, 13-26. doi:10.1007/BF02198293, arXiv:math/9409227 (duplication algorithm and
+  the check values of section 3, numbered as in arXiv v1)
 - Chael, A., Johnson, M. D. and Lupsasca, A. (2021). Observing the inner shadow of a black hole:
-  a direct view of the event horizon. ApJ 918, 6. doi:10.3847/1538-4357/ac09ee,
-  arXiv:2106.00683 (metadata confirmed via Crossref)
+  a direct view of the event horizon. ApJ 918, 6. doi:10.3847/1538-4357/ac09ee, arXiv:2106.00683
+  (arXiv v1, pp. 2 to 3)
+- CIE (2018). CIE standard illuminant A - 1 nm. Dataset, International Commission on
+  Illumination, doi:10.25039/CIE.DS.8jsxjrsn (used only to check the illuminant A chromaticity
+  in the tests; no value from it is quoted)
+- CIE (2019). Colour-matching functions of CIE 1931 standard colorimetric observer. Dataset,
+  International Commission on Illumination, doi:10.25039/CIE.DS.xvudnb9b, licence CC BY-SA 4.0
+  (four sample values quoted in tests)
+- Cunningham, C. T. (1975). The effects of redshifts and focusing on the spectrum of an accretion
+  disk around a Kerr black hole. ApJ 202, 788-802. doi:10.1086/154033 (eqs. 2 and 6)
 - Darwin, C. G. (1959). The gravity field of a particle. Proc. R. Soc. Lond. A 249, 180-194.
   doi:10.1098/rspa.1959.0015 (citation and abstract confirmed; full text not read)
 - DLMF: NIST Digital Library of Mathematical Functions, section 19.29 (reduction of general
-  elliptic integrals), https://dlmf.nist.gov/19.29
+  elliptic integrals), eqs. 19.29.4 and 19.29.5, release 1.2.8 of 2026-09-15,
+  https://dlmf.nist.gov/19.29
 - Figueroa, S. A. (1995). When is double rounding innocuous? ACM SIGNUM Newsletter 30(3), 21-26.
-  doi:10.1145/221332.221334 (metadata confirmed via Crossref)
+  doi:10.1145/221332.221334 (metadata only; its result as restated and proved by Roux 2014)
 - Iyer, S. V. and Petters, A. O. (2007). Light's bending angle due to black holes: from the photon
-  sphere to infinity. Gen. Rel. Grav. 39, 1563-1582. arXiv:gr-qc/0611086
+  sphere to infinity. Gen. Rel. Grav. 39(10), 1563-1582. doi:10.1007/s10714-007-0481-8,
+  arXiv:gr-qc/0611086 (eqs. 8 and 25, numbered as in arXiv v2)
 - Jarzynski, M. and Olano, M. (2020). Hash functions for GPU rendering. Journal of Computer
-  Graphics Techniques 9(3). https://jcgt.org/published/0009/03/02/ (pcg3d, section 6.1)
+  Graphics Techniques 9(3), 20-38. https://jcgt.org/published/0009/03/02/ (pcg3d, section 6.1)
 - Keeton, C. R. and Petters, A. O. (2005). Formalism for testing theories of gravity using lensing
   by compact objects: static, spherically symmetric case. Phys. Rev. D 72, 104006.
-  arXiv:gr-qc/0511019
+  doi:10.1103/PhysRevD.72.104006, arXiv:gr-qc/0511019 (eqs. 24 and 25, numbered as in arXiv v1)
 - Lindquist, R. W. (1966). Relativistic transport theory. Ann. Phys. 37, 487-518.
-  doi:10.1016/0003-4916(66)90207-7
+  doi:10.1016/0003-4916(66)90207-7 (metadata only; cited by Cunningham 1975 for Liouville's
+  theorem, which his eq. 6 uses)
 - Luminet, J.-P. (1979). Image of a spherical black hole with thin accretion disk. A&A 75,
-  228-235. ADS 1979A&A....75..228L
-- Page, D. N. and Thorne, K. S. (1974). Disk-accretion onto a black hole. I. Time-averaged
-  structure of accretion disk. ApJ 191, 499-506. doi:10.1086/152990
-- Perlick, V. and Tsupko, O. Yu. (2022). Calculating black hole shadows: review of analytical
-  studies. Phys. Rep. 947, 1-39. doi:10.1016/j.physrep.2021.10.004, arXiv:2105.07101
-- NIST CODATA: second radiation constant $c_2 = 1.438776877\times10^{-2}$ m K (exact),
+  228-235. ADS 1979A&A....75..228L (eqs. 6, 18 and 19; p. 233)
+- NIST CODATA: second radiation constant $c_2$, exact,
   https://physics.nist.gov/cgi-bin/cuu/Value?c22ndrc
+- Page, D. N. and Thorne, K. S. (1974). Disk-accretion onto a black hole. I. Time-averaged
+  structure of accretion disk. ApJ 191, 499-506. doi:10.1086/152990 (title page and abstract
+  read; cited only for the existence of the relativistic solution)
+- Perlick, V. and Tsupko, O. Yu. (2022). Calculating black hole shadows: review of analytical
+  studies. Phys. Rep. 947, 1-39. doi:10.1016/j.physrep.2021.10.004, arXiv:2105.07101 (eqs. 6 to
+  8, numbered as in arXiv v2)
+- Roux, P. (2014). Innocuous double rounding of basic arithmetic operations. Journal of Formalized
+  Reasoning 7(1), 131-142. doi:10.6092/issn.1972-5787/4359
 - Shakura, N. I. and Sunyaev, R. A. (1973). Black holes in binary systems. Observational
-  appearance. A&A 24, 337-355.
+  appearance. A&A 24, 337-355. ADS 1973A&A....24..337S, no DOI (eq. 2.6; p. 344)
 - Synge, J. L. (1966). The escape of photons from gravitationally intense stars. MNRAS 131,
-  463-466. doi:10.1093/mnras/131.3.463
-- W3C CSS Color Module Level 4, sample code `conversions.js` (`XYZ_to_lin_sRGB`, `gam_sRGB`),
-  https://drafts.csswg.org/css-color-4/ (matrix and transfer function after IEC 61966-2-1)
+  463-466. doi:10.1093/mnras/131.3.463 (eqs. 8 to 11 and 14)
+- W3C CSS Color Module Level 4, Candidate Recommendation Draft, 27 October 2026, section 19
+  "Sample code for Color Conversions", https://www.w3.org/TR/2026/CRD-css-color-4-20261027/, and
+  its sample code file https://drafts.csswg.org/css-color-4/conversions.js (`XYZ_to_lin_sRGB`,
+  `gam_sRGB`; matrix and transfer function after IEC 61966-2-1, which was not read)
+- WGSL: WebGPU Shading Language, W3C Candidate Recommendation Draft, 26 October 2026, sections
+  6.2.1, 6.2.4, 15.7.2, 15.7.4 and 15.7.5, https://www.w3.org/TR/2026/CRD-WGSL-20261026/
 - Wyman, C., Sloan, P.-P. and Shirley, P. (2013). Simple analytic approximations to the CIE
   XYZ color matching functions. Journal of Computer Graphics Techniques 2(2), 1-11.
   https://jcgt.org/published/0002/02/01/ (multi-lobe fit, eq. 4 and table 1)
-- WGSL: WebGPU Shading Language, W3C draft, section "Floating Point Accuracy",
-  https://www.w3.org/TR/WGSL/
