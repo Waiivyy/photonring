@@ -10,6 +10,7 @@ import {
   type Vec3,
 } from '../../src/physics/index.ts';
 import { randomUnitVector, seededRandom } from '../helpers/random.ts';
+import { measured } from '../helpers/measured.ts';
 
 /** Independent pcg3d with BigInt arithmetic modulo 2^32 (Jarzynski and Olano 2020, sec. 6.1). */
 function pcg3dBig(x: number, y: number, z: number): [number, number, number] {
@@ -88,6 +89,10 @@ describe('star field', () => {
       };
       const a = luminance(skyRadiance(norm(before), 1));
       const b = luminance(skyRadiance(norm(after), 1));
+      measured(
+        'star field: luminance step across a cell boundary, relative',
+        Math.abs(a - b) / Math.max(1, a),
+      );
       expect(Math.abs(a - b)).toBeLessThan(1e-9 * Math.max(1, a));
       if (a > 0) lit++;
     }
@@ -152,6 +157,11 @@ describe('star field', () => {
     }
     const mean = counts.reduce((s, c) => s + c, 0) / counts.length;
     expect(mean).toBeGreaterThan(50);
+    for (const c of counts)
+      measured(
+        'star field: axis-direction star count off the mean, relative',
+        Math.abs(c / mean - 1),
+      );
     for (const c of counts) expect(Math.abs(c / mean - 1)).toBeLessThan(0.25);
   });
 });

@@ -16,6 +16,7 @@ import {
 import { traceCartesian3D } from '../helpers/cartesian3d.ts';
 import { randomUnitVector, seededRandom } from '../helpers/random.ts';
 import { exactRadiusAtAngle, exactSweptAngle } from '../helpers/reference.ts';
+import { measured } from '../helpers/measured.ts';
 
 const M = 1;
 const BC = criticalImpactParameter(M);
@@ -253,8 +254,16 @@ describe('5. redshift sign along traced rays', () => {
         const cl = left.crossings[0];
         const cr = right.crossings[0];
         if (!cl || !cr || cl.radius < 6 || cl.radius > 20) continue;
+        measured(
+          'item 5: mirror pixel pairs, crossing radius difference, relative',
+          Math.abs(cl.radius - cr.radius) / cl.radius,
+        );
         expect(Math.abs(cl.radius - cr.radius)).toBeLessThan(1e-9 * cl.radius);
         expect(left.lzOverE).toBeGreaterThan(0);
+        measured(
+          'item 5: mirror pixel pairs, L_z/E + mirror L_z/E',
+          Math.abs(right.lzOverE + left.lzOverE),
+        );
         expect(right.lzOverE).toBeCloseTo(-left.lzOverE, 9);
         const g = (ray: RayResult, r: number) =>
           redshiftFactor(circularOrbitEmitter(r, M), ray.lzOverE);
@@ -268,6 +277,7 @@ describe('5. redshift sign along traced rays', () => {
   it('|L_z / E| never exceeds the impact parameter', () => {
     for (const { origin, d } of cameraRays(30, 30, 200, 17)) {
       const ray = traceRay(M, origin, d, OPTS);
+      measured('item 5: |L_z/E| / b, largest', Math.abs(ray.lzOverE) / ray.impactParameter);
       expect(Math.abs(ray.lzOverE)).toBeLessThanOrEqual(ray.impactParameter * (1 + 1e-12));
     }
   });
@@ -299,6 +309,10 @@ describe('8. flat space (M = 0)', () => {
   it('a tiny mass bends rays continuously away from the flat result', () => {
     for (const { origin, d } of cameraRays(30, 25, 50, 20)) {
       const ray = traceRay(1e-9, origin, d, OPTS);
+      measured(
+        'item 8: mass 1e-9 against flat space, direction change in rad',
+        angle(ray.direction as Vec3, d),
+      );
       expect(angle(ray.direction as Vec3, d)).toBeLessThan(1e-7);
     }
   });

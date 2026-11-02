@@ -16,6 +16,7 @@ import {
 import { adaptiveSimpson, relErr } from '../helpers/numeric.ts';
 import { exactRadiusAtAngle } from '../helpers/reference.ts';
 import { binetRadiusAt } from '../helpers/rings.ts';
+import { measured } from '../helpers/measured.ts';
 
 const M = 1;
 const BC = criticalImpactParameter(M);
@@ -56,6 +57,10 @@ describe('swept angle of plunging photons (b < b_c), any interval', () => {
     it(`b = ${ratio} b_c: agrees with adaptive Simpson to 1e-10`, () => {
       for (const [uA, uB] of intervals) {
         const b = ratio * BC;
+        measured(
+          'Stage 4: plunging swept angle against Simpson, relative',
+          relErr(sweptAnglePlunging(b, uA, uB, M), simpsonSwept(b, uA, uB)),
+        );
         expect(relErr(sweptAnglePlunging(b, uA, uB, M), simpsonSwept(b, uA, uB))).toBeLessThan(
           1e-10,
         );

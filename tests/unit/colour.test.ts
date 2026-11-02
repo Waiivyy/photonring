@@ -9,6 +9,7 @@ import {
   toneMap,
   xyzToLinearSrgb,
 } from '../../src/physics/index.ts';
+import { measured } from '../helpers/measured.ts';
 
 const chromaticity = (xyz: readonly [number, number, number]) => {
   const s = xyz[0] + xyz[1] + xyz[2];
@@ -25,6 +26,10 @@ describe('CIE 1931 colour-matching functions (Wyman, Sloan and Shirley 2013 mult
     [600, 1.0622, 0.631, 0.0008],
   ])('%d nm matches the CIE table within the fit accuracy', (nm, x, y, z) => {
     const [fx, fy, fz] = cieColourMatching(nm);
+    measured(
+      'colour: fit against the CIE samples, largest difference',
+      Math.max(Math.abs(fx - x), Math.abs(fy - y), Math.abs(fz - z)),
+    );
     expect(Math.abs(fx - x)).toBeLessThan(0.025);
     expect(Math.abs(fy - y)).toBeLessThan(0.025);
     expect(Math.abs(fz - z)).toBeLessThan(0.025);
@@ -44,12 +49,20 @@ describe('blackbody chromaticity', () => {
     [20000, 0.25646, 0.25763, 0.002],
   ])('%d K lies on the Planckian locus (tolerance %d in x and y)', (T, x, y, tol) => {
     const [cx, cy] = chromaticity(blackbodyXYZ(T));
+    measured(
+      `colour: chromaticity offset from the Planckian locus at ${T} K`,
+      Math.max(Math.abs(cx - x), Math.abs(cy - y)),
+    );
     expect(Math.abs(cx - x)).toBeLessThan(tol);
     expect(Math.abs(cy - y)).toBeLessThan(tol);
   });
 
   it('CIE illuminant A (a 2856 K Planckian radiator) is at (0.44757, 0.40745)', () => {
     const [cx, cy] = chromaticity(blackbodyXYZ(2856));
+    measured(
+      'colour: chromaticity offset from CIE illuminant A (2856 K)',
+      Math.max(Math.abs(cx - 0.44757), Math.abs(cy - 0.40745)),
+    );
     expect(Math.abs(cx - 0.44757)).toBeLessThan(0.002);
     expect(Math.abs(cy - 0.40745)).toBeLessThan(0.002);
   });

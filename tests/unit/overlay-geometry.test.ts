@@ -30,6 +30,7 @@ import {
   type TanPoint,
 } from '../../src/ui/overlay-geometry.ts';
 import { binetRadiusAt } from '../helpers/rings.ts';
+import { measured } from '../helpers/measured.ts';
 
 const M = 1;
 const W = 1920;
@@ -316,6 +317,10 @@ describe('lensed ring curves', () => {
             const ey = b[1] - a[1];
             const len = Math.hypot(ex, ey);
             const dev = len === 0 ? 0 : Math.abs((m[0] - a[0]) * ey - (m[1] - a[1]) * ex) / len;
+            measured(
+              'Stage 4: overlay chord deviation over its 0.1 px allowance (2160 rows)',
+              dev / tol,
+            );
             expect(dev, `${v.name}, R ${R}, n ${order}`).toBeLessThanOrEqual(tol * 1.01);
           }
         }
