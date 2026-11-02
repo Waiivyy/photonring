@@ -14,10 +14,12 @@ const GALLERY = [
   { src: closeUp, caption: 'From 5 M, with the field of view widened to 120 degrees.' },
 ] as const;
 
+// Vendor status re-checked on 2026-11-02 (sources: docs/DESIGN.md, section 4).
 const BROWSERS = [
-  'Chrome or Edge 113 or later on Windows, macOS and ChromeOS; on Linux with recent Intel or NVIDIA GPUs.',
-  'Safari 26 on macOS Tahoe 26, and on iOS and iPadOS 26.',
-  'Firefox 141 or later on Windows, and 147 or later on Macs with Apple silicon.',
+  'Chrome or Edge 113 or later on Windows and macOS, and Chrome 113 or later on ChromeOS; Chrome 144 or later on Linux with Intel Gen12 or newer GPUs (147 or later with NVIDIA GPUs under Wayland).',
+  'Chrome 121 or later on Android 12 or later with Qualcomm or ARM GPUs.',
+  'Safari 26 or later on macOS Tahoe 26, and on iOS, iPadOS and visionOS 26 (not on macOS Sequoia or Sonoma).',
+  'Firefox 141 or later on Windows, and on Macs with Apple silicon (145 or later on macOS Tahoe, 147 or later on older macOS).',
 ];
 
 export function showUnsupported(root: HTMLElement, message: string): void {
