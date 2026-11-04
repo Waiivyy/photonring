@@ -6,22 +6,22 @@ except the CI runs in sections 5 and 14, which name their runner. In section 3, 
 6 says "emulated", the f32 results come from an emulation (`Math.fround` after every operation);
 sections 6 and 11 have the measurements on the GPU.
 
-| Decision             | Choice                                                                                                                                                           | Section |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| Language and tooling | TypeScript 6.0 (strict), Vite, Vitest, Playwright, ESLint, Prettier                                                                                              | 2       |
-| GPU API              | Raw WebGPU with WGSL compute shaders, no rendering framework                                                                                                     | 2       |
-| Integrator           | Planar Binet equation $u'' = 3Mu^2 - u$, classical RK4, fixed step $d\phi = 0.05$ (f32)                                                                          | 3       |
-| Final direction      | Rotation recurrence instead of WGSL `sin`/`cos`                                                                                                                  | 3       |
-| Fallback             | No WebGL2 renderer in the MVP; explanation page plus pre-rendered gallery                                                                                        | 4       |
-| Star field           | Three cubic lattices in direction space hashed with pcg3d; profiles truncated at half a cell, so lookups are seamless                                            | 10      |
-| Colour               | Planck spectrum against an analytic CIE 1931 fit (no CIE table in the repository; four sample values quoted in tests, with attribution), CSS Color 4 sRGB matrix | 10      |
-| CPU reference        | f64, $d\phi = 0.0125$, own PNG codec on `node:zlib`, goldens at 160x90 with a documented tolerance                                                               | 10      |
-| CI                   | Ubuntu: checks, build and the built page in Google Chrome with SwiftShader WebGPU; macOS arm64: GPU parity and the full page suite on the runner's GPU           | 5, 14   |
-| Build                | Vite, every file but `index.html` and `favicon.svg` content-hashed, type check and structural checks of `dist/` in every build                                   | 14      |
-| CSP                  | Meta tag in the built page only: `default-src 'none'`, `'self'` for scripts, styles and images, Trusted Types required                                           | 14      |
-| Hosting              | GitHub Pages through a workflow started by hand, actions pinned to commit SHAs                                                                                   | 14      |
-| Measured values      | Recorded by the physics, camera, overlay and contrast unit tests (not every check) and printed by `npm run measure`                                              | 15      |
-| README image         | CPU reference render at 1600 x 900 (`npm run render:hero`); social preview and Open Graph tags after the owner's pick and the deploy                             | 15      |
+| Decision             | Choice                                                                                                                                                            | Section |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| Language and tooling | TypeScript 6.0 (strict), Vite, Vitest, Playwright, ESLint, Prettier                                                                                               | 2       |
+| GPU API              | Raw WebGPU with WGSL compute shaders, no rendering framework                                                                                                      | 2       |
+| Integrator           | Planar Binet equation $u'' = 3Mu^2 - u$, classical RK4, fixed step $d\phi = 0.05$ (f32)                                                                           | 3       |
+| Final direction      | Rotation recurrence instead of WGSL `sin`/`cos`                                                                                                                   | 3       |
+| Fallback             | No WebGL2 renderer in the MVP; explanation page plus pre-rendered gallery                                                                                         | 4       |
+| Star field           | Three cubic lattices in direction space hashed with pcg3d; profiles truncated at half a cell, so lookups are seamless                                             | 10      |
+| Colour               | Planck spectrum against an analytic CIE 1931 fit (no CIE table in the repository; four sample values quoted in tests, with attribution), CSS Color 4 sRGB matrix  | 10      |
+| CPU reference        | f64, $d\phi = 0.0125$, own PNG codec on `node:zlib`, goldens at 160x90 with a documented tolerance                                                                | 10      |
+| CI                   | Ubuntu: checks, build and the built page in Google Chrome with SwiftShader WebGPU; macOS arm64: GPU parity and the full page suite on the runner's GPU            | 5, 14   |
+| Build                | Vite, every file but `index.html` and `favicon.svg` content-hashed, type check and structural checks of `dist/` in every build                                    | 14      |
+| CSP                  | Meta tag in the built page only: `default-src 'none'`, `'self'` for scripts, styles and images, Trusted Types required                                            | 14      |
+| Hosting              | GitHub Pages through a workflow started by hand, actions pinned to commit SHAs                                                                                    | 14      |
+| Measured values      | Recorded by the physics, camera, overlay and contrast unit tests (not every check) and printed by `npm run measure`                                               | 15      |
+| README image         | CPU reference render at 1600 x 900 (`npm run render:hero`); social preview `public/social-preview.png` at 1280 x 640, same view; Open Graph tags after the deploy | 15      |
 
 ## 1. Positioning: what already exists
 
@@ -686,9 +686,7 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
   after every change of the hash (measured), and GitHub Pages sends `cache-control: max-age=600`
   for every file (measured on other github.io sites), so a hash would buy no caching. What hashing
   does buy here: names change exactly when content changes, and `dist/` follows one rule that the
-  build checks. `PUBLIC_FILES` in `tools/dist-rules.ts` lists what may sit in `public/` (only
-  `favicon.svg`; the social preview image would join it, but it waits for the owner's pick and
-  the deploy, section 15).
+  build checks. `PUBLIC_FILES` in `tools/dist-rules.ts` lists what may sit in `public/`: `favicon.svg`, and since c13ec2a `social-preview.png`, which link previews fetch by a fixed name (section 15).
 - **No modulepreload polyfill** (`build.modulePreload: { polyfill: false }`). The build is one
   chunk with no modulepreload links, so the polyfill had nothing to do, and every browser with
   WebGPU supports modulepreload natively (browser-compat-data: Chrome 66, Firefox 115, Safari 17,
@@ -898,22 +896,23 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
   rendered with the page's scene (`tests/unit/hero-views.test.ts`); this one opens on the page at
   `#v=1&r=30&az=0&el=12&disk=1&aa=1&view=colour&ov=none&val=0`. The script writes nothing and
   exits 1 if a sample is not finite or the file is over 600,000 bytes.
-- **Four candidates; the owner's choice is pending.** `npm run render:hero -- --candidates`
+- **Four candidates; the owner kept the default view.** `npm run render:hero -- --candidates`
   renders four views at 1600 x 900 and at 1280 x 640 into the gitignored `artifacts/stage6/`,
   with a contact sheet, in 6 min 58 s for the whole command on the M5. At 1600 x 900: the default
   view above (377,204 bytes, 75.0 s), nearly edge-on at 30 M and elevation 2 degrees (446,638
   bytes, 64.0 s), close at 5 M and elevation 20 degrees with the automatic 120 degree field of
   view (568,429 bytes, 67.7 s), and wide at 60 M and elevation 8 degrees (402,160 bytes, 60.1 s).
-  Every image has 0 step-limit and 0 non-finite samples. The owner may pick another view at the
-  Stage 6 check-in; until then `HERO_VIEW` in `tools/hero-views.ts` is the default view.
-- **No social preview or Open Graph tags in Stage 6.** `npm run render:hero -- --social` writes
-  `public/social-preview.png` at 1280 x 640, GitHub's recommended size for a repository's social
-  preview (248,032 bytes in 41.7 s for the default view in the candidates run), but the image and
-  the tags wait. Why: the owner picks the view first, and an Open Graph `og:image` needs an
-  absolute URL, which for this site will not answer until the first deploy. Until the image is
-  listed in `PUBLIC_FILES`, the dist rules reject it (section 14), and a plain
-  `npm run render:hero` writes only the README image. For the same reason the README's line for
-  the live page is a placeholder until the deploy, not a link.
+  Every image has 0 step-limit and 0 non-finite samples. At the Stage 6 check-in (2026-11-04) the owner kept the default view for the README image and the social preview, so `HERO_VIEW` in `tools/hero-views.ts` stays `'default'`.
+- **Social preview now, Open Graph tags after the deploy.** After the owner's pick,
+  `npm run render:hero -- --social` wrote `public/social-preview.png` (c13ec2a): the default view
+  at 1280 x 640, GitHub's recommended size for a repository's social preview, 248,032 bytes in
+  41.6 s, byte for byte the candidate `01-social-default.png`. It is copied into `dist/` unhashed
+  under that fixed name (it is in `PUBLIC_FILES`, with a fixture for its absence in
+  `tests/unit/dist-rules.test.ts`), and the page never requests it: the offline test's request
+  sets are unchanged. The owner can upload it under the repository's Settings > Social preview.
+  The Open Graph tags that would point link previews at it wait: `og:image` needs an absolute URL,
+  which for this site will not answer until the first deploy. For the same reason the README's
+  line for the live page is a placeholder until the deploy, not a link.
 - **CHANGELOG.** `CHANGELOG.md` follows Keep a Changelog 1.1.0 and Semantic Versioning 2.0.0,
   with one Unreleased section that has "Added" and one "Fixed" entry. There is no version heading:
   nothing is tagged, `package.json` says 0.0.0 and nothing is deployed, so a version would

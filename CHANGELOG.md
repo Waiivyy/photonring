@@ -117,9 +117,11 @@ branch.
   that same build. It has not run yet.
 - **README image** (`npm run render:hero`): the CPU reference renderer draws the page's opening
   view at 1600 x 900 with 3 x 3 samples per pixel into `docs/images/hero.png`, and writes nothing
-  if a sample is not finite or the file is over its size budget.
-  `npm run render:hero -- --candidates` renders four candidate views and a contact sheet into
+  if a sample is not finite or the file is over its size budget. `npm run render:hero -- --candidates` renders four candidate views and a contact sheet into
   `artifacts/stage6/`, which git ignores.
+- **Social preview image** `public/social-preview.png` (`npm run render:hero -- --social`): the
+  same view at 1280 x 640 for link previews and the repository's social preview. The page never
+  loads it, and the build checks allow it in `public/` by name.
 - **Documentation**: [README.md](README.md) (what the page shows, how to run it, the controls,
   measured validation and performance numbers, browser support, limits, privacy, an FAQ and
   references), [docs/PHYSICS.md](docs/PHYSICS.md) (derivations and references),

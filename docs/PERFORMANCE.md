@@ -146,9 +146,10 @@ from the cache.
 ## Download size (Stage 6)
 
 `npm run build`, then `npm run size` (Node 25.6.1; gzip level 9 and brotli quality 11 from
-`node:zlib`). Bytes of the build at commit b310128, which changed the browser list of the page
-for browsers without WebGPU. The Stage 6 comment change in `src/physics/colour.ts` builds to the
-same files, byte for byte (checked by building it).
+`node:zlib`). Bytes of the build at commit c13ec2a, which added the social preview image; the JS,
+CSS and `index.html` are those of b310128, which changed the browser list of the page for browsers
+without WebGPU (the Stage 6 comment change in `src/physics/colour.ts` builds to the same files, byte
+for byte, checked by building it).
 
 | Files                  | Raw     | gzip    | brotli  |
 | ---------------------- | ------- | ------- | ------- |
@@ -157,11 +158,13 @@ same files, byte for byte (checked by building it).
 | `index.html`           | 887     | 485     | 348     |
 | `favicon.svg`          | 233     | 168     | 143     |
 | Gallery PNGs (4 files) | 408,789 | 408,411 | 408,335 |
-| Everything in `dist/`  | 518,238 | 447,189 | 442,721 |
+| `social-preview.png`   | 248,032 | 247,946 | 248,037 |
+| Everything in `dist/`  | 766,270 | 695,135 | 690,758 |
 
-With WebGPU the page loads `index.html`, the JS and the CSS (and possibly the favicon):
-109,216 bytes, 38,610 with gzip. The gallery images load only on the page for browsers without
-WebGPU. What GitHub Pages actually sends compressed was not measured. There is no size budget.
+With WebGPU the page loads `index.html`, the JS and the CSS (and possibly the favicon): 109,216
+bytes, 38,610 with gzip. The gallery images load only on the page for browsers without WebGPU, and
+the social preview is never loaded by the page (link previews fetch it). What GitHub Pages actually
+sends compressed was not measured. There is no size budget.
 
 ## CI run times (Stage 5)
 
@@ -208,8 +211,9 @@ ray, 3 x 3 samples per pixel, the page's scene (star sky, the default disk, expo
 mapping) and its automatic field of view. `docs/images/hero.png` is the first row, the page's
 opening view (`#v=1&r=30&az=0&el=12&disk=1&aa=1&view=colour&ov=none&val=0`). All eight rows come
 from one run of `npm run render:hero -- --candidates`, which writes them to the gitignored
-`artifacts/stage6/`; the 1280 x 640 images are candidates for a social preview, which is not in
-the build.
+`artifacts/stage6/`. The owner kept the default view: `public/social-preview.png` is the fifth
+row's view, rendered again on 2026-11-04 by `npm run render:hero -- --social` (41.6 s, the same
+248,032 bytes).
 
 | Candidate            | Distance, elevation, field of view | Size       | Time   | PNG bytes |
 | -------------------- | ---------------------------------- | ---------- | ------ | --------- |
