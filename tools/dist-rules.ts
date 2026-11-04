@@ -7,8 +7,12 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, posix, relative, sep } from 'node:path';
 import { CSP_POLICY } from './csp.ts';
 
-/** Files copied unhashed from public/. Anything else there must be imported, so it is hashed. */
-export const PUBLIC_FILES: readonly string[] = ['favicon.svg'];
+/**
+ * Files copied unhashed from public/: the favicon, and the social preview image (rendered by
+ * npm run render:hero -- --social), which link previews fetch by a fixed name and the page never
+ * requests. Anything else must be imported, so it is hashed.
+ */
+export const PUBLIC_FILES: readonly string[] = ['favicon.svg', 'social-preview.png'];
 
 /** The only absolute URLs the built files may contain: the SVG namespace and the repository
  * links in src/ui/links.ts. They are text, never fetched. */

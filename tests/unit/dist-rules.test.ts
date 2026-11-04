@@ -46,7 +46,10 @@ const clean = (): Files => ({
     'const l=`https://github.com/Waiivyy/photonring/blob/main/`;const o={data:r};',
   [`dist/${CSS}`]: 'body{margin:0}',
   [`dist/${PNG}`]: 'png',
+  // The social preview is copied unhashed from public/ and never requested by the page.
+  'dist/social-preview.png': 'png',
   'public/favicon.svg': '<svg></svg>',
+  'public/social-preview.png': 'png',
 });
 
 let roots: string[] = [];
@@ -147,6 +150,15 @@ describe('dist rules', () => {
       'public/assets/disk-inclined.png is not in PUBLIC_FILES',
     ],
     ['a public file missing from the build', withoutFavicon(), 'missing public file: favicon.svg'],
+    [
+      'the social preview missing from the build',
+      (() => {
+        const f = clean();
+        delete f['dist/social-preview.png'];
+        return f;
+      })(),
+      'missing public file: social-preview.png',
+    ],
     // Hashes.
     [
       'an asset without a content hash',
