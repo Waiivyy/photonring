@@ -122,6 +122,28 @@ branch.
 - **Social preview image** `public/social-preview.png` (`npm run render:hero -- --social`): the
   same view at 1280 x 640 for link previews and the repository's social preview. The page never
   loads it, and the build checks allow it in `public/` by name.
+- **EHT-style view** (key `B`): the toy disk's brightness at all frequencies, blurred to the
+  20 μas resolution of the 2019 EHT images of M87* scaled to this hole (5.3 M), normalised from
+  black to the brightest point and drawn in false colour with the afmhot formula, turned so that
+  north is up as for M87* on the sky. A preset button, "Tilt 17°, as for M87*", sets the camera
+  the EHT's models assume. Every place the view appears, saved images included, says "false
+  colour" and "not a simulation of the EHT observation". Blur and colour run on the GPU after
+  each frame (0.66 to 0.72 ms at 1920 x 1080) and in the CPU reference renderer, which agree
+  within 1 level of 255 ([docs/PHYSICS.md](docs/PHYSICS.md), section 10d).
+- **Photon subrings, measured**: a 64-bit solver for the image of a disk ring after any number of
+  half-turns, checked against an independent quadrature and the ray tracer; GPU fans of rays that
+  locate each band edge at 5, 30 and 200 M; and a photon subring view (key `N`) that shows the
+  region just outside the shadow edge magnified and on a logarithmic scale, with the predicted
+  band edges and the measured 32-bit limit. The spacing approaches $e^\pi$ as Gralla, Holz and
+  Wald (2019) and Johnson et al. (2020) predicted: a reproduction, not a discovery
+  ([docs/PHYSICS.md](docs/PHYSICS.md), section 6b).
+- **Views as one choice**: colour, EHT-style, photon subrings and termination are a radio group
+  in the Controls panel and the `view` key of a link; each view keeps its own cost estimate for
+  the frame budget.
+- **README gallery, diagrams and page screenshots**, with the tools that make them
+  (`npm run render:readme`, `npm run shots:readme`, `npm run diagrams`), a step that copies only
+  approved images into `docs/images/`, and a test of their sizes.
+- **Text check for en-dashes**: `npm run lint` now also rejects U+2013.
 - **Documentation**: [README.md](README.md) (what the page shows, how to run it, the controls,
   measured validation and performance numbers, browser support, limits, privacy, an FAQ and
   references), [docs/PHYSICS.md](docs/PHYSICS.md) (derivations and references),
