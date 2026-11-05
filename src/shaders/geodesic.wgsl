@@ -85,7 +85,7 @@ fn atanSmall(x: f32) -> f32 {
 }
 
 // Records a disk-plane crossing at radius r and composites its light front to back, as in
-// compositeDisk (src/physics/disk.ts). Returns true when nothing behind it can be seen.
+// compositeDisk (or compositeDiskBolometric in the EHT-style view, src/physics/disk.ts). Returns true when nothing behind it can be seen.
 fn addCrossing(out: ptr<function, Trace>, r: f32, lzOverE: f32) -> bool {
   if (LOG_CROSSINGS && (*out).crossings < CROSSING_LOG_SIZE) {
     crossingLog[(*out).crossings] = r;
@@ -94,7 +94,7 @@ fn addCrossing(out: ptr<function, Trace>, r: f32, lzOverE: f32) -> bool {
   if (r < params.diskInner || r > params.diskOuter) {
     return false;
   }
-  (*out).emission += (*out).transmittance * params.diskOpacity * diskEmission(r, lzOverE);
+  (*out).emission += (*out).transmittance * params.diskOpacity * diskLight(r, lzOverE);
   (*out).transmittance *= 1.0 - params.diskOpacity;
   return (*out).transmittance == 0.0;
 }

@@ -22,7 +22,7 @@ import {
   type Vec3,
 } from '../../src/physics/index.ts';
 import type { HarnessImageRequest } from './harness-api.ts';
-import { gpuModes, openHarness } from './page.ts';
+import { openHarness } from './page.ts';
 
 /** Largest perceived difference between a pixel and its 8 neighbours (edges clamped). */
 function contrast(out: RenderOutput, s: RenderSettings, i: number, j: number): number {
@@ -69,7 +69,8 @@ test('anti-aliased images against the CPU reference', async ({ page }) => {
       width: scene.width,
       height: scene.height,
       camera: scene.camera,
-      ...gpuModes(scene),
+      mode: scene.mode,
+      sky: scene.sky,
       exposure: scene.exposure,
       toneMapping: scene.toneMapping,
       disk: scene.disk,
@@ -131,7 +132,8 @@ test('anti-aliasing off leaves every pixel with one sample', async ({ page }) =>
     width: s.width,
     height: s.height,
     camera: s.camera,
-    ...gpuModes(s),
+    mode: s.mode,
+    sky: s.sky,
     exposure: s.exposure,
     toneMapping: s.toneMapping,
     disk: s.disk,

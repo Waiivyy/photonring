@@ -1,7 +1,20 @@
 // Generated WGSL: uniform structs and constants taken from the TypeScript sources of truth
 // (physics library, star layers, colour table), so CPU and GPU cannot disagree on them.
 import { luminance, STAR_LAYERS, TERMINATION_COLOURS } from '../../physics/index.ts';
+import { TABLE_SIZE } from './eht-post.ts';
 import { wgslStruct, type StructField } from './layout.ts';
+
+/** Render modes, in the order of their WGSL constants (MODE_COLOUR is 0, and so on). */
+export const RENDER_MODES = ['colour', 'termination', 'eht'] as const;
+/** Skies behind the disk, in the order of their WGSL constants (SKY_STARS is 0, and so on). */
+export const SKIES = ['stars', 'uniform', 'black'] as const;
+
+/**
+ * What the compute pass writes: disk and sky colours, each ray's termination as a colour, or the
+ * disk's brightness at all frequencies for the EHT-style view (blurred and mapped by the blit).
+ */
+export type RenderMode = (typeof RENDER_MODES)[number];
+export type Sky = (typeof SKIES)[number];
 
 /** Per-dispatch parameters of the compute shaders. */
 export const FRAME_FIELDS: readonly StructField[] = [
@@ -34,6 +47,19 @@ export const FRAME_FIELDS: readonly StructField[] = [
   ['aaThreshold', 'f32'],
   ['exposure', 'f32'],
   ['toneMapping', 'u32'],
+];
+
+/** Parameters of the EHT-style post-process (src/shaders/eht.wgsl and the EHT blit). */
+export const EHT_FIELDS: readonly StructField[] = [
+  ['imageSize', 'vec2u'],
+  ['lowSize', 'vec2u'],
+  // Part of the preview image that holds the preview, as a fraction of its size.
+  ['previewScale', 'vec2f'],
+  ['factor', 'u32'],
+  ['radius', 'u32'],
+  // 0: full image (with anti-aliased pixels); 1: preview, upscaled.
+  ['source', 'u32'],
+  ['floor', 'f32'],
 ];
 
 /** Number of plane-crossing radii the parity entry point reports per ray. */
@@ -80,6 +106,9 @@ export function wgslHeader(lut: LutParams): string {
     '// Stopped at an opaque disk: the light behind it no longer matters (image pass only).',
     'const OPAQUE: u32 = 3u;',
     `const CROSSING_LOG_SIZE: u32 = ${CROSSING_LOG_SIZE}u;`,
+    ...RENDER_MODES.map((m, i) => `const MODE_${m.toUpperCase()}: u32 = ${i}u;`),
+    ...SKIES.map((m, i) => `const SKY_${m.toUpperCase()}: u32 = ${i}u;`),
+    `const EHT_TABLE_SIZE: u32 = ${TABLE_SIZE}u;`,
     `const RADIAL_SIN: f32 = ${f32(GPU_RADIAL_SIN)};`,
     `const STAR_LAYER_COUNT: u32 = ${STAR_LAYERS.length}u;`,
     `var<private> STAR_LAYERS: array<vec4f, ${STAR_LAYERS.length}> = array<vec4f, ${STAR_LAYERS.length}>(${layers.join(', ')});`,
@@ -95,5 +124,6 @@ export function wgslHeader(lut: LutParams): string {
     `const LUT_INV_LOG_RANGE: f32 = ${f32((lut.size - 1) / Math.log(lut.tMax / lut.tMin))};`,
     wgslStruct('Params', FRAME_FIELDS),
     wgslStruct('BlitParams', BLIT_FIELDS),
+    wgslStruct('EhtParams', EHT_FIELDS),
   ].join('\n');
 }

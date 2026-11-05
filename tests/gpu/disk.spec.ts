@@ -19,7 +19,7 @@ import {
   type Vec3,
 } from '../../src/physics/index.ts';
 import type { HarnessImageRequest, HarnessRay } from './harness-api.ts';
-import { gpuModes, openHarness } from './page.ts';
+import { openHarness } from './page.ts';
 
 const M = 1;
 const BC = criticalImpactParameter(M);
@@ -155,7 +155,8 @@ test.describe('GPU against CPU parity with the disk', () => {
         width: s.width,
         height: s.height,
         camera: s.camera,
-        ...gpuModes(s),
+        mode: s.mode,
+        sky: s.sky,
         exposure: s.exposure,
         toneMapping: s.toneMapping,
         disk: s.disk,

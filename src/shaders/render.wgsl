@@ -48,13 +48,13 @@ fn debugColour(termination: u32) -> vec3f {
 }
 
 // Colour of one sample: disk light, then the sky behind whatever the disk lets through, as in
-// shade (src/cpu-renderer/render.ts).
+// shade (src/cpu-renderer/render.ts). A black sky adds nothing (the EHT-style view).
 fn shadeSample(d: vec3f) -> vec3f {
   let tr = traceGeodesic(params.position, d, true);
   var colour = tr.emission;
-  if (tr.termination == ESCAPED && tr.transmittance > 0.0) {
+  if (tr.termination == ESCAPED && tr.transmittance > 0.0 && params.sky != SKY_BLACK) {
     var sky = vec3f(1.0);
-    if (params.sky == 0u) {
+    if (params.sky == SKY_STARS) {
       sky = skyRadiance(tr.dir, params.gObserver);
     }
     colour += tr.transmittance * sky;
@@ -73,7 +73,7 @@ fn renderTile(@builtin(global_invocation_id) gid: vec3u) {
   }
   let d = pixelDirection(vec2f(px) + vec2f(0.5));
   var colour = vec3f(0.0);
-  if (params.mode == 1u) {
+  if (params.mode == MODE_TERMINATION) {
     colour = debugColour(traceGeodesic(params.position, d, false).termination);
   } else {
     colour = shadeSample(d);
