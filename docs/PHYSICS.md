@@ -360,6 +360,25 @@ further subring brings the ratio at least 12.7 times closer to it (smallest fact
 view directions and both edges). With the page's opaque disk tilted 12 degrees, the near side of the
 disk hides the subrings over most of the lower half of the image.
 
+**The strip (the page's photon subring view).** A magnified, unrolled image of the region just
+outside the shadow edge (`src/physics/strip.ts`). Column $x$ of a strip $W$ wide is the image
+angle $\theta = 2\pi x/W$, from image right towards image up; row $y$ of a strip $H$ tall is
+$\log_{10}\varepsilon = t - y\,(t - u)/H$, from $t = \min(0.5, \log_{10}\varepsilon_{max})$ down to
+$u = -7.5$, where $\varepsilon_{max} = 1/(k\,b_c) - 1$ is the largest offset seen at all
+($\sin\alpha = 1$; $-0.616$ at 5 M). The direction of a strip pixel is
+$\cos\alpha\,\text{forward} + \sin\alpha\,(\cos\theta\,\text{right} + \sin\theta\,\text{up})$
+with $\sin\alpha = k\,b_c(1 + \varepsilon)$. On this scale every band has the same height and
+successive bands are $\pi/\ln 10 = 1.364$ decades apart. The GPU gets $(\cos\theta, \sin\theta)$ per
+column and $(\cos\alpha, \sin\alpha)$ per row from tables computed in f64, and the tracer takes
+$\sin\psi$ from them directly instead of from the length of $d - \cos\psi\,e_1$, a difference of
+nearly equal numbers: that difference limits the ordinary image to about $10^{-7}$ to $10^{-6}$ in
+$\varepsilon$ (more at 200 M, `docs/VALIDATION.md`), while the strip's limit, measured on the Apple
+M5 from its order 3 and 4 edges, is about $1.2\times10^{-7}$ at 5 M, $1.7\times10^{-7}$ at 30 M and
+$2.5\times10^{-7}$ at 200 M (an estimate from four edges per distance). The page draws a dashed
+"32-bit limit" line there, interpolated in $\log r$ and $\log\varepsilon$, and the band edges the
+64-bit library predicts for the disk's inner and outer radius, orders 0 to 5, every 2 degrees of
+$\theta$ (`subringOffset` for $n \ge 1$, `ringImageAngle` for the direct image).
+
 **Checks** (`tests/unit/subrings.test.ts`; measured values in `docs/VALIDATION.md`). The solved
 root satisfies the same sweep evaluated with the Gauss-Legendre quadrature of section 8, which
 shares no code with the Carlson form; the backward ray traced by `traceRay` (f64,

@@ -178,6 +178,28 @@ five times as much. The page's frame budget of 12 ms counts only the tiles; the 
 to subtract the post-process from it if it took more than 1 ms at 1920 x 1080, which it does not,
 so the budget is unchanged. At 4K each present adds about 1.8 ms to its frame.
 
+## Photon subring view: the strip (Stage 7)
+
+`npm run bench:gpu` (`tests/bench/subrings.spec.ts`): Google Chrome 156.0.8078.80, headless;
+adapter "apple / metal-3"; measured on 2026-11-05 on the code of commit d68c8e6
+(`artifacts/stage7/benchmark-subrings.json`). Default disk, no anti-aliasing (the strip view has
+none), black sky for the strip and the star field for the colour view, $d\phi = 0.05$, step cap 1000. GPU milliseconds from timestamp queries, median of nine runs after a warm-up run.
+
+| View   | Camera                 | Resolution  | First pass ms | Preview 1/2 ms | Preview 1/4 ms |
+| ------ | ---------------------- | ----------- | ------------- | -------------- | -------------- |
+| Strip  | default (30 M, 12 deg) | 960 x 540   | 2.82          | 0.79           | 0.20           |
+| Colour | default (30 M, 12 deg) | 960 x 540   | 1.57          | 0.39           | 0.13           |
+| Strip  | default                | 1920 x 1080 | 8.19          | 2.23           | 0.66           |
+| Colour | default                | 1920 x 1080 | 5.51          | 1.57           | 0.46           |
+| Strip  | face-on (30 M, 90 deg) | 960 x 540   | 3.41          | 0.92           | 0.26           |
+| Colour | face-on                | 960 x 540   | 1.25          | 0.33           | 0.13           |
+| Strip  | face-on                | 1920 x 1080 | 13.24         | 3.41           | 0.92           |
+| Colour | face-on                | 1920 x 1080 | 4.59          | 1.31           | 0.39           |
+
+Every strip pixel traces a ray close to the photon sphere, so the strip costs 1.5 to 2.9 times
+the colour view of the same camera. The page keeps a separate cost estimate per view, so its
+first frames after switching are planned without the colour view's estimate.
+
 ## Download size (Stage 6)
 
 `npm run build`, then `npm run size` (Node 25.6.1; gzip level 9 and brotli quality 11 from
