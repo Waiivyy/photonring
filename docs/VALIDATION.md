@@ -198,3 +198,14 @@ the residual is the quantisation of the area count.
   non-finite values (item 10, `tests/gpu/robustness.spec.ts`). Ten Vitest files now record the
   values that the rows citing `npm run measure` give (commits 0ff1b63 and 8c374bd); every bound
   stayed as it was.
+- **Stage 7, settled on the first runs of new tests.** The subring offsets against the
+  Gauss-Legendre form of the sweep were first proposed at $10^{-12}$ rad; the tolerance adds
+  $2.2\times10^{-16}/\varepsilon$, because $b = b_c(1 + \varepsilon)$ resolves $\varepsilon$ only to
+  about that (measured: residuals up to $2.0\times10^{-9}$ rad for order 5 at the top of the
+  default view, where $\varepsilon = 3.9\times10^{-8}$; both integrals agree with each other to
+  about $10^{-14}$ there). The GPU subring tolerance is $4 \cdot 2^{-24}/\sin\psi_{sh}$, a bound for
+  GPUs that round each operation; the design's guess was $10^{-6}$ at 30 M, and the M5 measured
+  bands of at most $4.9\times10^{-7}$ at every distance. The EHT blur of a single bright pixel
+  against a direct Gaussian was proposed at 3 levels of 255 and measured 4, so its bound is 5:
+  the normalisation then follows that one point, whose blurred peak height depends on where it
+  sits inside a reduced texel; the realistic toy-disk test holds 1 level.
