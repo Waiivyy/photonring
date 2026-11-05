@@ -130,6 +130,15 @@ export interface Harness {
    */
   benchmark(request: HarnessImageRequest, repeats: number): Promise<HarnessBenchmark>;
   /**
+   * Renders the image once, then times `repeats` presents of it (the EHT post-process and blit,
+   * or the tone-mapping blit), after one untimed warm-up present. `factor` fixes the EHT reduce.
+   */
+  benchmarkPresent(
+    request: HarnessImageRequest,
+    repeats: number,
+    factor?: number,
+  ): Promise<{ timing: string; ms: number[] }>;
+  /**
    * The Validation panel's measurement: the colour validation render (disk off, uniform sky, no
    * tone mapping, one sample per pixel) and the termination render of the same view, offscreen,
    * classified in the page.

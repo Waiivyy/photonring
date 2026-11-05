@@ -130,6 +130,23 @@ const harness: Harness = {
     const refinedFraction = counts.reduce((n, c) => n + (c > 1 ? 1 : 0), 0) / counts.length;
     return { ...result, refinedFraction };
   },
+  async benchmarkPresent(request, repeats, factor) {
+    const r = await get();
+    r.resize(request.width, request.height);
+    r.setScene({ ...parityScene, ...request });
+    await r.renderAll();
+    // Warm-up: pipelines, reduced images, and GPU clocks (a cold first present measured several
+    // times slower than the same present later).
+    for (let i = 0; i < 10; i++) await r.timePresent('full', factor);
+    const ms: number[] = [];
+    let timing = '';
+    for (let i = 0; i < repeats; i++) {
+      const t = await r.timePresent('full', factor);
+      ms.push(t.ms);
+      timing = t.timing;
+    }
+    return { timing, ms };
+  },
   async measureShadow(request) {
     const r = await get();
     const { side, timed, ...camera } = request;

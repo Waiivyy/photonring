@@ -47,11 +47,18 @@ export interface EhtPlan {
  * each add (f^2 + 1/2) / 6 px^2 of variance, averaged over sub-pixel phase (docs/PHYSICS.md 10d),
  * so the low-resolution kernel supplies the rest of sigma^2.
  */
-export function ehtPlan(camera: CameraParams, width: number, height: number, M = 1): EhtPlan {
+export function ehtPlan(
+  camera: CameraParams,
+  width: number,
+  height: number,
+  M = 1,
+  /** Benchmarks only: a fixed reduce factor instead of the rule. */
+  factor?: number,
+): EhtPlan {
   const tanHalf = Math.tan((camera.fovYDeg * Math.PI) / 360);
   const s = edgePixelScale(camera.distance, height, tanHalf, M);
   const sigmaPx = ehtBeamSigmaM() * s;
-  const f = FACTORS.find((k) => sigmaPx / k >= MIN_SIGMA_LOW) ?? 1;
+  const f = factor ?? FACTORS.find((k) => sigmaPx / k >= MIN_SIGMA_LOW) ?? 1;
   const sigmaLow = f === 1 ? sigmaPx : Math.sqrt(sigmaPx ** 2 - (f * f + 0.5) / 3) / f;
   const R = Math.ceil(4 * sigmaLow);
   const raw = Array.from({ length: 2 * R + 1 }, (_, i) =>

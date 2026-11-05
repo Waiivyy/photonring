@@ -1,6 +1,6 @@
 // The EHT-style view's post-process on the GPU, the twin of ehtLinear (src/gpu/host/eht-post.ts):
-// a tent reduce by f, a separable Gaussian on the reduced grid, its peak, and the normalisation
-// to that peak. Each pass is its own entry point; values live in the red channel of rgba16float
+// a tent reduce by f (separable, in two passes), a separable Gaussian on the reduced grid, its
+// peak, and the normalisation to that peak. Each pass is its own entry point; values live in the red channel of rgba16float
 // images. The blit then upsamples bilinearly and applies the colour map (blit.wgsl).
 
 @group(0) @binding(0) var<uniform> ep: EhtParams;
@@ -33,33 +33,48 @@ fn inLow(p: vec2i) -> bool {
   return all(p >= vec2i(0)) && all(p < vec2i(ep.lowSize));
 }
 
-// Reduced texel l (centre (l + 1/2) f) takes max(0, 1 - |x| / f) / f of each pixel at offset x
-// along each axis; pixels outside the image count as 0 (reduceTent1D).
+// Tent reduce, separably (reduceTent1D along x, then along y): reduced texel l (centre
+// (l + 1/2) f) takes max(0, 1 - |x| / f) / f of each pixel at offset x; pixels outside the image
+// count as 0. Along x, from the full image into a reduced-width image of full height.
 @compute @workgroup_size(8, 8)
-fn ehtReduce(@builtin(global_invocation_id) gid: vec3u) {
-  let l = vec2i(gid.xy);
-  if (!inLow(l)) {
+fn ehtReduceX(@builtin(global_invocation_id) gid: vec3u) {
+  let p = vec2i(gid.xy);
+  let size = vec2i(ep.imageSize);
+  if (p.x >= i32(ep.lowSize.x) || p.y >= size.y) {
     return;
   }
   let f = i32(ep.factor);
   let ff = f32(ep.factor);
-  let centre = (vec2f(l) + 0.5) * ff;
-  let size = vec2i(ep.imageSize);
+  let centre = (f32(p.x) + 0.5) * ff;
   var acc = 0.0;
-  for (var j = l.y * f - f; j < l.y * f + 2 * f; j++) {
-    let wy = 1.0 - abs(f32(j) + 0.5 - centre.y) / ff;
-    if (j < 0 || j >= size.y || wy <= 0.0) {
-      continue;
-    }
-    for (var i = l.x * f - f; i < l.x * f + 2 * f; i++) {
-      let wx = 1.0 - abs(f32(i) + 0.5 - centre.x) / ff;
-      if (i < 0 || i >= size.x || wx <= 0.0) {
-        continue;
-      }
-      acc += wx * wy * fullValue(vec2i(i, j));
+  for (var i = p.x * f - f; i < p.x * f + 2 * f; i++) {
+    let w = 1.0 - abs(f32(i) + 0.5 - centre) / ff;
+    if (i >= 0 && i < size.x && w > 0.0) {
+      acc += w * fullValue(vec2i(i, p.y));
     }
   }
-  textureStore(dst, l, vec4f(acc / (ff * ff), 0.0, 0.0, 1.0));
+  textureStore(dst, p, vec4f(acc / ff, 0.0, 0.0, 1.0));
+}
+
+// Then along y, from the reduced-width image (bound as `low`) onto the reduced grid.
+@compute @workgroup_size(8, 8)
+fn ehtReduceY(@builtin(global_invocation_id) gid: vec3u) {
+  let p = vec2i(gid.xy);
+  if (!inLow(p)) {
+    return;
+  }
+  let f = i32(ep.factor);
+  let ff = f32(ep.factor);
+  let centre = (f32(p.y) + 0.5) * ff;
+  let height = i32(ep.imageSize.y);
+  var acc = 0.0;
+  for (var j = p.y * f - f; j < p.y * f + 2 * f; j++) {
+    let w = 1.0 - abs(f32(j) + 0.5 - centre) / ff;
+    if (j >= 0 && j < height && w > 0.0) {
+      acc += w * textureLoad(low, vec2i(p.x, j), 0).r;
+    }
+  }
+  textureStore(dst, p, vec4f(acc / ff, 0.0, 0.0, 1.0));
 }
 
 // Convolution with the plan's weights along one axis, zero outside the reduced grid (blur1D).

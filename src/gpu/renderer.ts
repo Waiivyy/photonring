@@ -86,7 +86,10 @@ type Layouts = Record<
   GPUBindGroupLayout
 >;
 type Pipelines = Record<'render' | 'refine' | 'rays' | 'sky', GPUComputePipeline>;
-type EhtPipelines = Record<'reduce' | 'blurH' | 'blurV' | 'max' | 'normalise', GPUComputePipeline>;
+type EhtPipelines = Record<
+  'reduceX' | 'reduceY' | 'blurH' | 'blurV' | 'max' | 'normalise',
+  GPUComputePipeline
+>;
 
 /** Which compute pass a tile dispatch runs: one sample per pixel, or anti-aliasing. */
 export type TilePass = 'trace' | 'refine';
@@ -104,7 +107,16 @@ export class GpuRenderer {
   private readonly ehtTable: GPUBuffer;
   private readonly ehtPeak: GPUBuffer;
   private ehtWeights: GPUBuffer | null = null;
-  private ehtLow: readonly [GPUTexture, GPUTexture] | null = null;
+  /** The reduced images, and the reduced-width image between the two reduce passes. */
+  private ehtLow: readonly [GPUTexture, GPUTexture, GPUTexture] | null = null;
+  /** Benchmarks only: a fixed reduce factor for the EHT post-process. */
+  private ehtFactorOverride: number | undefined = undefined;
+  /** Timestamp queries for timed presents, apart from the tile timing. */
+  private readonly presentQuery: {
+    readonly set: GPUQuerySet;
+    readonly resolve: GPUBuffer;
+    readonly read: GPUBuffer;
+  } | null;
   /** One sample per pixel (first pass). */
   private image: GPUTexture | null = null;
   private imageGroup: GPUBindGroup | null = null;
@@ -191,6 +203,19 @@ export class GpuRenderer {
     });
     this.empty = device.createBindGroup({ layout: layouts.empty, entries: [] });
     this.sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
+    this.presentQuery = timestampQuery
+      ? {
+          set: device.createQuerySet({ type: 'timestamp', count: 2 }),
+          resolve: device.createBuffer({
+            size: 16,
+            usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC,
+          }),
+          read: device.createBuffer({
+            size: 16,
+            usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+          }),
+        }
+      : null;
     if (timestampQuery) {
       this.querySet = device.createQuerySet({ type: 'timestamp', count: 2 });
       this.queryResolve = device.createBuffer({
@@ -283,7 +308,8 @@ export class GpuRenderer {
         compute: { module: ehtModule, entryPoint },
       });
     const ehtPipelines = {
-      reduce: await eht('ehtReduce'),
+      reduceX: await eht('ehtReduceX'),
+      reduceY: await eht('ehtReduceY'),
       blurH: await eht('ehtBlurH'),
       blurV: await eht('ehtBlurV'),
       max: await eht('ehtMax'),
@@ -667,37 +693,52 @@ export class GpuRenderer {
     return p;
   }
 
-  /** The two reduced images of the EHT post-process, reallocated when the reduced size changes. */
-  private ehtTargets(width: number, height: number): readonly [GPUTexture, GPUTexture] {
+  /**
+   * The reduced images of the EHT post-process (two of the reduced size, one of reduced width and
+   * full height), reallocated when the sizes change.
+   */
+  private ehtTargets(
+    width: number,
+    height: number,
+    fullHeight: number,
+  ): readonly [GPUTexture, GPUTexture, GPUTexture] {
     const cur = this.ehtLow;
-    if (cur && cur[0].width === width && cur[0].height === height) return cur;
+    if (cur && cur[0].width === width && cur[0].height === height && cur[2].height === fullHeight) {
+      return cur;
+    }
     cur?.forEach((t) => t.destroy());
-    const make = (label: string) =>
+    const make = (label: string, h: number) =>
       this.device.createTexture({
         label,
-        size: { width, height },
+        size: { width, height: h },
         format: IMAGE_FORMAT,
         usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING,
       });
-    this.ehtLow = [make('EHT reduced A'), make('EHT reduced B')];
+    this.ehtLow = [
+      make('EHT reduced A', height),
+      make('EHT reduced B', height),
+      make('EHT reduced along x', fullHeight),
+    ];
     return this.ehtLow;
   }
 
   /**
-   * The EHT-style view's present: reduce, blur along x and y, peak and normalisation in five
-   * compute passes, then the colour-mapped upsample, all in one command encoder, so the peak
+   * The EHT-style view's present: reduce along x and y, blur along x and y, peak and
+   * normalisation in six compute passes, then the colour-mapped upsample, all in one command encoder, so the peak
    * always belongs to the frame it normalises. Reads the interactive images and never writes them.
    */
   private blitEht(
     target: GPUTextureView,
     format: GPUTextureFormat,
     source: 'full' | 'preview',
+    timed = false,
   ): void {
     const scene = this.scene;
     if (!this.image || !this.refined || !this.preview || !scene) return;
     const d = this.device;
-    const plan = ehtPlan(scene.camera, this.width, this.height, scene.M);
-    const [a, b] = this.ehtTargets(plan.lowWidth, plan.lowHeight);
+    const plan = ehtPlan(scene.camera, this.width, this.height, scene.M, this.ehtFactorOverride);
+    const q = timed ? this.presentQuery : null;
+    const [a, b, c] = this.ehtTargets(plan.lowWidth, plan.lowHeight, this.height);
     const weights = new Float32Array(plan.weights);
     if (!this.ehtWeights || this.ehtWeights.size < weights.byteLength) {
       this.ehtWeights?.destroy();
@@ -734,15 +775,21 @@ export class GpuRenderer {
     const groups = (n: number) => Math.ceil(n / 8);
     const passes: [GPUComputePipeline, GPUBindGroupEntry[], number, number][] = [
       [
-        this.ehtPipelines.reduce,
+        this.ehtPipelines.reduceX,
         [
           params,
           tex(1, this.image),
           tex(2, this.refined),
           tex(3, this.preview),
           { binding: 4, resource: this.sampler },
-          tex(5, a),
+          tex(5, c),
         ],
+        groups(plan.lowWidth),
+        groups(this.height),
+      ],
+      [
+        this.ehtPipelines.reduceY,
+        [params, tex(7, c), tex(5, a)],
         groups(plan.lowWidth),
         groups(plan.lowHeight),
       ],
@@ -767,8 +814,10 @@ export class GpuRenderer {
       ],
     ];
     const encoder = d.createCommandEncoder();
-    for (const [pipeline, entries, x, y] of passes) {
-      const pass = encoder.beginComputePass();
+    for (const [k, [pipeline, entries, x, y]] of passes.entries()) {
+      const pass = encoder.beginComputePass(
+        q && k === 0 ? { timestampWrites: { querySet: q.set, beginningOfPassWriteIndex: 0 } } : {},
+      );
       pass.setPipeline(pipeline);
       pass.setBindGroup(0, d.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries }));
       pass.dispatchWorkgroups(x, y);
@@ -779,6 +828,7 @@ export class GpuRenderer {
       colorAttachments: [
         { view: target, loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 1] },
       ],
+      ...(q ? { timestampWrites: { querySet: q.set, endOfPassWriteIndex: 1 } } : {}),
     });
     render.setPipeline(pipeline);
     render.setBindGroup(
@@ -795,7 +845,46 @@ export class GpuRenderer {
     );
     render.draw(3);
     render.end();
+    if (q) {
+      encoder.resolveQuerySet(q.set, 0, 2, q.resolve, 0);
+      encoder.copyBufferToBuffer(q.resolve, 0, q.read, 0, 16);
+    }
     d.queue.submit([encoder.finish()]);
+  }
+
+  /**
+   * Benchmarks: GPU milliseconds of one present into an offscreen target (in the EHT-style view,
+   * its six passes and the colour-mapped upsample; otherwise the tone-mapping blit), from
+   * timestamp queries, or wall-clock milliseconds until the queue drains without them. `factor`
+   * fixes the EHT reduce factor for a comparison.
+   */
+  async timePresent(
+    source: 'full' | 'preview' = 'full',
+    factor?: number,
+  ): Promise<{ ms: number; timing: 'timestamp-query' | 'wall-clock' }> {
+    const target = this.device.createTexture({
+      size: { width: this.width, height: this.height },
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT,
+    });
+    this.ehtFactorOverride = factor;
+    const q = this.presentQuery;
+    try {
+      const t0 = performance.now();
+      this.blit(target.createView(), 'rgba8unorm', source, true);
+      if (q) {
+        await q.read.mapAsync(GPUMapMode.READ);
+        const t = new BigUint64Array(q.read.getMappedRange());
+        const ms = Number((t[1] as bigint) - (t[0] as bigint)) / 1e6;
+        q.read.unmap();
+        return { ms, timing: 'timestamp-query' };
+      }
+      await this.device.queue.onSubmittedWorkDone();
+      return { ms: performance.now() - t0, timing: 'wall-clock' };
+    } finally {
+      this.ehtFactorOverride = undefined;
+      target.destroy();
+    }
   }
 
   /**
@@ -806,12 +895,14 @@ export class GpuRenderer {
     target: GPUTextureView,
     format: GPUTextureFormat,
     source: 'full' | 'preview' = 'full',
+    timed = false,
   ): void {
     if (!this.image || !this.refined || !this.preview || !this.scene) return;
     if (this.scene.mode === 'eht') {
-      this.blitEht(target, format, source);
+      this.blitEht(target, format, source, timed);
       return;
     }
+    const q = timed ? this.presentQuery : null;
     const tone = this.scene.toneMapping && this.scene.mode === 'colour';
     this.device.queue.writeBuffer(
       this.blitUniform,
@@ -841,11 +932,24 @@ export class GpuRenderer {
       colorAttachments: [
         { view: target, loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 1] },
       ],
+      ...(q
+        ? {
+            timestampWrites: {
+              querySet: q.set,
+              beginningOfPassWriteIndex: 0,
+              endOfPassWriteIndex: 1,
+            },
+          }
+        : {}),
     });
     pass.setPipeline(this.blitPipeline(format));
     pass.setBindGroup(0, group);
     pass.draw(3);
     pass.end();
+    if (q) {
+      encoder.resolveQuerySet(q.set, 0, 2, q.resolve, 0);
+      encoder.copyBufferToBuffer(q.resolve, 0, q.read, 0, 16);
+    }
     this.device.queue.submit([encoder.finish()]);
   }
 
@@ -1095,5 +1199,8 @@ export class GpuRenderer {
     this.querySet?.destroy();
     this.queryResolve?.destroy();
     this.queryRead?.destroy();
+    this.presentQuery?.set.destroy();
+    this.presentQuery?.resolve.destroy();
+    this.presentQuery?.read.destroy();
   }
 }
