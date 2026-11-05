@@ -21,10 +21,13 @@ export const GPU_MAX_STEPS = 1000;
 export const TILE_SIZE = 256;
 const IMAGE_FORMAT: GPUTextureFormat = 'rgba16float';
 
+/** What the compute pass writes: disk and sky colours, or each ray's termination as a colour. */
+export type RenderMode = 'colour' | 'termination';
+
 export interface SceneParams {
   readonly M: number;
   readonly camera: CameraParams;
-  readonly mode: 'colour' | 'termination';
+  readonly mode: RenderMode;
   readonly sky: 'stars' | 'uniform';
   readonly exposure: number;
   readonly toneMapping: boolean;

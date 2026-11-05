@@ -17,7 +17,7 @@ describe('key map', () => {
     ['-', { type: 'zoom', factor: 1.1 }],
     ['d', { type: 'toggle', target: 'disk' }],
     ['A', { type: 'toggle', target: 'antialias' }],
-    ['t', { type: 'toggle', target: 'termination' }],
+    ['t', { type: 'view', mode: 'termination' }],
     ['e', { type: 'overlay', id: 'edge' }],
     ['h', { type: 'overlay', id: 'horizon' }],
     ['P', { type: 'overlay', id: 'photon' }],

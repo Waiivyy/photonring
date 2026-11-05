@@ -1,6 +1,7 @@
 // The page's read-only debug interface (window.photonring), shared by the app and the browser
 // tests. Types only.
 import type { ShadowResult } from './validation.ts';
+import type { ViewMode } from './view-state.ts';
 
 export interface AppStats {
   state: 'starting' | 'rendering' | 'lost';
@@ -10,7 +11,7 @@ export interface AppStats {
   internalHeight: number;
   limitedBy: 'none' | 'texture' | 'pixels';
   /** Applied scene: what the image shows. */
-  mode: 'colour' | 'termination';
+  mode: ViewMode;
   disk: boolean;
   antialias: boolean;
   distance: number;
@@ -32,7 +33,7 @@ export interface AppStats {
   controlsOpen: boolean;
   /** What the controls ask for; the image follows within the brightness limiter's interval. */
   requestedDisk: boolean;
-  requestedMode: 'colour' | 'termination';
+  requestedMode: ViewMode;
   brightnessPending: boolean;
   /** Brightness changes applied so far, and the times (performance.now) of the last 16. */
   toggleApplies: number;

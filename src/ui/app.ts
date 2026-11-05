@@ -5,7 +5,7 @@
 import { initWebGpu } from '../gpu/device.ts';
 import { ProgressiveRenderer, type FrameAction } from '../gpu/host/progressive.ts';
 import { chooseInternalResolution, type Resolution } from '../gpu/host/resolution.ts';
-import { GpuRenderer, TILE_SIZE } from '../gpu/renderer.ts';
+import { GpuRenderer, TILE_SIZE, type RenderMode } from '../gpu/renderer.ts';
 import { DEFAULT_DISK, shadowAngularRadius, type CameraParams } from '../physics/index.ts';
 import { createAbout, type About } from './about.ts';
 import { createAnnouncer, type Announcer } from './announcer.ts';
@@ -41,7 +41,25 @@ import {
   createValidationPanel,
   type ValidationPanel,
 } from './validation-panel.ts';
-import { DEFAULT_VIEW, toggleOverlay, type ViewMode, type ViewState } from './view-state.ts';
+import {
+  DEFAULT_VIEW,
+  VIEW_NAMES,
+  toggleOverlay,
+  toggledView,
+  type ViewMode,
+  type ViewState,
+} from './view-state.ts';
+
+/** What the renderer draws for each view. */
+const RENDER_MODE: Readonly<Record<ViewMode, RenderMode>> = {
+  colour: 'colour',
+  termination: 'termination',
+};
+/** What the camera line of the status adds for each view. */
+const HUD_VIEW: Readonly<Record<ViewMode, string>> = {
+  colour: '',
+  termination: ', termination view',
+};
 
 /** GPU time per animation frame the renderer aims for. */
 const FRAME_BUDGET_MS = 12;
@@ -264,6 +282,7 @@ class App {
     this.controls = createControlsPanel({
       action: (a) => this.dispatch(a, 'button'),
       scene: (toggle, on) => this.setSceneToggle(toggle, on, false),
+      view: (mode) => this.setView(mode, false),
       overlay: (id, on) => this.setOverlay(id, on, false),
       close: () => this.closePanel('controls', true),
     });
@@ -407,7 +426,7 @@ class App {
     this.renderer.setScene({
       M: 1,
       camera: s.camera,
-      mode: s.view,
+      mode: RENDER_MODE[s.view],
       sky: 'stars',
       exposure: 1,
       toneMapping: true,
@@ -510,7 +529,7 @@ class App {
       cssWidth: this.canvas.clientWidth,
       cssHeight: this.canvas.clientHeight,
       overlays: this.view.overlays,
-      termination: this.applied.view === 'termination',
+      view: this.applied.view,
       controlsOpen: this.panels.includes('controls'),
     };
   }
@@ -554,16 +573,15 @@ class App {
     const camera =
       `${o.distance.toFixed(1)} M, elevation ${formatNumber(o.elevationDeg, 2)} degrees, ` +
       `azimuth ${formatNumber(o.azimuthDeg, 2)} degrees`;
-    const view = this.applied.view === 'termination' ? ', termination view' : '';
-    this.hudCamera.textContent = `${camera}${view}.`;
+    this.hudCamera.textContent = `${camera}${HUD_VIEW[this.applied.view]}.`;
     this.hudTiming.textContent = ` ${width} x ${height}, ${timing} time: ${status}`;
   }
 
   // ---- State changes ------------------------------------------------------------------------
 
   /**
-   * Makes `next` the requested view: the camera and anti-aliasing apply at once, disk and
-   * termination view go through the brightness limiter, and the URL follows (debounced).
+   * Makes `next` the requested view: the camera and anti-aliasing apply at once, the disk and
+   * the view go through the brightness limiter, and the URL follows (debounced).
    */
   private commit(next: ViewState): void {
     const prev = this.view;
@@ -586,14 +604,16 @@ class App {
   private setSceneToggle(toggle: SceneToggle, on: boolean, announce: boolean): void {
     const v = this.view;
     if (toggle === 'disk') this.commit({ ...v, disk: on });
-    else if (toggle === 'termination') this.commit({ ...v, view: on ? 'termination' : 'colour' });
     else this.commit({ ...v, antialias: on });
     if (announce) {
-      const name = { disk: 'Disk', antialias: 'Anti-aliasing', termination: 'Termination view' }[
-        toggle
-      ];
+      const name = { disk: 'Disk', antialias: 'Anti-aliasing' }[toggle];
       this.announcer.announce(`${name} ${on ? 'on' : 'off'}`);
     }
+  }
+
+  private setView(mode: ViewMode, announce: boolean): void {
+    if (this.view.view !== mode) this.commit({ ...this.view, view: mode });
+    if (announce) this.announcer.announce(`View: ${VIEW_NAMES[mode]}`);
   }
 
   private setOverlay(id: OverlayId, on: boolean, announce: boolean): void {
@@ -647,7 +667,7 @@ class App {
     this.controls.sync({
       disk: this.view.disk,
       antialias: this.view.antialias,
-      termination: this.view.view === 'termination',
+      view: this.view.view,
       overlays: this.view.overlays,
     });
   }
@@ -679,16 +699,16 @@ class App {
         this.announceCamera = false;
         this.announcer.announce('View reset');
         return;
-      case 'toggle': {
-        const on =
-          a.target === 'disk'
-            ? !v.disk
-            : a.target === 'antialias'
-              ? !v.antialias
-              : v.view !== 'termination';
-        this.setSceneToggle(a.target, on, source === 'key');
+      case 'toggle':
+        this.setSceneToggle(
+          a.target,
+          a.target === 'disk' ? !v.disk : !v.antialias,
+          source === 'key',
+        );
         return;
-      }
+      case 'view':
+        this.setView(toggledView(v.view, a.mode), source === 'key');
+        return;
       case 'overlay':
         this.setOverlay(a.id, !v.overlays.includes(a.id), source === 'key');
         return;
@@ -819,7 +839,7 @@ class App {
         edge: frame.overlays.includes('edge') ? edgeEllipse(shown.camera.distance, view) : null,
         rings: this.overlay.paths(view, frame),
         overlays: frame.overlays,
-        termination: shown.view === 'termination',
+        view: shown.view,
       });
       if (this.life.disposed) return;
       const name = screenshotName({ ...shown.camera, view: shown.view });

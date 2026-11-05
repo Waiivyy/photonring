@@ -1,6 +1,6 @@
 // The Controls panel: camera buttons (a single-pointer, path-free alternative to dragging and
 // pinching, and a screen-reader path that does not depend on arrow keys reaching the canvas),
-// scene checkboxes and overlay checkboxes, which double as the legend.
+// scene checkboxes, the view as a radio group, and overlay checkboxes, which double as the legend.
 import { el } from './dom.ts';
 import { KEYMAP, keyName, type Action } from './keymap.ts';
 import {
@@ -11,15 +11,19 @@ import {
   type OverlayId,
 } from './overlay-style.ts';
 import { TERMINATION_LABELS, colourSwatch, lineSwatch, type TerminationKind } from './swatch.ts';
+import { VIEW_MODES, VIEW_NAMES, type ViewMode } from './view-state.ts';
 
-export type SceneToggle = 'disk' | 'antialias' | 'termination';
+export type SceneToggle = 'disk' | 'antialias';
 
 export interface ControlsState {
   readonly disk: boolean;
   readonly antialias: boolean;
-  readonly termination: boolean;
+  readonly view: ViewMode;
   readonly overlays: readonly OverlayId[];
 }
+
+/** The key that shows each view (colour has none: a view's key returns to it). */
+const VIEW_KEYS: Readonly<Record<ViewMode, string | null>> = { colour: null, termination: 't' };
 
 export interface ControlsPanel {
   readonly element: HTMLElement;
@@ -49,6 +53,7 @@ const kbd = (key: string) => el('kbd', { 'aria-hidden': 'true' }, keyName(key));
 export function createControlsPanel(h: {
   action(a: Action): void;
   scene(toggle: SceneToggle, on: boolean): void;
+  view(mode: ViewMode): void;
   overlay(id: OverlayId, on: boolean): void;
   close(): void;
 }): ControlsPanel {
@@ -92,27 +97,57 @@ export function createControlsPanel(h: {
     );
   };
 
-  const termItems = (Object.keys(TERMINATION_LABELS) as TerminationKind[]).map((k) =>
-    el('li', {}, colourSwatch(k), ` ${TERMINATION_LABELS[k]}`),
-  );
   const scene = el(
     'fieldset',
     {},
     el('legend', {}, 'Scene'),
     checkbox('disk', 'Accretion disk', 'd', null),
     checkbox('antialias', 'Anti-aliasing', 'a', null),
-    checkbox('termination', 'Termination view', 't', 'desc-termination'),
-    el('ul', { class: 'term-legend', 'aria-hidden': 'true' }, ...termItems),
-    el('p', { class: 'desc', id: 'desc-termination' }, TERMINATION_LEGEND),
   );
-  for (const [id, toggle] of [
-    ['disk', 'disk'],
-    ['antialias', 'antialias'],
-    ['termination', 'termination'],
-  ] as const) {
+  for (const toggle of ['disk', 'antialias'] as const) {
     boxes
-      .get(id)!
+      .get(toggle)!
       .addEventListener('change', (e) => h.scene(toggle, (e.target as HTMLInputElement).checked));
+  }
+
+  // The view: native radio buttons, so arrow keys move the selection inside the group (each
+  // change goes through the brightness limiter like any other view change).
+  const radios = new Map<ViewMode, HTMLInputElement>();
+  const termItems = (Object.keys(TERMINATION_LABELS) as TerminationKind[]).map((k) =>
+    el('li', {}, colourSwatch(k), ` ${TERMINATION_LABELS[k]}`),
+  );
+  const viewDetails: Readonly<Record<ViewMode, Node[]>> = {
+    colour: [],
+    termination: [
+      el('ul', { class: 'term-legend', 'aria-hidden': 'true' }, ...termItems),
+      el('p', { class: 'desc', id: 'desc-view-termination' }, TERMINATION_LEGEND),
+    ],
+  };
+  const views = el('fieldset', {}, el('legend', {}, 'View'));
+  for (const mode of VIEW_MODES) {
+    const details = viewDetails[mode];
+    const input = el('input', {
+      type: 'radio',
+      name: 'view',
+      id: `rb-view-${mode}`,
+      value: mode,
+      'aria-describedby': details.length > 0 ? `desc-view-${mode}` : null,
+    });
+    input.addEventListener('change', () => {
+      if (input.checked) h.view(mode);
+    });
+    radios.set(mode, input);
+    const key = VIEW_KEYS[mode];
+    views.append(
+      el(
+        'label',
+        { class: 'check', for: `rb-view-${mode}` },
+        input,
+        el('span', {}, VIEW_NAMES[mode]),
+        ...(key === null ? [] : [' ', kbd(key)]),
+      ),
+      ...details,
+    );
   }
 
   const overlays = el('fieldset', {}, el('legend', {}, 'Overlays'));
@@ -133,6 +168,7 @@ export function createControlsPanel(h: {
     el('h2', { id: 'controls-heading' }, 'Controls'),
     el('fieldset', {}, el('legend', {}, 'Camera'), camera),
     scene,
+    views,
     overlays,
     el(
       'p',
@@ -156,7 +192,7 @@ export function createControlsPanel(h: {
     sync(state) {
       boxes.get('disk')!.checked = state.disk;
       boxes.get('antialias')!.checked = state.antialias;
-      boxes.get('termination')!.checked = state.termination;
+      for (const mode of VIEW_MODES) radios.get(mode)!.checked = state.view === mode;
       for (const id of OVERLAY_IDS) boxes.get(id)!.checked = state.overlays.includes(id);
     },
   };

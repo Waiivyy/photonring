@@ -7,6 +7,7 @@ import type { Lifecycle } from './lifecycle.ts';
 import { legendLayout } from './legend-layout.ts';
 import { HALO, OVERLAY_STYLES, type OverlayId } from './overlay-style.ts';
 import { TERMINATION_LABELS, displayColour, type TerminationKind } from './swatch.ts';
+import type { ViewMode } from './view-state.ts';
 
 export interface SaveScene {
   readonly width: number;
@@ -17,21 +18,21 @@ export interface SaveScene {
   readonly edge: { cx: number; cy: number; rx: number; ry: number } | null;
   readonly rings: readonly { id: OverlayId; order: number; d: string }[];
   readonly overlays: readonly OverlayId[];
-  readonly termination: boolean;
+  readonly view: ViewMode;
 }
 
 type LegendEntry =
   | { readonly kind: 'overlay'; readonly id: OverlayId; readonly label: string }
   | { readonly kind: 'termination'; readonly id: TerminationKind; readonly label: string };
 
-/** The legend of a saved image: the enabled overlays, then the termination colours. */
-export function legendEntries(overlays: readonly OverlayId[], termination: boolean): LegendEntry[] {
+/** The legend of a saved image: the enabled overlays, then the key of the view, if it has one. */
+export function legendEntries(overlays: readonly OverlayId[], view: ViewMode): LegendEntry[] {
   const out: LegendEntry[] = overlays.map((id) => ({
     kind: 'overlay',
     id,
     label: OVERLAY_STYLES[id].label,
   }));
-  if (termination) {
+  if (view === 'termination') {
     for (const id of Object.keys(TERMINATION_LABELS) as TerminationKind[]) {
       out.push({ kind: 'termination', id, label: TERMINATION_LABELS[id] });
     }
@@ -91,7 +92,7 @@ export function composeImage(scene: SaveScene): Promise<Blob> {
     stroke(ctx, () => ctx.stroke(path), r.id, k, r.order);
   }
 
-  const entries = legendEntries(scene.overlays, scene.termination);
+  const entries = legendEntries(scene.overlays, scene.view);
   const box = legendLayout(scene.width, scene.height, entries, k);
   if (box) {
     ctx.setLineDash([]);

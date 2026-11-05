@@ -18,6 +18,7 @@ import {
 } from './overlay-geometry.ts';
 import { HALO, OVERLAY_STYLES, type OverlayId } from './overlay-style.ts';
 import { TERMINATION_LABELS, colourSwatch, lineSwatch, type TerminationKind } from './swatch.ts';
+import type { ViewMode } from './view-state.ts';
 
 export interface OverlayFrame {
   /** Camera of the presented image, or null before the first one. */
@@ -27,7 +28,7 @@ export interface OverlayFrame {
   readonly cssWidth: number;
   readonly cssHeight: number;
   readonly overlays: readonly OverlayId[];
-  readonly termination: boolean;
+  readonly view: ViewMode;
   readonly controlsOpen: boolean;
 }
 
@@ -316,8 +317,9 @@ export class OverlayLayer {
   }
 
   private updateLegend(frame: OverlayFrame): void {
-    const show = (frame.overlays.length > 0 || frame.termination) && !frame.controlsOpen;
-    const sig = show ? `${frame.overlays.join(',')}|${frame.termination}` : 'hidden';
+    const viewKey = frame.view === 'termination';
+    const show = (frame.overlays.length > 0 || viewKey) && !frame.controlsOpen;
+    const sig = show ? `${frame.overlays.join(',')}|${frame.view}` : 'hidden';
     if (sig === this.legendKey) return;
     this.legendKey = sig;
     this.legend.hidden = !show;
@@ -325,7 +327,7 @@ export class OverlayLayer {
     const items: HTMLLIElement[] = frame.overlays.map((id) =>
       el('li', {}, lineSwatch(OVERLAY_STYLES[id]), el('span', {}, OVERLAY_STYLES[id].label)),
     );
-    if (frame.termination) {
+    if (viewKey) {
       for (const k of Object.keys(TERMINATION_LABELS) as TerminationKind[]) {
         items.push(el('li', {}, colourSwatch(k), el('span', {}, TERMINATION_LABELS[k])));
       }

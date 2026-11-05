@@ -21,11 +21,21 @@ function height(elevationDeg: number): string {
   return `${deg(elevationDeg)} ${elevationDeg > 0 ? 'above' : 'below'} the disk plane`;
 }
 
+/** What the view adds to the accessible name. */
+function viewPart(d: Described): string {
+  switch (d.view) {
+    case 'colour':
+      return `disk ${d.disk ? 'on' : 'off'}`;
+    case 'termination':
+      return 'termination view';
+  }
+}
+
 /** Accessible name of the canvas: what the image shows. */
 export function sceneSummary(d: Described): string {
   const parts = [
     `Black hole seen from ${d.distance.toFixed(1)} M, ${height(d.elevationDeg)}`,
-    d.view === 'termination' ? 'termination view' : `disk ${d.disk ? 'on' : 'off'}`,
+    viewPart(d),
   ];
   if (d.overlays.length > 0) {
     parts.push(

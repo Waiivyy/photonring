@@ -2,6 +2,9 @@
 import { ANGLE_DECIMALS, DISTANCE_DECIMALS, formatNumber, quantiseOrbit } from './quantise.ts';
 import type { ViewMode } from './view-state.ts';
 
+/** File name suffix of each view. */
+const SUFFIX: Readonly<Record<ViewMode, string>> = { colour: '', termination: '-termination' };
+
 export function screenshotName(s: {
   readonly distance: number;
   readonly azimuthDeg: number;
@@ -12,5 +15,5 @@ export function screenshotName(s: {
   const r = formatNumber(o.distance, DISTANCE_DECIMALS);
   const az = formatNumber(o.azimuthDeg, ANGLE_DECIMALS);
   const el = formatNumber(o.elevationDeg, ANGLE_DECIMALS);
-  return `photonring-r${r}-az${az}-el${el}${s.view === 'termination' ? '-termination' : ''}.png`;
+  return `photonring-r${r}-az${az}-el${el}${SUFFIX[s.view]}.png`;
 }
