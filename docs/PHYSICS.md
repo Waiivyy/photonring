@@ -10,7 +10,7 @@ version their entry names; the journal versions were not compared.
 ## 1. Conventions
 
 - Schwarzschild metric, geometric units G = c = 1:
-  $ds^2 = -(1-2M/r)\,dt^2 + (1-2M/r)^{-1}dr^2 + r^2 d\Omega^2$.
+  $ds^2 = -(1-2M/r)\thinspace dt^2 + (1-2M/r)^{-1}dr^2 + r^2 d\Omega^2$.
 - Library functions take the mass `M` explicitly so the flat-space limit (M = 0) and scaling with
   M can be tested. The renderer uses M = 1, so lengths in the UI are in units of $GM/c^2$.
 - $u = 1/r$. Primes on $u$ mean $d/d\phi$.
@@ -19,25 +19,29 @@ version their entry names; the journal versions were not compared.
 
 By spherical symmetry every geodesic lies in a plane through the origin; take it as the equatorial
 plane. With affine parameter $\sigma$, the conserved energy and angular momentum are
-$E = (1-2M/r)\,dt/d\sigma$ and $L = r^2\,d\phi/d\sigma$. The null condition gives
+$E = (1-2M/r)\thinspace dt/d\sigma$ and $L = r^2\thinspace d\phi/d\sigma$. The null condition gives
 
-$$\left(\frac{dr}{d\sigma}\right)^2 = E^2 - \left(1-\frac{2M}{r}\right)\frac{L^2}{r^2}.$$
+```math
+\left(\frac{dr}{d\sigma}\right)^2 = E^2 - \left(1-\frac{2M}{r}\right)\frac{L^2}{r^2}.
+```
 
 With the impact parameter $b = L/E$ and $u = 1/r$:
 
-$$u'^2 = P(u) \equiv \frac{1}{b^2} - u^2 + 2Mu^3, \qquad u'' + u = 3Mu^2 .$$
+```math
+u'^2 = P(u) \equiv \frac{1}{b^2} - u^2 + 2Mu^3, \qquad u'' + u = 3Mu^2 .
+```
 
 (`orbitPolynomial` in `src/physics/orbits.ts`.) Both match the forms in the project brief.
 
 **Photon sphere and $b_c$.** Turning points satisfy $V(r) = 1/b^2$ with the photon potential
-$V(r) = (1-2M/r)/r^2$. $V'(r) = 0$ at $r = 3M$, $V(3M) = 1/(27M^2)$, so $b_c = 3\sqrt{3}\,M
-\approx 5.196\,M$. The photon orbit is Bardeen, Press and Teukolsky (1972), eq. (2.18) with
+$V(r) = (1-2M/r)/r^2$. $V'(r) = 0$ at $r = 3M$, $V(3M) = 1/(27M^2)$, so
+$b_c = 3\sqrt{3}\thinspace M \approx 5.196\thinspace M$. The photon orbit is Bardeen, Press and Teukolsky (1972), eq. (2.18) with
 $a = 0$, and $b_c$ is Perlick and Tsupko (2022), eq. (8). $V''(3M) < 0$: the circular null orbit
 is a maximum of $V$ and is unstable. Equivalently $P(1/3M) = P'(1/3M) = 0$ at $b = b_c$ (a double
 root). Tested numerically by a golden-section search for the maximum of $V$.
 
 **Instability rate.** Linearising $u'' = 3Mu^2 - u$ about $u = 1/(3M)$ gives
-$\delta u'' = (6Mu - 1)\,\delta u = \delta u$: perturbations grow as $e^{\phi}$, a factor
+$\delta u'' = (6Mu - 1)\thinspace\delta u = \delta u$: perturbations grow as $e^{\phi}$, a factor
 $e^\pi \approx 23$ per half orbit. Integration errors near $b_c$ are amplified by the same factor,
 which is why near-critical rays are the hard case for any integrator. (This is the Lyapunov
 exponent per radian of orbit; per unit coordinate time it is $1/(3\sqrt3 M)$, which follows from
@@ -54,7 +58,9 @@ render because the disk ends at the ISCO, outside $3M$.
 For circular timelike orbits, $L^2 = Mr^2/(r-3M)$ (`circularOrbitAngularMomentumSq`; Bardeen,
 Press and Teukolsky 1972, eq. 2.13 with $a = 0$), and
 
-$$\frac{d L^2}{dr} = \frac{M r (r-6M)}{(r-3M)^2},$$
+```math
+\frac{d L^2}{dr} = \frac{M r (r-6M)}{(r-3M)^2},
+```
 
 so $L^2$ has its minimum at $r = 6M$ and orbits inside it are unstable: the ISCO is at $6M$
 (Bardeen, Press and Teukolsky 1972, eq. 2.21). The angular velocity is
@@ -65,23 +71,27 @@ $(u^t)^2[(1-2M/r) - r^2\Omega^2] = 1$, hence $u^t = (1 - 3M/r)^{-1/2}$.
 ## 4. Euclidean (Cartesian) form of the geodesic equation
 
 Treat $(r, \phi)$ as polar coordinates of a Euclidean plane, $\mathbf{x} = r(\cos\phi, \sin\phi)$,
-and choose a parameter $\lambda$ with $r^2\,d\phi/d\lambda = h$ constant. For a central
-acceleration $\mathbf{x}'' = F(r)\,\hat{\mathbf{x}}$, Binet's formula gives
+and choose a parameter $\lambda$ with $r^2\thinspace d\phi/d\lambda = h$ constant. For a central
+acceleration $\mathbf{x}'' = F(r)\thinspace\hat{\mathbf{x}}$, Binet's formula gives
 $F = -h^2u^2(u'' + u) = -3Mh^2u^4$, so
 
-$$\mathbf{x}'' = -\frac{3Mh^2\,\mathbf{x}}{r^5}, \qquad h = |\mathbf{x}\times\mathbf{x}'| .$$
+```math
+\mathbf{x}'' = -\frac{3Mh^2\,\mathbf{x}}{r^5}, \qquad h = |\mathbf{x}\times\mathbf{x}'| .
+```
 
 The force is central, so $h$ is conserved and the motion stays in the plane of $\mathbf{x}$ and
 $\mathbf{x}'$; the same equation therefore holds in 3D with no polar singularity. This verifies the
 form in the brief.
 
-**Affine parameter.** $r^2\,d\phi/d\sigma = L$ and $r^2\,d\phi/d\lambda = h$ give
+**Affine parameter.** $r^2\thinspace d\phi/d\sigma = L$ and $r^2\thinspace d\phi/d\lambda = h$ give
 $d\lambda/d\sigma = h/L$: $\lambda$ is an affine parameter, rescaled by a constant.
 
 **Initial speed.** From section 2, $(dr/d\lambda)^2 = h^2[1/b^2 - (1-2M/r)/r^2]$ and
 $r^2(d\phi/d\lambda)^2 = h^2/r^2$, so
 
-$$|\mathbf{x}'|^2 = h^2\left(\frac{1}{b^2} + \frac{2M}{r^3}\right),$$
+```math
+|\mathbf{x}'|^2 = h^2\left(\frac{1}{b^2} + \frac{2M}{r^3}\right),
+```
 
 which is the energy integral $\tfrac12|\mathbf{x}'|^2 - Mh^2/r^3 = h^2/(2b^2)$ of the potential
 $-Mh^2/r^3$. The Euclidean speed is not constant, and the initial speed and direction together fix
@@ -103,19 +113,19 @@ cubic with three real roots $u_k = \frac{1}{6M} + \frac{1}{3M}\cos(\eta - 2\pi k
 $\cos 3\eta = 1 - 54M^2/b^2$, that is $\eta = \tfrac23\arcsin(b_c/b) \in (0, \pi/3]$.
 
 Written naively this loses all precision in both limits (roots merge at $b_c$; $u_2 \to 0$ for
-large $b$). With $k = 1/(3M)$ and $\vartheta = \pi/3 - \eta =
-\tfrac43\arcsin\sqrt{(b-b_c)/(2b)}$, the roots and their differences become
+large $b$). With $k = 1/(3M)$ and
+$\vartheta = \pi/3 - \eta = \tfrac43\arcsin\sqrt{(b-b_c)/(2b)}$, the roots and their differences become
 
-$$
+```math
 u_{1,2} = k\sin^2\tfrac{\eta}{2} \mp \tfrac{\sqrt3}{2}k\sin\eta,\quad
 u_3 = k(\tfrac12 + \cos\eta),
-$$
+```
 
-$$
+```math
 u_3-u_2 = \sqrt3\,k\sin\vartheta,\quad u_2-u_1 = \sqrt3\,k\sin\eta,\quad
 u_3-u_1 = \sqrt3\,k\cos(\eta-\tfrac{\pi}{6}),\quad \tfrac{1}{3M}-u_2 = k(\sin^2\tfrac{\vartheta}{2} +
 \tfrac{\sqrt3}{2}\sin\vartheta).
-$$
+```
 
 `orbitRoots` computes whichever of $\eta$ or $\vartheta$ is small directly. Tests check the Vieta
 relations ($\sum u_i = 1/(2M)$, $\prod u_i = -1/(2Mb^2)$, pairwise sum $= 0$) for
@@ -129,17 +139,19 @@ $e_{\hat\theta} = r^{-1}\partial_\theta$, $e_{\hat\phi} = (r\sin\theta)^{-1}\par
 A photon has local energy $E/\sqrt{1-2M/r}$ and local tangential momentum $L/r$, so its angle
 $\psi$ from the radial direction satisfies
 
-$$\sin\psi = \frac{b}{r}\sqrt{1-\frac{2M}{r}} .$$
+```math
+\sin\psi = \frac{b}{r}\sqrt{1-\frac{2M}{r}} .
+```
 
 This is Synge (1966), eqs. (8) to (11), in his variables $\rho = r/2M$ and $\beta = 2M/b$: his
 eq. (11), $\sin^2\psi = (\rho - 1)/(\rho^3\beta^2)$, expands to $(b^2/r^2)(1 - 2M/r)$.
 
 **Shadow.** Rays with $b < b_c$ traced backwards are captured, so the shadow edge is at
 
-$$
+```math
 \sin\psi_{sh} = \frac{3\sqrt3\,M}{r_o}\sqrt{1-\frac{2M}{r_o}}, \qquad
 \cos\psi_{sh} = \frac{(r_o-3M)\sqrt{r_o+6M}}{r_o^{3/2}},
-$$
+```
 
 measured from the direction to the black hole. The cosine follows from the factorisation
 $r^3 - 27M^2r + 54M^3 = (r-3M)^2(r+6M)$; its sign selects $\psi_{sh} > \pi/2$ inside the photon
@@ -150,10 +162,12 @@ $r_o = 30M$ it is $9.633°$ against $9.974°$, 3.4 % smaller (`npm run measure`)
 formula is confirmed.
 
 **Local direction to Euclidean velocity.** A local unit direction $d$ has coordinate velocity
-proportional to $(\sqrt{1-2M/r}\,d_{\hat r},\ d_{\hat\theta}/r,\ d_{\hat\phi}/(r\sin\theta))$, so
+proportional to $(\sqrt{1-2M/r}\thinspace d_{\hat r},\ d_{\hat\theta}/r,\ d_{\hat\phi}/(r\sin\theta))$, so
 in the Euclidean picture of section 4
 
-$$\mathbf{x}' \propto d - \left(1 - \sqrt{1-2M/r}\right)(d\cdot\hat{\mathbf r})\,\hat{\mathbf r},$$
+```math
+\mathbf{x}' \propto d - \left(1 - \sqrt{1-2M/r}\right)(d\cdot\hat{\mathbf r})\,\hat{\mathbf r},
+```
 
 that is, the radial component shrinks by $\sqrt{1-2M/r}$ and tangential components are unchanged
 (`localDirectionToEuclidean`). Check: for $d = (\cos\psi, \sin\psi)$, $h = r\sin\psi$ and
@@ -182,12 +196,12 @@ direct image of $r = 2M$ is the edge of the "inner shadow" for a disk that emits
 horizon (Chael, Johnson and Lupsasca 2021); photonring's disk stops at the ISCO, so no brightness
 edge appears there in this render.
 
-**Image order.** The order-$n$ image of a ring point is reached at the $(n+1)$-th crossing of
+**Image order.** The image of order $n$ of a ring point is reached at the $(n+1)$-th crossing of
 the disk plane along the backward ray, not counting the observer's own position: the same order
 in which `traceRay` and the WGSL crossing log record crossings. For the image direction
 $\theta$, measured from image right towards image up, the ray plane is spanned by $e_1$, the
 direction from the hole to the observer (minus forward), and
-$e_2 = \cos\theta\, r + \sin\theta\, u$, where $r$ and $u$ are the camera's right and up
+$e_2 = \cos\theta\thinspace r + \sin\theta\thinspace u$, where $r$ and $u$ are the camera's right and up
 vectors. The camera frame has a horizontal right vector and an up vector with $z$ component
 $\cos\epsilon$ at elevation $\epsilon$, so the $z$ components are $\sin\epsilon$ for $e_1$
 and $\sin\theta\cos\epsilon$ for $e_2$. The crossings are at $\phi_0 + n\pi$, where
@@ -198,7 +212,7 @@ camera together.
 **The view angle of a ring point.** `ringImageAngle(r_o, R, sweep)` returns the angle $\alpha$
 from the direction to the hole at which the observer sees the point of radius $R$ that the
 backward ray reaches after sweeping the orbital angle `sweep`. With
-$k = \sqrt{1-2M/r_o}/r_o$, $\sin\alpha = k\,b$. Writing $\Phi(b; u_A, u_B)$ for the swept angle
+$k = \sqrt{1-2M/r_o}/r_o$, $\sin\alpha = k\thinspace b$. Writing $\Phi(b; u_A, u_B)$ for the swept angle
 over $[u_A, u_B]$ (section 8a below $b_c$, the Carlson form of section 8 above), the branches are:
 
 - $R < r_o$, $R \le 3M$: only plunging rays reach $R$, and the inbound sweep
@@ -216,7 +230,7 @@ over $[u_A, u_B]$ (section 8a below $b_c$, the Carlson form of section 8 above),
   $\Phi(b; u_o, u_2) + \Phi(b; u_R, u_2)$. The sweep falls from infinity at $\psi_{sh}$ to $0$ at
   $\pi$; root in $x = \ln(\alpha - \psi_{sh})$.
 - $R = r_o$ (to $10^{-12}$ relative): outward rays never return, so
-  $\psi_{sh} < \alpha \le \pi/2$ and the sweep is $2\,\Phi(b; u_o, u_2)$.
+  $\psi_{sh} < \alpha \le \pi/2$ and the sweep is $2\thinspace\Phi(b; u_o, u_2)$.
 
 Each branch is monotone, so every sweep has one root; the plunging branch is proved above, and
 the other branches are checked numerically: a scan over 2000 view angles in six cases finds
@@ -227,8 +241,8 @@ branch's bracket is split once at its midpoint, and the half that holds the root
 variable measured from its own end, so angles very close to $0$, to $\pi$ or to the edge keep
 full relative precision: $\ln\alpha$, $\ln(\pi - \alpha)$, $\ln|\alpha - \psi_{sh}|$, or
 $\alpha$ itself at a regular end such as the fold. The far end of each bracket is a nearly
-radial ray chosen from the sweep: for $b \le b_c/2$, $1/\sqrt{P} \le 1.155\,b$, so
-$b = \text{sweep}/(4\,|u_R - u_o|)$ has a sweep below $0.29$ of the target, which makes the
+radial ray chosen from the sweep: for $b \le b_c/2$, $1/\sqrt{P} \le 1.155\thinspace b$, so
+$b = \text{sweep}/(4\thinspace|u_R - u_o|)$ has a sweep below $0.29$ of the target, which makes the
 solver valid down to the smallest sweeps. The near end is $10^{-13}\psi_{sh}$ from the edge; a
 root closer than that is returned there. That happens only for observers within about $0.01M$
 of the photon sphere, where $b(\alpha)$ is so flat near the edge that the root is a few ulps
@@ -241,7 +255,7 @@ than the uniform sampling.
 
 **Checks** (`tests/unit/lensing.test.ts`). The radius reached at the target sweep agrees with
 the Binet integrator (f64, $d\phi = 5\times10^{-4}$) within $10^{-9}$ relative for
-$r_o \in \{5, 5.5, 6, 6.5, 10, 30, 200\}$, $R \in \{2, 3, 6\}$ and eight sweeps up to $2\pi$, and
+$r_o \in \lbrace 5, 5.5, 6, 6.5, 10, 30, 200 \rbrace$, $R \in \lbrace 2, 3, 6 \rbrace$ and eight sweeps up to $2\pi$, and
 with the exact elliptic-integral reference for $R = 6$. Sweeps from $10^{-14}$ to $10^{-11}$
 match the radial-ray limit $b = \text{sweep}/|u_R - u_o|$ within $10^{-9}$. Observers from
 $3.0001M$ to $3.5M$ with rings near $3M$ never make the solver throw. Images of $R \le 3M$ lie
@@ -284,9 +298,11 @@ ring and keep "photon ring" for $m \ge 3$. photonring says "subring $n$" with it
 
 **The outbound branch.** For $b > b_c$ the backward ray runs in from $u_o = 1/r_o$ to its turning
 point $u_2$ and out again; it meets the disk plane at the sweeps $\phi_0 + n\pi$ (section 6a), so
-the order-$n$ image of the ring $R$ is the root of
+the image of order $n$ of the ring $R$ is the root of
 
-$$\Phi(b) \equiv \int_{u_o}^{u_2}\frac{du}{\sqrt{P}} + \int_{u_R}^{u_2}\frac{du}{\sqrt{P}} = \phi_0 + n\pi .$$
+```math
+\Phi(b) \equiv \int_{u_o}^{u_2}\frac{du}{\sqrt{P}} + \int_{u_R}^{u_2}\frac{du}{\sqrt{P}} = \phi_0 + n\pi .
+```
 
 $\Phi$ falls monotonically from infinity at $b_c$ to its value for the ray that turns at
 $\max(u_o, u_R)$, so the root is unique. For the default disk's edges (6 and 20 M) and observers
@@ -294,13 +310,15 @@ at 5, 6.5, 30 and 200 M that smallest sweep is between 0.55 and 2.04 rad (comput
 `outboundSweep`), below $\pi$, so every image of order $n \ge 1$ lies on this branch.
 
 **The critical orbit's sweep.** At $b = b_c$ the orbit polynomial factorises,
-$P_c(u) = 2M\,(u - \tfrac{1}{3M})^2\,(u + \tfrac{1}{6M})$. The substitution
+$P_c(u) = 2M\thinspace(u - \tfrac{1}{3M})^2\thinspace(u + \tfrac{1}{6M})$. The substitution
 $u = -\tfrac{1}{6M} + \tfrac{1}{2M}\tanh^2 x$ gives $u + \tfrac{1}{6M} = \tanh^2 x/(2M)$ and
-$u - \tfrac{1}{3M} = -(1 - \tanh^2 x)/(2M)$, so $\sqrt{P_c} = \tanh x\,(1 - \tanh^2 x)/(2M)$,
-while $du = \tanh x\,(1 - \tanh^2 x)\,dx/M$; hence $du/\sqrt{P_c} = 2\,dx$. Integrating from
+$u - \tfrac{1}{3M} = -(1 - \tanh^2 x)/(2M)$, so $\sqrt{P_c} = \tanh x\thinspace(1 - \tanh^2 x)/(2M)$,
+while $du = \tanh x\thinspace(1 - \tanh^2 x)\thinspace dx/M$; hence $du/\sqrt{P_c} = 2\thinspace dx$. Integrating from
 $u = 0$ ($\tanh x = 1/\sqrt3$) to $u$:
 
-$$\Delta\phi_c(u) = 2\left[\operatorname{artanh}\sqrt{2Mu + \tfrac13} - \operatorname{artanh}\tfrac{1}{\sqrt3}\right],\qquad 0 \le u < \tfrac{1}{3M}.$$
+```math
+\Delta\phi_c(u) = 2\left[\operatorname{artanh}\sqrt{2Mu + \tfrac13} - \operatorname{artanh}\tfrac{1}{\sqrt3}\right],\qquad 0 \le u < \tfrac{1}{3M}.
+```
 
 Values: $\Delta\phi_c(1/30) = 0.174038$, $\Delta\phi_c(1/20) = 0.262589$,
 $\Delta\phi_c(1/6) = 0.975474$ (`criticalOrbitSweep`). It diverges at the photon sphere, where the
@@ -312,36 +330,38 @@ $\varepsilon = b/b_c - 1$ and $C = 216(7 - 4\sqrt3) = 15.5081$. Each leg carries
 the part of a leg between infinity and a finite radius tends to the critical orbit's sweep with an
 $O(\varepsilon)$ error, because the integrand is smooth there. Subtracting those parts,
 
-$$\varepsilon_n(R) \approx C\,e^{-\Delta\phi_c(u_o) - \Delta\phi_c(u_R)}\,e^{-\phi_0}\,e^{-n\pi}$$
+```math
+\varepsilon_n(R) \approx C\,e^{-\Delta\phi_c(u_o) - \Delta\phi_c(u_R)}\,e^{-\phi_0}\,e^{-n\pi}
+```
 
 (`subringOffsetLeadingOrder`; derived for this project and checked numerically below). This
 formula carries the main consequences: successive offsets of one edge, and so the widths of the
 bands, shrink by $e^{\pi}$ per half-turn; on a $\log_{10}\varepsilon$ axis the bands repeat every
 $\pi/\ln 10 = 1.364$ decades; and the view enters only through $\phi_0$, which is $\pi/2$ along the
-horizontal image axis at every elevation. ($C\,b_c = 1944M/(12 + 7\sqrt3) = 80.58M$ is Gralla, Holz
-and Wald's $C_+$.) Its error is $-2.4\,\%$, $-0.28\,\%$ and $-0.019\,\%$ at $R = 6M$ for $n = 1$
-to 3 face-on at $30M$, and within $0.304\,\varepsilon\,(\ln(1/\varepsilon) + 2)$ for $n = 1$ to 5
+horizontal image axis at every elevation. ($C\thinspace b_c = 1944M/(12 + 7\sqrt3) = 80.58M$ is Gralla, Holz
+and Wald's $C_+$.) Its error is $-2.4$ %, $-0.28$ % and $-0.019$ % at $R = 6M$ for $n = 1$
+to 3 face-on at $30M$, and within $0.304\thinspace\varepsilon\thinspace(\ln(1/\varepsilon) + 2)$ for $n = 1$ to 5
 in the five view directions of the test, at both disk edges.
 
 **How fast the ratio approaches $e^{\pi}$.** Write
-$\Phi = -\ln\varepsilon + K + c\,\varepsilon\ln(1/\varepsilon) + d\,\varepsilon + \dots$. The step
+$\Phi = -\ln\varepsilon + K + c\thinspace\varepsilon\ln(1/\varepsilon) + d\thinspace\varepsilon + \dots$. The step
 $\Phi(\varepsilon_{n+1}) - \Phi(\varepsilon_n) = \pi$ then gives
-$\delta_n \equiv (\varepsilon_n/\varepsilon_{n+1})/e^{\pi} - 1 \approx (1 - e^{-\pi})\,c\,\varepsilon_n\ln(1/\varepsilon_n) + A\,\varepsilon_n$.
+$\delta_n \equiv (\varepsilon_n/\varepsilon_{n+1})/e^{\pi} - 1 \approx (1 - e^{-\pi})\thinspace c\thinspace\varepsilon_n\ln(1/\varepsilon_n) + A\thinspace\varepsilon_n$.
 For rays from infinity $c = 5/18$ (Iyer and Petters 2007, eq. 25, section 8). With that $c$ the
 fitted $A$ is constant to three or four digits ($-0.28$ at $6M$, $+0.69$ at $20M$, $\lvert A\rvert \le 0.72$
 including $n = 1$). That $c = 5/18$ also holds for finite radii is a fit to these numbers, not a
-derivation. The test bound $\lvert\delta_n\rvert \le \tfrac{5}{18}\varepsilon_n\ln(1/\varepsilon_n) + 1.5\,\varepsilon_n$
+derivation. The test bound $\lvert\delta_n\rvert \le \tfrac{5}{18}\varepsilon_n\ln(1/\varepsilon_n) + 1.5\thinspace\varepsilon_n$
 covers both terms; its first term is larger than the leading one by $1/(1 - e^{-\pi}) = 1.045$.
 
-**Solver.** `outboundImageOffset(u_o, u_R, sweep)` solves $\Phi = $ sweep by Brent's method
+**Solver.** `outboundImageOffset(u_o, u_R, sweep)` solves $\Phi = \text{sweep}$ by Brent's method
 (section 6a) in $\ln\varepsilon$, so $\varepsilon$ keeps full relative precision, with $\Phi$ from
 the Carlson form of section 8 and the bracket started at the leading-order estimate; $u = 0$ means
 infinity. `ringImageOffset(r_o, R, sweep)` uses it whenever the sweep is beyond the branch's
 smallest value and otherwise converts the result of `ringImageAngle` with
-$\varepsilon = \sin\alpha/(k\,b_c) - 1$; `subringOffset` passes $\phi_0 + n\pi$. The offsets are
+$\varepsilon = \sin\alpha/(k\thinspace b_c) - 1$; `subringOffset` passes $\phi_0 + n\pi$. The offsets are
 computed by the 64-bit library; they are predictions of the model, not measurements of an image.
 The limit of f64: $b = b_c(1 + \varepsilon)$ moves in steps of one unit in the last place, about
-$1.7\times10^{-16}\,b_c$, so $\varepsilon$ is resolved only to about $2\times10^{-16}/\varepsilon$
+$1.7\times10^{-16}\thinspace b_c$, so $\varepsilon$ is resolved only to about $2\times10^{-16}/\varepsilon$
 relative, and roots below $\varepsilon = 10^{-14}$ are refused (order 12 face-on at $30M$ is near
 $10^{-16}$). Ratios are therefore checked up to $n = 4$, which uses $\varepsilon_5$.
 
@@ -363,16 +383,16 @@ disk hides the subrings over most of the lower half of the image.
 **The strip (the page's photon subring view).** A magnified, unrolled image of the region just
 outside the shadow edge (`src/physics/strip.ts`). Column $x$ of a strip $W$ wide is the image
 angle $\theta = 2\pi x/W$, from image right towards image up; row $y$ of a strip $H$ tall is
-$\log_{10}\varepsilon = t - y\,(t - u)/H$, from $t = \min(0.5, \log_{10}\varepsilon_{max})$ down to
-$u = -7.5$, where $\varepsilon_{max} = 1/(k\,b_c) - 1$ is the largest offset seen at all
+$\log_{10}\varepsilon = t - y\thinspace(t - u)/H$, from $t = \min(0.5, \log_{10}\varepsilon_{max})$ down to
+$u = -7.5$, where $\varepsilon_{max} = 1/(k\thinspace b_c) - 1$ is the largest offset seen at all
 ($\sin\alpha = 1$; $-0.616$ at 5 M). The direction of a strip pixel is
-$\cos\alpha\,\text{forward} + \sin\alpha\,(\cos\theta\,\text{right} + \sin\theta\,\text{up})$
-with $\sin\alpha = k\,b_c(1 + \varepsilon)$. On this scale the bands of the subrings have nearly
+$\cos\alpha\thinspace\text{forward} + \sin\alpha\thinspace(\cos\theta\thinspace\text{right} + \sin\theta\thinspace\text{up})$
+with $\sin\alpha = k\thinspace b_c(1 + \varepsilon)$. On this scale the bands of the subrings have nearly
 the same height (face-on at 30 M: 0.358 decades for $n = 1$, 0.312 for $n = 2$, 0.310 from
 $n = 3$ on; the direct image's band is 0.819) and successive bands are $\pi/\ln 10 = 1.364$
 decades apart. The GPU gets $(\cos\theta, \sin\theta)$ per
 column and $(\cos\alpha, \sin\alpha)$ per row from tables computed in f64, and the tracer takes
-$\sin\psi$ from them directly instead of from the length of $d - \cos\psi\,e_1$, a difference of
+$\sin\psi$ from them directly instead of from the length of $d - \cos\psi\thinspace e_1$, a difference of
 nearly equal numbers: that difference limits the ordinary image to about $10^{-7}$ to $10^{-6}$ in
 $\varepsilon$ (more at 200 M, `docs/VALIDATION.md`), while the strip's limit, measured on the Apple
 M5 from its order 3 and 4 edges, is about $1.2\times10^{-7}$ at 5 M, $1.7\times10^{-7}$ at 30 M and
@@ -399,7 +419,9 @@ Stage 0 (`integrateBinet` in `src/physics/integrators.ts`; the comparison is in
 `docs/DESIGN.md`). The 3D tracer `traceRay` (`src/physics/raytrace.ts`) reduces every ray to it.
 From the observer,
 
-$$u_0 = 1/r_o, \qquad w_0 = -u_0\sqrt{1-2Mu_0}\,\cot\psi,$$
+```math
+u_0 = 1/r_o, \qquad w_0 = -u_0\sqrt{1-2Mu_0}\,\cot\psi,
+```
 
 from $P(u_0) = u_0^2(1-2Mu_0)\cot^2\psi$, with the sign chosen so that an outward ray
 ($\cos\psi > 0$) has decreasing $u$. The impact parameter is not needed for the integration.
@@ -437,7 +459,7 @@ from $P(u_0) = u_0^2(1-2Mu_0)\cot^2\psi$, with the sign chosen so that an outwar
   $x^7$ (truncation error below $10^{-11}$ for $|x| \le 0.06$). In the last step a crossing
   counts only if it comes before the escape or capture point.
 - **Physical angular momentum.** The traced ray's plane normal is $n = e_1 \times e_2$. The
-  physical photon travels the other way, so its conserved $L_z/E = -b\,n_z$ with
+  physical photon travels the other way, so its conserved $L_z/E = -b\thinspace n_z$ with
   $b = r_o\sin\psi/\sqrt{1-2M/r_o}$; positive values co-rotate with the disk.
 - **Flat space** ($M = 0$) is the straight line itself: the escape direction is $d$ exactly and
   the one possible crossing is the intersection of the line with $z = 0$.
@@ -447,8 +469,8 @@ from $P(u_0) = u_0^2(1-2Mu_0)\cot^2\psi$, with the sign chosen so that an outwar
 The camera is a static observer at $r_o$ on a sphere around the hole, at azimuth $\alpha$ and
 elevation $\epsilon$ above the disk plane, looking at the hole (`cameraFrame` in
 `src/physics/camera.ts`). Its basis is forward $= -\hat{\mathbf r}$,
-up $= \partial\hat{\mathbf r}/\partial\epsilon = (-\sin\epsilon\cos\alpha,
--\sin\epsilon\sin\alpha, \cos\epsilon)$, which stays defined at the poles, and
+up $= \partial\hat{\mathbf r}/\partial\epsilon = (-\sin\epsilon\cos\alpha, -\sin\epsilon\sin\alpha, \cos\epsilon)$,
+which stays defined at the poles, and
 right $=$ forward $\times$ up. Because the static frame's axes are aligned with the Euclidean
 axes (section 6), these vectors are directly the local view directions.
 
@@ -472,12 +494,12 @@ ray from infinity is $\alpha(b) = 2\int_0^{u_2} du/\sqrt{P(u)} - \pi$, as in the
 **Method 1: quadrature after two changes of variables** (`sweptAngleQuadrature`). With
 $u = u_2 - s^2$, $P(u) = s^2 Q(u_2 - s^2)$ where, exactly (Q is quadratic in u),
 
-$$
+```math
 Q(u_2 - s^2) = Q_0 + \kappa s^2 - 2Ms^4,\qquad Q_0 = 6Mu_2\left(\tfrac{1}{3M}-u_2\right),\quad
 \kappa = 6Mu_2 - 1,
-$$
+```
 
-and the integral becomes $\int 2\,ds/\sqrt{Q_0 + \kappa s^2 - 2Ms^4}$: the turning-point
+and the integral becomes $\int 2\thinspace ds/\sqrt{Q_0 + \kappa s^2 - 2Ms^4}$: the turning-point
 singularity is gone. Near $b_c$, $Q_0 \to 0$ and the integrand develops a peak of width
 $\sqrt{Q_0/\kappa}$ at $s = 0$ (the logarithmic divergence of $\alpha$). The substitution
 $s = c\sinh\tau$ with $c = \sqrt{Q_0/\kappa}$ turns it into
@@ -488,15 +510,15 @@ precision. $Q_0$ is computed from the cancellation-free $1/(3M) - u_2$ of sectio
 **Method 2: elliptic integrals** (`sweptAngleElliptic`). With $X_i, Y_i$ the square roots of the
 three factors $(u-u_1), (u_2-u), (u_3-u)$ at $x = u_B$ and $y = u_A$,
 
-$$
+```math
 \int_y^x \frac{du}{\sqrt{2M(u-u_1)(u_2-u)(u_3-u)}} = \frac{2}{\sqrt{2M}}\,
 R_F(U_{12}^2, U_{13}^2, U_{14}^2),
-$$
+```
 
-$$
+```math
 U_{12} = \frac{X_1X_2Y_3 + Y_1Y_2X_3}{x-y},\quad U_{13} = \frac{X_1X_3Y_2 + Y_1Y_3X_2}{x-y},\quad
 U_{14} = \frac{X_1Y_2Y_3 + Y_1X_2X_3}{x-y},
-$$
+```
 
 which is DLMF 19.29.4 with the fourth factor set to 1 and the $U_{\alpha\beta}$ of 19.29.5 (DLMF
 release 1.2.8). $R_F$ uses Carlson's duplication algorithm (Carlson 1995, with his check values as
@@ -509,11 +531,11 @@ Iyer and Petters (2007, eq. 8) give equivalent closed forms in Legendre integral
 
 **Agreement (measured, Apple M5, macOS 27, Node 25.6.1, `npm run measure`).** At the test's
 values of $b/b_c$ from $1 + 10^{-8}$ to 1.1, with $M = 1$ and 2.5, the relative difference is at
-most $1.05\times10^{-15}$. Beyond 1.1, up to $1000\,b_c$, it is at most $2.9\times10^{-12}$. The
+most $1.05\times10^{-15}$. Beyond 1.1, up to $1000\thinspace b_c$, it is at most $2.9\times10^{-12}$. The
 larger value is cancellation in $2I - \pi$, not a disagreement of the two integrals: the
-deflection falls to about $4M/b = 7.7\times10^{-4}$ rad at $1000\,b_c$, so a rounding-level
+deflection falls to about $4M/b = 7.7\times10^{-4}$ rad at $1000\thinspace b_c$, so a rounding-level
 difference in $2I \approx \pi$ is a much larger fraction of it. The test tolerance is $10^{-11}$
-relative up to $1000\,b_c$.
+relative up to $1000\thinspace b_c$.
 
 **Weak field.** $\alpha = \sum A_n (M/b)^n$ with $A_1 = 4$, $A_2 = 15\pi/4$, $A_3 = 128/3$,
 $A_4 = 3465\pi/64$, $A_5 = 3584/5$, $A_6 = 255255\pi/256$ (Keeton and Petters 2005, eqs. 24 and
@@ -526,10 +548,10 @@ $(A_5/A_4)(M/b) = 4.2\times10^{-3}$ at $1000M$ (test bounds 0.95 to 1.06).
 $\bar b = \ln[216(7-4\sqrt3)] - \pi \approx -0.4002$ (his eqs. 47 to 49; the paper uses units
 $2M = 1$ and $u_m = 3\sqrt3/2$ there), written in the impact parameter:
 
-$$
+```math
 \alpha(b) = -\ln\left(\frac{b}{b_c} - 1\right) + \ln[216(7-4\sqrt3)] - \pi +
 O\big((b-b_c)\ln(b-b_c)\big).
-$$
+```
 
 The brief's "logarithmic divergence, coefficients from Bozza 2002" is confirmed. Bozza keeps only
 the zeroth-order terms in the closest-approach distance $x_0$ and gives the remainder as
@@ -538,11 +560,11 @@ from the series of Iyer and Petters (2007), eq. (25), in $b' = 1 - b_c/b$. With
 $\varepsilon = b/b_c - 1$ and $\ln(1/b') = \ln(1/\varepsilon) + \varepsilon + O(\varepsilon^2)$, its
 first correction gives the exact value minus the formula above as
 
-$$
+```math
 \varepsilon\left[\tfrac{5}{18}\ln\tfrac{1}{\varepsilon} + 1 + \tfrac{4\sqrt3 - 17}{18} +
 \tfrac{5}{18}\ln[216(7-4\sqrt3)]\right] = \varepsilon\left(0.2778\ln\tfrac{1}{\varepsilon} +
 1.2019\right),
-$$
+```
 
 up to $O(\varepsilon^2\ln\varepsilon)$. Measured (`npm run measure`, test at
 $\varepsilon = 10^{-3}$ to $10^{-7}$): the difference is $5.7\times10^{-7}$ rad at
@@ -556,16 +578,18 @@ For $b < b_c$ the reference quadrature of section 8 stops at $u = 1/(4M)$, but t
 section 6a need the swept angle through the photon sphere and past the horizon. With
 $v = u - 1/(3M)$ the orbit polynomial is exactly
 
-$$P = \varepsilon + v^2(1 + 2Mv), \qquad \varepsilon = \frac{1}{b^2} - \frac{1}{b_c^2} > 0,$$
+```math
+P = \varepsilon + v^2(1 + 2Mv), \qquad \varepsilon = \frac{1}{b^2} - \frac{1}{b_c^2} > 0,
+```
 
 because the linear terms cancel at $u = 1/(3M)$ and $1/b^2 - u^2(1-2Mu)$ there equals
 $\varepsilon$. Since $1 + 2Mv \ge 1/3$ for every $u \ge 0$, the substitution
 $v = \sqrt\varepsilon\sinh\tau$ gives
 
-$$
+```math
 \int \frac{du}{\sqrt{P}} = \int \frac{d\tau}{\sqrt{1 + 2M\sqrt\varepsilon\,
 \sinh^3\tau/\cosh^2\tau}},
-$$
+```
 
 a smooth, bounded integrand for any interval, evaluated by composite Gauss-Legendre with panels
 of width $0.5$ in $\tau$ (at least four): `sweptAnglePlunging`. Checks: agreement with an
@@ -578,7 +602,9 @@ the section 8 quadrature where both apply, and continuity with the Carlson form 
 An emitter with $u^\mu = u^t(1, 0, 0, \Omega)$ and a photon with $p_t = -E$, $p_\phi = L_z$ give,
 for an observer at rest at infinity,
 
-$$g = \frac{\nu_{obs}}{\nu_{emit}} = \frac{1}{u^t\,(1 - \Omega L_z/E)}$$
+```math
+g = \frac{\nu_{obs}}{\nu_{emit}} = \frac{1}{u^t\,(1 - \Omega L_z/E)}
+```
 
 (`redshiftFactor`), as in the brief. This matches Luminet (1979) eqs. (18) and (19) and
 Cunningham (1975) eq. (2).
@@ -605,11 +631,13 @@ Shakura and Sunyaev (1973) eq. (2.6) gives the flux per face
 $Q \propto R^{-3}[1 - (R_0/R)^{1/2}]$ with zero torque at the inner edge $R_0$. With
 $Q = \sigma T^4$:
 
-$$T(r) \propto r^{-3/4}\left(1 - \sqrt{r_{in}/r}\right)^{1/4},$$
+```math
+T(r) \propto r^{-3/4}\left(1 - \sqrt{r_{in}/r}\right)^{1/4},
+```
 
-as in the brief, with its maximum at $r = (49/36)\,r_{in} \approx 8.17M$ for $r_{in} = 6M$
+as in the brief, with its maximum at $r = (49/36)\thinspace r_{in} \approx 8.17M$ for $r_{in} = 6M$
 (`diskTemperature`, normalised to 1 at the peak); Shakura and Sunyaev (1973, p. 344) give the
-maximum of the flux at $R = 1.36\,R_0$. This is the Newtonian profile, not the relativistic Page
+maximum of the flux at $R = 1.36\thinspace R_0$. This is the Newtonian profile, not the relativistic Page
 and Thorne (1974) solution, and the disk has no thickness, no radiative transfer, no
 self-illumination and no magnetic fields. It is a toy for demonstration and must not be presented
 as a model of any real observation.
@@ -673,7 +701,7 @@ of the unit sphere. The star's direction is that point normalised.
 
 For each sample direction, `renderImage` (`src/cpu-renderer/render.ts`) traces the ray and then
 composites front to back along the traced path: each crossing with $r_{in} \le r \le r_{out}$
-adds $\tau\,a\,B(g\,T(r))$ and multiplies the transmittance $\tau$ by $1 - a$, where $a$ is
+adds $\tau\thinspace a\thinspace B(g\thinspace T(r))$ and multiplies the transmittance $\tau$ by $1 - a$, where $a$ is
 the disk opacity, $B$ the normalised blackbody colour and
 $g = g_\infty(r, L_z/E)/\sqrt{1 - 2M/r_o}$; finally an escaped ray adds $\tau$ times the sky
 radiance in its escape direction. Supersampling averages an $n \times n$ grid of samples per
@@ -682,26 +710,26 @@ no tone mapping, so captured pixels are exactly 0 and escaped pixels exactly 1.
 
 **On the GPU** (`src/shaders/render.wgsl` and `disk.wgsl`) the same compositing runs at each
 crossing. $T$ and $g$ use only square roots and divisions, because WGSL's `pow` inherits the
-loose error bounds of `exp2` and `log2`: $T = k\,s^{3/2}(1-s)^{1/4}$ with $s = \sqrt{r_{in}/r}$,
-and $g = g_{obs}\sqrt{1-3M/r}\,/\,(1 - \Omega L_z/E)$ with $\Omega = \sqrt{M/r}/r$. Once the
+loose error bounds of `exp2` and `log2`: $T = k\thinspace s^{3/2}(1-s)^{1/4}$ with $s = \sqrt{r_{in}/r}$,
+and $g = g_{obs}\sqrt{1-3M/r}\thinspace/\thinspace(1 - \Omega L_z/E)$ with $\Omega = \sqrt{M/r}/r$. Once the
 transmittance is zero (an opaque disk) tracing stops, since nothing behind can be seen.
 
 **Anti-aliasing** (`src/shaders/refine.wgsl`, `src/gpu/host/antialias.ts`). A second pass gives a
 pixel the CPU renderer's $3 \times 3$ grid of samples (the centre one is the first pass's) when
 either test holds:
 
-- **Critical band.** Its footprint may contain an inward ray with $b_c \le b \le 1.02\,b_c$, or
+- **Critical band.** Its footprint may contain an inward ray with $b_c \le b \le 1.02\thinspace b_c$, or
   the shadow edge. The footprint's angular radius is at most the pixel's half-diagonal in the
   image plane at unit distance, $\delta = \sqrt2\tan(f/2)/H$, because the inverse gnomonic
   projection shrinks lengths (its local scale factors are $\cos\theta$ and $\cos^2\theta$). The
   test is therefore a range of the cosine of the angle between the pixel centre's direction and
   the direction to the hole, $[\cos(\psi_{out} + \delta), \cos(\psi_{sh} - \delta)]$, with
-  $\sin\psi_{out} = 1.02\,b_c\sqrt{1-2M/r_o}/r_o$. In Bozza's strong-field limit ($\bar a = 1$),
+  $\sin\psi_{out} = 1.02\thinspace b_c\sqrt{1-2M/r_o}/r_o$. In Bozza's strong-field limit ($\bar a = 1$),
   $b/b_c - 1 \approx e^{\bar b - \alpha}$, so images half a turn apart differ by a factor
   $e^{-\pi} \approx 1/23$ in $b/b_c - 1$: the photon ring and the higher-order images of the disk
   soon become thinner than a pixel, and a one-sample image can miss them entirely. The band
   holds every ray deflected by more than 3.56 rad, or 204 degrees (`deflectionAngleElliptic` at
-  $1.02\,b_c$; the strong-field formula gives 3.51).
+  $1.02\thinspace b_c$; the strong-field formula gives 3.51).
 - **Contrast.** Its one-sample value differs from one of its 8 neighbours by more than 0.05 in
   sRGB-encoded, tone-mapped luminance (about 13 of 255 levels): disk edges, star images and other
   sharp features.
@@ -718,7 +746,9 @@ the caveats at the end of this section say why, and the page says so wherever th
 **The quantity.** Per sample, the brightness summed over all frequencies, composited front to
 back over the disk crossings like the colour view (`compositeDiskBolometric`):
 
-$$I = \sum_k \tau_k\,a\,\left(g\,\hat T(r_k)\right)^4,\qquad \tau_0 = 1,\quad \tau_{k+1} = \tau_k (1 - a),$$
+```math
+I = \sum_k \tau_k\,a\,\left(g\,\hat T(r_k)\right)^4,\qquad \tau_0 = 1,\quad \tau_{k+1} = \tau_k (1 - a),
+```
 
 with $g$ the frequency ratio of section 9 (including the static observer's factor), $\hat T$ the
 temperature profile of section 10 normalised to 1 at its peak, and $a$ the disk opacity. Because
@@ -737,25 +767,29 @@ about 25 μas (Paper I, section 3) is not an applied blur and is not used. The m
 $\theta_g = GM/(c^2D) = 3.8 \pm 0.4$ μas (Paper I, Table 1). For a distant observer, angle and
 impact parameter are proportional, so the blur in units of $M$ is
 
-$$F_b = \frac{20}{3.8}\,M = 5.263\,M,\qquad \sigma_b = \frac{F_b}{2\sqrt{2\ln 2}} = 2.2351\,M$$
+```math
+F_b = \frac{20}{3.8}\,M = 5.263\,M,\qquad \sigma_b = \frac{F_b}{2\sqrt{2\ln 2}} = 2.2351\,M
+```
 
 (`ehtBeamFwhmM`, `ehtBeamSigmaM`), 4.76 to 5.88 M over the uncertainty of $\theta_g$. Paper I
 (section 7) calibrates the ring diameter in units of $\theta_g$ against its library of GRMHD
 images, so this scale carries that calibration.
 
-**Pixels per M.** With $k = \sqrt{1 - 2M/r_o}/r_o$, $\sin\psi = k\,b$ (section 6), and the
+**Pixels per M.** With $k = \sqrt{1 - 2M/r_o}/r_o$, $\sin\psi = k\thinspace b$ (section 6), and the
 pinhole radius $\rho = (H/2)\tan\psi/\tan(f_y/2)$ (section 7a), the scale at the shadow edge is
 
-$$s = \frac{d\rho}{db}\bigg|_{b_c} = \frac{H\,k}{2\tan(f_y/2)\cos^3\psi_{sh}}\ \text{px per } M$$
+```math
+s = \frac{d\rho}{db}\bigg|_{b_c} = \frac{H\,k}{2\tan(f_y/2)\cos^3\psi_{sh}}\ \text{px per } M
+```
 
-(`edgePixelScale`), and the blur is $\sigma_{px} = \sigma_b\,s$. Scaling by the shadow's own image
+(`edgePixelScale`), and the blur is $\sigma_{px} = \sigma_b\thinspace s$. Scaling by the shadow's own image
 radius over $b_c$ instead would differ by exactly $\cos^2\psi_{sh}$ (0.99933 at 200 M, 0.972 at
 30 M); the local scale is used because a beam is a local resolution and the ring lies just
 outside the edge. Elsewhere the pinhole scale differs, so the beam is matched at the shadow edge
 and is exact only for a distant observer; below 100 M the page says so.
 
 **Framing and orientation.** The view chooses its own field of view: a circle of radius 28 M at
-the edge scale fits the shorter image side, $\tan(f_y/2) = (28\,k/\cos^3\psi_{sh})\max(1, H/W)$
+the edge scale fits the shorter image side, $\tan(f_y/2) = (28\thinspace k/\cos^3\psi_{sh})\max(1, H/W)$
 (`ehtFieldOfView`), capped at 120 degrees (closer than about 17.2 M), so the blur keeps the same
 number of pixels per M at every distance: 15.876 degrees at 200 M for a 16:9 image. The image is
 turned anticlockwise by 108 degrees (`M87_SKY_ROLL_DEG`): M87*'s approaching jet lies at position
@@ -788,7 +822,7 @@ models (Paper V, Figures 2 and 4); seen from below, the disk turns clockwise, as
 The tent reduce and the bilinear upsample each add the variance of a discrete hat function at
 half-integer offsets $a = 1/2, 3/2, \dots, f - 1/2$ from its nodes: $a(f - a)$, which averages to
 $(f^2 + 1/2)/6$ px² over the sub-texel phase. So
-$\sigma_{low} = \sqrt{\sigma_{px}^2 - (f^2 + 1/2)/3}\,/\,f$ for $f \ge 2$, and $\sigma_{px}$ for
+$\sigma_{low} = \sqrt{\sigma_{px}^2 - (f^2 + 1/2)/3}\thinspace/\thinspace f$ for $f \ge 2$, and $\sigma_{px}$ for
 $f = 1$. Six low-resolution pixels per $\sigma$ keep the peak that the normalisation reads on the
 reduced grid within 0.7 % for a single point between texels (with four, a render at 30 M
 differed from a direct full-resolution Gaussian by 2 levels of 255). At 1920 x 1080 the plan is
@@ -805,7 +839,7 @@ brightest regions merge.
 
 **Measured on the CPU twin** at the preset (`tests/unit/eht-render.test.ts`, 432 x 432, one
 sample per pixel): the ring, the peak of the azimuthal mean of the blurred image, lies at
-$b = 11.21M$, so it is 22.4 M across, about twice M87*'s ring of $11\,\theta_g$
+$b = 11.21M$, so it is 22.4 M across, about twice M87*'s ring of $11\thinspace\theta_g$
 ($11^{+0.5}_{-0.3}$, Paper I, Table 1) in units of M; the bright side, the brightness-weighted
 direction around the ring, is at position angle 196.7 degrees, inside M87*'s published 150 to
 200 degrees (Paper I, Table 1).
