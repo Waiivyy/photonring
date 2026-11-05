@@ -101,6 +101,15 @@ const harness: Harness = {
       countsAfter.every((c, i) => c === countsBefore[i]);
     return { rgb: toBase64(rgb), linear: toBase64(new Uint8Array(linear.buffer)), peak, untouched };
   },
+  async renderStrip(request) {
+    const r = await get();
+    r.resize(request.width, request.height);
+    r.setScene({ ...parityScene, ...request });
+    await r.renderAll();
+    const rgb = await r.readImageRGB8();
+    const order = await r.readLinearImage(3);
+    return { rgb: toBase64(rgb), order: toBase64(new Uint8Array(order.buffer)) };
+  },
   async benchmark(request, repeats) {
     const r = await get();
     const info = await ready;

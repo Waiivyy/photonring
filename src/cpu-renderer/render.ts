@@ -9,6 +9,9 @@ import {
   skyRadiance,
   srgbEncode,
   staticObserverFactor,
+  stripDirection,
+  stripOffsetAt,
+  stripRange,
   TERMINATION_COLOURS,
   toneMap,
   traceRay,
@@ -33,9 +36,10 @@ export interface RenderSettings {
   /**
    * 'termination' colours each sample by why its ray ended; 'eht' is the EHT-style view: the
    * disk's brightness at all frequencies as a grey value (no sky), blurred and mapped to false
-   * colour by encodeImage (docs/PHYSICS.md, section 10d).
+   * colour by encodeImage (docs/PHYSICS.md, section 10d); 'subrings' is the photon subring strip:
+   * the colour view's shading on the strip's directions instead of the camera's (section 6b).
    */
-  readonly mode: 'colour' | 'termination' | 'eht';
+  readonly mode: 'colour' | 'termination' | 'eht' | 'subrings';
   /** Supersampling: n x n samples per pixel on a regular grid; 1 samples the pixel centre. */
   readonly samplesPerAxis: number;
   readonly dphi: number;
@@ -60,6 +64,11 @@ export interface RenderOutput {
   readonly linear: Float64Array;
   /** Counts per sample, not per pixel. */
   readonly stats: RenderStats;
+  /**
+   * Strip only: image order at each pixel (the index of the first disk-plane crossing inside the
+   * disk, for the centre sample, or the one just past it for an even grid), -1 where none.
+   */
+  readonly order?: Int8Array;
 }
 
 function validate(s: RenderSettings): void {
@@ -89,6 +98,10 @@ export function renderImage(s: RenderSettings): RenderOutput {
   const weight = 1 / (n * n);
   const linear = new Float64Array(s.width * s.height * 3);
   const stats = { escaped: 0, captured: 0, stepLimit: 0, nonFinite: 0 };
+  const strip = s.mode === 'subrings';
+  const range = stripRange(s.camera.distance, s.M);
+  const order = strip ? new Int8Array(s.width * s.height).fill(-1) : null;
+  const centre = Math.floor(n / 2);
 
   for (let j = 0; j < s.height; j++) {
     for (let i = 0; i < s.width; i++) {
@@ -97,15 +110,25 @@ export function renderImage(s: RenderSettings): RenderOutput {
       let b = 0;
       for (let sy = 0; sy < n; sy++) {
         for (let sx = 0; sx < n; sx++) {
-          const d = pixelDirection(
-            frame,
-            s.width,
-            s.height,
-            i + (sx + 0.5) / n,
-            j + (sy + 0.5) / n,
-          );
+          const x = i + (sx + 0.5) / n;
+          const y = j + (sy + 0.5) / n;
+          const d = strip
+            ? stripDirection(
+                frame,
+                s.camera.distance,
+                stripOffsetAt(y, s.height, range),
+                (2 * Math.PI * x) / s.width,
+                s.M,
+              )
+            : pixelDirection(frame, s.width, s.height, x, y);
           const ray = traceRay(s.M, frame.position, d, { dphi: s.dphi, maxSteps: s.maxSteps });
           stats[ray.termination]++;
+          if (order && s.disk && sx === centre && sy === centre) {
+            const { rIn, rOut } = s.disk;
+            order[j * s.width + i] = ray.crossings.findIndex(
+              (c) => c.radius >= rIn && c.radius <= rOut,
+            );
+          }
           let c: Vec3;
           if (s.mode === 'termination') {
             c = TERMINATION_COLOURS[ray.termination];
@@ -138,7 +161,7 @@ export function renderImage(s: RenderSettings): RenderOutput {
       linear[p + 2] = b;
     }
   }
-  return { width: s.width, height: s.height, linear, stats };
+  return { width: s.width, height: s.height, linear, stats, ...(order ? { order } : {}) };
 }
 
 /**
@@ -183,7 +206,7 @@ export function encodeImage(out: RenderOutput, s: RenderSettings): Uint8Array {
     return postProcessEht(ehtIntensity(out), out.width, out.height, plan, colourMapTable());
   }
   const rgb = new Uint8Array(out.width * out.height * 3);
-  const tone = s.toneMapping && s.mode === 'colour';
+  const tone = s.toneMapping && (s.mode === 'colour' || s.mode === 'subrings');
   for (let k = 0; k < rgb.length; k++) {
     const c = Math.max(0, out.linear[k] as number);
     const v = tone ? toneMap(c, s.exposure) : Math.min(1, c);

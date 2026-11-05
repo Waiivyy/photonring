@@ -5,13 +5,14 @@ import { TABLE_SIZE } from './eht-post.ts';
 import { wgslStruct, type StructField } from './layout.ts';
 
 /** Render modes, in the order of their WGSL constants (MODE_COLOUR is 0, and so on). */
-export const RENDER_MODES = ['colour', 'termination', 'eht'] as const;
+export const RENDER_MODES = ['colour', 'termination', 'eht', 'subrings'] as const;
 /** Skies behind the disk, in the order of their WGSL constants (SKY_STARS is 0, and so on). */
 export const SKIES = ['stars', 'uniform', 'black'] as const;
 
 /**
- * What the compute pass writes: disk and sky colours, each ray's termination as a colour, or the
- * disk's brightness at all frequencies for the EHT-style view (blurred and mapped by the blit).
+ * What the compute pass writes: disk and sky colours, each ray's termination as a colour, the
+ * disk's brightness at all frequencies for the EHT-style view (blurred and mapped by the blit), or
+ * the photon subring strip (the colour view's shading on the strip's directions).
  */
 export type RenderMode = (typeof RENDER_MODES)[number];
 export type Sky = (typeof SKIES)[number];
@@ -47,6 +48,8 @@ export const FRAME_FIELDS: readonly StructField[] = [
   ['aaThreshold', 'f32'],
   ['exposure', 'f32'],
   ['toneMapping', 'u32'],
+  // Size of the full photon subring strip (the strip tables), for the strip mode and its preview.
+  ['stripSize', 'vec2u'],
 ];
 
 /** Parameters of the EHT-style post-process (src/shaders/eht.wgsl and the EHT blit). */

@@ -124,6 +124,12 @@ export interface Harness {
    */
   renderEht(request: HarnessImageRequest, previewScale?: number): Promise<HarnessEhtImage>;
   /**
+   * Renders the photon subring strip (mode 'subrings') and returns the presented 8-bit RGB and the
+   * first pass's alpha channel (image order plus one on the disk, 0 elsewhere), both base64
+   * (the alpha as little-endian Float32).
+   */
+  renderStrip(request: HarnessImageRequest): Promise<{ rgb: string; order: string }>;
+  /**
    * Renders the full image `repeats` times after a warm-up run, and a preview at 1/2 and 1/4
    * scale after each. Milliseconds are GPU time from timestamp queries when available (else
    * wall-clock): for a pass, from the start of its first tile to the end of its last.

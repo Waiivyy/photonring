@@ -13,3 +13,4 @@ export * from './raytrace.ts';
 export * from './lensing.ts';
 export * from './colour.ts';
 export * from './starfield.ts';
+export * from './strip.ts';

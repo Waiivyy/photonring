@@ -11,11 +11,17 @@ import {
   criticalImpactParameter,
   firstPlaneCrossingAngle,
   shadowAngularRadius,
+  stripColumnAngle,
+  stripDirection,
+  stripOffsetAt,
+  stripRange,
+  stripRowFromOffset,
   subringOffset,
   traceRay,
+  type CameraParams,
   type Vec3,
 } from '../../src/physics/index.ts';
-import type { HarnessRay, HarnessRayResult } from './harness-api.ts';
+import type { HarnessImageRequest, HarnessRay, HarnessRayResult } from './harness-api.ts';
 import { openHarness } from './page.ts';
 
 const M = 1;
@@ -261,4 +267,157 @@ test.describe('photon subrings measured on the GPU', () => {
       }
     });
   }
+});
+
+// ---- The rendered strip: renderTile in the photon subring mode, whose alpha carries the order ----
+
+function stripRequest(camera: CameraParams, width: number, height: number): HarnessImageRequest {
+  return {
+    width,
+    height,
+    camera,
+    mode: 'subrings',
+    sky: 'black',
+    exposure: 1,
+    toneMapping: true,
+    disk: DISK,
+    antialias: false,
+  };
+}
+
+/** Image order per pixel from the strip's alpha (crossings so far on the disk), -1 elsewhere. */
+async function stripOrders(page: import('@playwright/test').Page, req: HarnessImageRequest) {
+  const out = await page.evaluate((r) => window.harness!.renderStrip(r), req);
+  const b = Buffer.from(out.order, 'base64');
+  const alpha = new Float32Array(b.buffer, b.byteOffset, b.byteLength / 4);
+  return Int8Array.from(alpha, (a) => (a > 0 ? Math.round(a) - 1 : -1));
+}
+
+/** Rows (boundaries between rows j - 1 and j) where a column enters or leaves order n. */
+function changes(col: ArrayLike<number>, n: number): number[] {
+  const out: number[] = [];
+  for (let j = 1; j < col.length; j++) if ((col[j - 1] === n) !== (col[j] === n)) out.push(j);
+  return out;
+}
+
+test.describe('photon subrings in the rendered strip on the GPU', () => {
+  for (const [name, elevationDeg] of [
+    ['face-on', 90],
+    ['default view, elevation 12', 12],
+  ] as const) {
+    test(`band edges of orders 1 to 3 at the predicted rows, ${name}, 30 M`, async ({ page }) => {
+      test.setTimeout(300_000);
+      await openHarness(page);
+      const rObs = 30;
+      const camera: CameraParams = { distance: rObs, azimuthDeg: 0, elevationDeg, fovYDeg: 60 };
+      const W = 360;
+      const H = 700;
+      const orders = await stripOrders(page, stripRequest(camera, W, H));
+      const range = stripRange(rObs, M);
+      const rowsPerDecade = H / (range.top - range.bottom);
+      const floor = tolerance(rObs);
+      const f = cameraFrame(camera, M);
+      let checked = 0;
+      let worstFraction = 0;
+      let worstRows = 0;
+      let worstOrder4 = 0;
+      for (let i = 0; i < W; i++) {
+        const theta = stripColumnAngle(i, W);
+        const e2: Vec3 = [
+          Math.cos(theta) * f.right[0] + Math.sin(theta) * f.up[0],
+          Math.cos(theta) * f.right[1] + Math.sin(theta) * f.up[1],
+          Math.cos(theta) * f.right[2] + Math.sin(theta) * f.up[2],
+        ];
+        const phi0 = firstPlaneCrossingAngle(f.position[2] / rObs, e2[2])!;
+        const col = Array.from({ length: H }, (_, j) => orders[j * W + i]!);
+        for (const n of [1, 2, 3, 4]) {
+          for (const R of [DISK.rIn, DISK.rOut]) {
+            const edge = subringOffset(rObs, R, n, phi0, M);
+            // Only edges the disk does not hide or touch: rays 0.1 % and 2 % inside the band meet
+            // it first at crossing n, and a ray 0.1 % outside does not meet it at an earlier one
+            // (else an image of the near side ends at the same place).
+            const towardsBand = R === DISK.rIn ? 1 : -1;
+            const firstAt = (factor: number) =>
+              orderOf(
+                traceRay(M, f.position, stripDirection(f, rObs, edge * factor, theta, M), {
+                  dphi: 0.0125,
+                  maxSteps: 8000,
+                }).crossings.map((c) => c.radius),
+              );
+            const outside = firstAt(1 - towardsBand * 0.001);
+            if (
+              firstAt(1 + towardsBand * 0.001) !== n ||
+              firstAt(1 + towardsBand * 0.02) !== n ||
+              (outside >= 0 && outside < n)
+            ) {
+              continue;
+            }
+            const predicted = stripRowFromOffset(edge, H, range);
+            const found = changes(col, n);
+            const miss = Math.min(...found.map((j) => Math.abs(j - predicted)));
+            if (n === 4) {
+              worstOrder4 = Math.max(worstOrder4, miss);
+              continue;
+            }
+            // Half a row for the sampling, plus the f32 tolerance converted to rows.
+            const allowed = 0.5 + (floor / (edge * Math.LN10)) * rowsPerDecade;
+            checked++;
+            worstRows = Math.max(worstRows, miss);
+            worstFraction = Math.max(worstFraction, miss / allowed);
+            expect(miss, `column ${i}, order ${n}, R = ${R} M`).toBeLessThanOrEqual(allowed);
+          }
+        }
+      }
+      console.log(
+        `strip ${name}: ${checked} edges of orders 1 to 3 checked, largest ${worstRows.toFixed(2)} rows ` +
+          `(${worstFraction.toFixed(2)} of the allowance); order 4: largest ${worstOrder4.toFixed(2)} rows (logged)`,
+      );
+      expect(checked).toBeGreaterThan(elevationDeg === 90 ? 2000 : 1000);
+    });
+  }
+
+  test('successive edges in the strip approach e^pi, face-on, 30 M, 4096 rows', async ({
+    page,
+  }) => {
+    test.setTimeout(300_000);
+    await openHarness(page);
+    const rObs = 30;
+    const camera: CameraParams = { distance: rObs, azimuthDeg: 0, elevationDeg: 90, fovYDeg: 60 };
+    const W = 8;
+    const H = 4096;
+    const orders = await stripOrders(page, stripRequest(camera, W, H));
+    const range = stripRange(rObs, M);
+    const decadesPerRow = (range.top - range.bottom) / H;
+    const floor = tolerance(rObs);
+    const col = Array.from({ length: H }, (_, j) => orders[j * W]!);
+    // Face-on every column has phi0 = pi/2; the edge of order n is where the column leaves or
+    // enters it, at the boundary between two rows.
+    const measuredEdge = (n: number, R: number) => {
+      const predicted = stripRowFromOffset(subringOffset(rObs, R, n, Math.PI / 2, M), H, range);
+      const found = changes(col, n);
+      const j = found.reduce((a, b) => (Math.abs(b - predicted) < Math.abs(a - predicted) ? b : a));
+      return stripOffsetAt(j, H, range);
+    };
+    for (const R of [DISK.rIn, DISK.rOut]) {
+      const parts: string[] = [];
+      for (const n of [1, 2, 3]) {
+        const gpu = measuredEdge(n, R) / measuredEdge(n + 1, R);
+        const exact =
+          subringOffset(rObs, R, n, Math.PI / 2, M) / subringOffset(rObs, R, n + 1, Math.PI / 2, M);
+        parts.push(`${n} to ${n + 1}: ${gpu.toFixed(3)} (f64 ${exact.toFixed(4)})`);
+        if (n === 3) continue; // order 4 is near the f32 limit: logged only
+        const allowed =
+          2 * (10 ** (decadesPerRow / 2) - 1) +
+          floor *
+            (1 / subringOffset(rObs, R, n, Math.PI / 2, M) +
+              1 / subringOffset(rObs, R, n + 1, Math.PI / 2, M));
+        expect(Math.abs(gpu / exact - 1), `R = ${R} M, ${n} to ${n + 1}`).toBeLessThanOrEqual(
+          allowed,
+        );
+      }
+      console.log(
+        `strip ratios at R = ${R} M: ${parts.join(', ')}; e^pi ${Math.exp(Math.PI).toFixed(4)}`,
+      );
+    }
+  });
 });

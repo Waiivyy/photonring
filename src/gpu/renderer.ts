@@ -4,6 +4,10 @@ import {
   cameraFrame,
   diskTemperatureScale,
   staticObserverFactor,
+  stripColumnAngle,
+  stripRange,
+  stripRowOffset,
+  stripSinAlpha,
   type CameraParams,
   type DiskSettings,
 } from '../physics/index.ts';
@@ -98,7 +102,11 @@ export class GpuRenderer {
   readonly device: GPUDevice;
   private readonly uniform: GPUBuffer;
   private readonly blitUniform: GPUBuffer;
-  private readonly common: GPUBindGroup;
+  private common: GPUBindGroup;
+  private readonly lut: GPUBuffer;
+  /** The photon subring strip's tables (a small placeholder in the other modes), and their key. */
+  private stripBuffer: GPUBuffer;
+  private stripKey = '';
   private readonly empty: GPUBindGroup;
   private readonly sampler: GPUSampler;
   private readonly blitPipelines = new Map<string, GPURenderPipeline>();
@@ -188,19 +196,18 @@ export class GpuRenderer {
       size: layoutStruct(BLIT_FIELDS).size,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
-    const lut = device.createBuffer({
+    this.lut = device.createBuffer({
       label: 'blackbody table',
       size: BLACKBODY_LUT.data.byteLength,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
-    device.queue.writeBuffer(lut, 0, BLACKBODY_LUT.data);
-    this.common = device.createBindGroup({
-      layout: layouts.common,
-      entries: [
-        { binding: 0, resource: { buffer: this.uniform } },
-        { binding: 1, resource: { buffer: lut } },
-      ],
+    device.queue.writeBuffer(this.lut, 0, BLACKBODY_LUT.data);
+    this.stripBuffer = device.createBuffer({
+      label: 'strip tables (placeholder)',
+      size: 16,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
+    this.common = this.commonGroup();
     this.empty = device.createBindGroup({ layout: layouts.empty, entries: [] });
     this.sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
     this.presentQuery = timestampQuery
@@ -239,6 +246,7 @@ export class GpuRenderer {
         entries: [
           { binding: 0, visibility: C, buffer: { type: 'uniform' } },
           { binding: 1, visibility: C, buffer: { type: 'read-only-storage' } },
+          { binding: 2, visibility: C, buffer: { type: 'read-only-storage' } },
         ],
       }),
       image: device.createBindGroupLayout({
@@ -403,6 +411,52 @@ export class GpuRenderer {
     this.scene = scene;
   }
 
+  private commonGroup(): GPUBindGroup {
+    return this.device.createBindGroup({
+      layout: this.layouts.common,
+      entries: [
+        { binding: 0, resource: { buffer: this.uniform } },
+        { binding: 1, resource: { buffer: this.lut } },
+        { binding: 2, resource: { buffer: this.stripBuffer } },
+      ],
+    });
+  }
+
+  /**
+   * The photon subring strip's tables for the full-size image: (cos, sin) of each column's image
+   * angle, then of each row's view angle alpha, in f64 and rounded once to f32. Rebuilt when the
+   * distance or the image size changes.
+   */
+  private updateStripTables(scene: SceneParams): void {
+    const { width, height } = this;
+    const key = `${width}x${height}|${scene.camera.distance}|${scene.M}`;
+    if (key === this.stripKey) return;
+    this.stripKey = key;
+    const range = stripRange(scene.camera.distance, scene.M);
+    const table = new Float32Array(2 * (width + height));
+    for (let i = 0; i < width; i++) {
+      const theta = stripColumnAngle(i, width);
+      table.set([Math.cos(theta), Math.sin(theta)], 2 * i);
+    }
+    for (let j = 0; j < height; j++) {
+      const s = Math.min(
+        1,
+        stripSinAlpha(scene.camera.distance, stripRowOffset(j, height, range), scene.M),
+      );
+      table.set([Math.sqrt(1 - s * s), s], 2 * (width + j));
+    }
+    if (this.stripBuffer.size < table.byteLength) {
+      this.stripBuffer.destroy();
+      this.stripBuffer = this.device.createBuffer({
+        label: 'strip tables',
+        size: table.byteLength,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      });
+      this.common = this.commonGroup();
+    }
+    this.device.queue.writeBuffer(this.stripBuffer, 0, table);
+  }
+
   /**
    * Frame parameters for one tile of a width x height image (the full image and the current
    * scene by default).
@@ -414,6 +468,7 @@ export class GpuRenderer {
     scene: SceneParams | null = this.scene,
   ): void {
     if (!scene) throw new Error('setScene must be called before rendering');
+    if (scene.mode === 'subrings') this.updateStripTables(scene);
     const f = cameraFrame(scene.camera, scene.M);
     const width = Math.max(1, imageWidth);
     const height = Math.max(1, imageHeight);
@@ -450,7 +505,9 @@ export class GpuRenderer {
       bandCosMax: band.cosMax,
       aaThreshold: scene.aaThreshold ?? AA_THRESHOLD,
       exposure: scene.exposure,
-      toneMapping: scene.toneMapping && scene.mode === 'colour' ? 1 : 0,
+      toneMapping:
+        scene.toneMapping && (scene.mode === 'colour' || scene.mode === 'subrings') ? 1 : 0,
+      stripSize: [Math.max(1, this.width), Math.max(1, this.height)],
     });
     this.device.queue.writeBuffer(this.uniform, 0, data);
   }
@@ -903,7 +960,8 @@ export class GpuRenderer {
       return;
     }
     const q = timed ? this.presentQuery : null;
-    const tone = this.scene.toneMapping && this.scene.mode === 'colour';
+    const tone =
+      this.scene.toneMapping && (this.scene.mode === 'colour' || this.scene.mode === 'subrings');
     this.device.queue.writeBuffer(
       this.blitUniform,
       0,
@@ -953,8 +1011,11 @@ export class GpuRenderer {
     this.device.queue.submit([encoder.finish()]);
   }
 
-  /** The first pass's red channel (the EHT-style view's linear brightness), row-major (for tests). */
-  async readLinearImage(): Promise<Float32Array> {
+  /**
+   * One channel of the first pass, row-major (for tests): red is the EHT-style view's linear
+   * brightness, alpha the photon subring strip's image order plus one.
+   */
+  async readLinearImage(channel = 0): Promise<Float32Array> {
     if (!this.image) throw new Error('resize must be called before reading');
     const { width, height } = this;
     const bytesPerRow = Math.ceil((width * 8) / 256) * 256;
@@ -974,7 +1035,7 @@ export class GpuRenderer {
     const out = new Float32Array(width * height);
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
-        out[y * width + x] = halfToFloat(halves[(y * bytesPerRow) / 2 + x * 4] as number);
+        out[y * width + x] = halfToFloat(halves[(y * bytesPerRow) / 2 + x * 4 + channel] as number);
       }
     }
     read.unmap();
@@ -1191,6 +1252,8 @@ export class GpuRenderer {
     this.preview?.destroy();
     this.uniform.destroy();
     this.blitUniform.destroy();
+    this.stripBuffer.destroy();
+    this.lut.destroy();
     this.ehtUniform.destroy();
     this.ehtTable.destroy();
     this.ehtPeak.destroy();
