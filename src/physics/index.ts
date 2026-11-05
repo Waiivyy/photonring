@@ -2,6 +2,7 @@
 export * from './constants.ts';
 export * from './deflection.ts';
 export * from './disk.ts';
+export * from './eht.ts';
 export * from './numerics.ts';
 export * from './observer.ts';
 export * from './orbits.ts';

@@ -86,3 +86,38 @@ export function compositeDisk(
   }
   return { emission: [r, g, b], transmittance };
 }
+
+/** What the disk contributes along one path in the EHT-style view: a scalar, not a colour. */
+export interface DiskBrightness {
+  /** (g T-hat)^4 composited front to back, T-hat the temperature over its peak value. */
+  readonly intensity: number;
+  readonly transmittance: number;
+}
+
+/**
+ * Brightness summed over all frequencies, composited front to back like compositeDisk. For a
+ * blackbody, I_nu / nu^3 is invariant along a ray (docs/PHYSICS.md, section 9), so the observed
+ * frequency-integrated intensity is g^4 times the emitted sigma T^4 / pi; in units of the peak
+ * emission this is (g T-hat)^4 with T-hat = diskTemperature (docs/PHYSICS.md, section 10d). The
+ * peak temperature cancels.
+ */
+export function compositeDiskBolometric(
+  disk: DiskSettings,
+  crossingRadii: readonly number[],
+  lzOverE: number,
+  M: number,
+  gObserver: number,
+): DiskBrightness {
+  const { rIn, rOut, opacity } = disk;
+  let intensity = 0;
+  let transmittance = 1;
+  for (const radius of crossingRadii) {
+    if (radius < rIn || radius > rOut) continue;
+    const shift = redshiftFactor(circularOrbitEmitter(radius, M), lzOverE) * gObserver;
+    const q = (shift * diskTemperature(radius, rIn)) ** 2;
+    intensity += transmittance * opacity * q * q;
+    transmittance *= 1 - opacity;
+    if (transmittance === 0) break;
+  }
+  return { intensity, transmittance };
+}
