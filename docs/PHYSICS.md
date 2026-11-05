@@ -3,8 +3,8 @@
 Every formula the code relies on is derived here, checked against a primary source, and covered by
 a test in `tests/`. The references at the end were read in full or at the cited pages (journal
 scans, arXiv full text, publisher, DLMF, NIST, CIE and W3C pages), except Darwin (1959), Figueroa
-(1995) and Lindquist (1966), whose entries say so, and IEC 61966-2-1, named only as the basis of
-the CSS Color 4 sample code. Papers read on arXiv are cited with the equation numbers of the arXiv
+(1995), Lindquist (1966) and Bozza and Scarpetta (2007), whose entries say so, and IEC 61966-2-1,
+named only as the basis of the CSS Color 4 sample code. Papers read on arXiv are cited with the equation numbers of the arXiv
 version their entry names; the journal versions were not compared.
 
 ## 1. Conventions
@@ -258,6 +258,118 @@ $9.6327°$):
 
 The overlays draw $n = 0$ for $2M$ and $3M$ (the $n = 1$ image of $3M$ would sit on the edge
 line) and $n = 0$ and $n = 1$ for the ISCO.
+
+## 6b. Photon subrings
+
+Each image of the disk made by light that circled the hole once more (half a turn more) lies
+closer to the shadow edge by a factor that tends to $e^{\pi} \approx 23.14$ in Schwarzschild
+spacetime. This is a published prediction (Gralla, Holz and Wald 2019, eqs. 2 and 13 to 15;
+Johnson et al. 2020, eqs. 7, 12 and 14, who attribute $\gamma = \pi$ to Luminet 1979; Gralla and
+Lupsasca 2020, section IV.1, $\gamma \to \pi$ as the spin goes to zero). photonring reproduces it
+with its own code: an independent check, not a new result. Strong-deflection formulas for
+sources at finite distance are not new either (Bozza and Scarpetta 2007, abstract read).
+
+**Image order, three spellings.** photonring's order $n$ is the image at the $(n+1)$-th crossing
+of the disk plane (section 6a).
+
+| photonring            | Gralla, Holz and Wald (2019) | Johnson et al. (2020)  |
+| --------------------- | ---------------------------- | ---------------------- |
+| $n = 0$, direct image | $m = 1$, direct              | $n = 0$                |
+| $n = 1$               | $m = 2$, the lensing ring    | $n = 1$, first subring |
+| $n \ge 2$             | $m \ge 3$, the photon ring   | $n \ge 2$              |
+
+Johnson et al. (footnote 3) note that their indexing differs from Gralla, Holz and Wald's: in
+their terms $n = 1$ is already a photon subring, while Gralla, Holz and Wald call it the lensing
+ring and keep "photon ring" for $m \ge 3$. photonring says "subring $n$" with its own $n$.
+
+**The outbound branch.** For $b > b_c$ the backward ray runs in from $u_o = 1/r_o$ to its turning
+point $u_2$ and out again; it meets the disk plane at the sweeps $\phi_0 + n\pi$ (section 6a), so
+the order-$n$ image of the ring $R$ is the root of
+
+$$\Phi(b) \equiv \int_{u_o}^{u_2}\frac{du}{\sqrt{P}} + \int_{u_R}^{u_2}\frac{du}{\sqrt{P}} = \phi_0 + n\pi .$$
+
+$\Phi$ falls monotonically from infinity at $b_c$ to its value for the ray that turns at
+$\max(u_o, u_R)$, so the root is unique. For the default disk's edges (6 and 20 M) and observers
+at 5, 6.5, 30 and 200 M that smallest sweep is between 0.55 and 2.04 rad (computed with
+`outboundSweep`), below $\pi$, so every image of order $n \ge 1$ lies on this branch.
+
+**The critical orbit's sweep.** At $b = b_c$ the orbit polynomial factorises,
+$P_c(u) = 2M\,(u - \tfrac{1}{3M})^2\,(u + \tfrac{1}{6M})$. The substitution
+$u = -\tfrac{1}{6M} + \tfrac{1}{2M}\tanh^2 x$ gives $u + \tfrac{1}{6M} = \tanh^2 x/(2M)$ and
+$u - \tfrac{1}{3M} = -(1 - \tanh^2 x)/(2M)$, so $\sqrt{P_c} = \tanh x\,(1 - \tanh^2 x)/(2M)$,
+while $du = \tanh x\,(1 - \tanh^2 x)\,dx/M$; hence $du/\sqrt{P_c} = 2\,dx$. Integrating from
+$u = 0$ ($\tanh x = 1/\sqrt3$) to $u$:
+
+$$\Delta\phi_c(u) = 2\left[\operatorname{artanh}\sqrt{2Mu + \tfrac13} - \operatorname{artanh}\tfrac{1}{\sqrt3}\right],\qquad 0 \le u < \tfrac{1}{3M}.$$
+
+Values: $\Delta\phi_c(1/30) = 0.174038$, $\Delta\phi_c(1/20) = 0.262589$,
+$\Delta\phi_c(1/6) = 0.975474$ (`criticalOrbitSweep`). It diverges at the photon sphere, where the
+critical orbit circles forever.
+
+**Leading order.** For a ray from infinity to infinity, Bozza's law (section 8) gives
+$\Phi_{\infty\infty} = \pi + \alpha = -\ln\varepsilon + \ln C + O(\varepsilon\ln\varepsilon)$ with
+$\varepsilon = b/b_c - 1$ and $C = 216(7 - 4\sqrt3) = 15.5081$. Each leg carries half of it, and
+the part of a leg between infinity and a finite radius tends to the critical orbit's sweep with an
+$O(\varepsilon)$ error, because the integrand is smooth there. Subtracting those parts,
+
+$$\varepsilon_n(R) \approx C\,e^{-\Delta\phi_c(u_o) - \Delta\phi_c(u_R)}\,e^{-\phi_0}\,e^{-n\pi}$$
+
+(`subringOffsetLeadingOrder`; derived for this project and checked numerically below). This
+formula carries the main consequences: successive offsets of one edge, and so the widths of the
+bands, shrink by $e^{\pi}$ per half-turn; on a $\log_{10}\varepsilon$ axis the bands repeat every
+$\pi/\ln 10 = 1.364$ decades; and the view enters only through $\phi_0$, which is $\pi/2$ along the
+horizontal image axis at every elevation. ($C\,b_c = 1944M/(12 + 7\sqrt3) = 80.58M$ is Gralla, Holz
+and Wald's $C_+$.) Its error is $-2.4\,\%$, $-0.28\,\%$ and $-0.019\,\%$ at $R = 6M$ for $n = 1$
+to 3 face-on at $30M$, and within $0.304\,\varepsilon\,(\ln(1/\varepsilon) + 2)$ for $n = 1$ to 5
+in the five view directions of the test, at both disk edges.
+
+**How fast the ratio approaches $e^{\pi}$.** Write
+$\Phi = -\ln\varepsilon + K + c\,\varepsilon\ln(1/\varepsilon) + d\,\varepsilon + \dots$. The step
+$\Phi(\varepsilon_{n+1}) - \Phi(\varepsilon_n) = \pi$ then gives
+$\delta_n \equiv (\varepsilon_n/\varepsilon_{n+1})/e^{\pi} - 1 \approx (1 - e^{-\pi})\,c\,\varepsilon_n\ln(1/\varepsilon_n) + A\,\varepsilon_n$.
+For rays from infinity $c = 5/18$ (Iyer and Petters 2007, eq. 25, section 8). With that $c$ the
+fitted $A$ is constant to three or four digits ($-0.28$ at $6M$, $+0.69$ at $20M$, $\lvert A\rvert \le 0.72$
+including $n = 1$). That $c = 5/18$ also holds for finite radii is a fit to these numbers, not a
+derivation. The test bound $\lvert\delta_n\rvert \le \tfrac{5}{18}\varepsilon_n\ln(1/\varepsilon_n) + 1.5\,\varepsilon_n$
+covers both terms; its first term is larger than the leading one by $1/(1 - e^{-\pi}) = 1.045$.
+
+**Solver.** `outboundImageOffset(u_o, u_R, sweep)` solves $\Phi = $ sweep by Brent's method
+(section 6a) in $\ln\varepsilon$, so $\varepsilon$ keeps full relative precision, with $\Phi$ from
+the Carlson form of section 8 and the bracket started at the leading-order estimate; $u = 0$ means
+infinity. `ringImageOffset(r_o, R, sweep)` uses it whenever the sweep is beyond the branch's
+smallest value and otherwise converts the result of `ringImageAngle` with
+$\varepsilon = \sin\alpha/(k\,b_c) - 1$; `subringOffset` passes $\phi_0 + n\pi$. The offsets are
+computed by the 64-bit library; they are predictions of the model, not measurements of an image.
+The limit of f64: $b = b_c(1 + \varepsilon)$ moves in steps of one unit in the last place, about
+$1.7\times10^{-16}\,b_c$, so $\varepsilon$ is resolved only to about $2\times10^{-16}/\varepsilon$
+relative, and roots below $\varepsilon = 10^{-14}$ are refused (order 12 face-on at $30M$ is near
+$10^{-16}$). Ratios are therefore checked up to $n = 4$, which uses $\varepsilon_5$.
+
+Computed by the 64-bit library, face-on at $30M$, default disk:
+
+| $n$ | $\varepsilon_n(6M)$   | $\varepsilon_n(20M)$  | $\varepsilon_n/\varepsilon_{n+1}$ at $6M$ | at $20M$ |
+| --- | --------------------- | --------------------- | ----------------------------------------- | -------- |
+| 1   | $4.5223\times10^{-2}$ | $1.0324\times10^{-1}$ | 23.6451                                   | 26.2983  |
+| 2   | $1.9126\times10^{-3}$ | $3.9256\times10^{-3}$ | 23.2018                                   | 23.3375  |
+| 3   | $8.2433\times10^{-5}$ | $1.6821\times10^{-4}$ | 23.1449                                   | 23.1524  |
+| 4   | $3.5616\times10^{-6}$ | $7.2653\times10^{-6}$ | 23.1409                                   | 23.1413  |
+| 5   | $1.5391\times10^{-7}$ | $3.1395\times10^{-7}$ |                                           |          |
+
+$e^{\pi} = 23.1407$. The $n = 1$ ring is the only one far from the limit; from $n = 2$ on, each
+further subring brings the ratio at least 12.7 times closer to it (smallest factor over the five
+view directions and both edges). With the page's opaque disk tilted 12 degrees, the near side of the
+disk hides the subrings over most of the lower half of the image.
+
+**Checks** (`tests/unit/subrings.test.ts`; measured values in `docs/VALIDATION.md`). The solved
+root satisfies the same sweep evaluated with the Gauss-Legendre quadrature of section 8, which
+shares no code with the Carlson form; the backward ray traced by `traceRay` (f64,
+$d\phi = 0.002$) crosses the disk plane at $R$ on crossing $n + 1$; the result agrees with
+`ringImageAngle`, a consistency check only, since both use the Carlson integrals;
+$\Delta\phi_c$ matches a quadrature of $1/\sqrt{P_c}$; with observer and source at infinity the
+boundaries of Gralla, Holz and Wald round to their published 5.02, 5.19, 5.23 and 6.17 M (computed
+5.0151, 5.1878, 5.2279 and 6.1676 M; the two below $b_c$ from the plunging sweep of section 8a);
+and the escape sweep from $30M$ grows by one radian per factor $e$ in $1/\varepsilon$
+(least-squares slope against $\ln\varepsilon$ over $10^{-6}$ to $10^{-3}$).
 
 ## 7. The Binet form used for integration
 
@@ -613,6 +725,9 @@ Each entry was confirmed from its text, or, where the entry says so, from publis
 - Bozza, V. (2002). Gravitational lensing in the strong field limit. Phys. Rev. D 66, 103001.
   doi:10.1103/PhysRevD.66.103001, arXiv:gr-qc/0208075 (eqs. 25, 29 and 47 to 50, numbered as in
   arXiv v3)
+- Bozza, V. and Scarpetta, G. (2007). Strong deflection limit of black hole gravitational lensing
+  with arbitrary source distances. Phys. Rev. D 76, 083008. doi:10.1103/PhysRevD.76.083008,
+  arXiv:0705.0246 (abstract only)
 - Cardoso, V., Miranda, A. S., Berti, E., Witek, H. and Zanchin, V. T. (2009). Geodesic
   stability, Lyapunov exponents, and quasinormal modes. Phys. Rev. D 79, 064016.
   doi:10.1103/PhysRevD.79.064016, arXiv:0812.1806 (eqs. 49 and 50, numbered as in arXiv v3)
@@ -637,9 +752,18 @@ Each entry was confirmed from its text, or, where the entry says so, from publis
   https://dlmf.nist.gov/19.29
 - Figueroa, S. A. (1995). When is double rounding innocuous? ACM SIGNUM Newsletter 30(3), 21-26.
   doi:10.1145/221332.221334 (metadata only; its result as restated and proved by Roux 2014)
+- Gralla, S. E., Holz, D. E. and Wald, R. M. (2019). Black hole shadows, photon rings, and lensing
+  rings. Phys. Rev. D 100, 024018. doi:10.1103/PhysRevD.100.024018, arXiv:1906.00873 (sections I
+  to III, eqs. 2 and 13 to 15, read in the HTML rendering of arXiv v2)
+- Gralla, S. E. and Lupsasca, A. (2020). Lensing by Kerr black holes. Phys. Rev. D 101, 044031.
+  doi:10.1103/PhysRevD.101.044031, arXiv:1910.12873 (section IV.1, read in the HTML rendering of
+  arXiv v2)
 - Iyer, S. V. and Petters, A. O. (2007). Light's bending angle due to black holes: from the photon
   sphere to infinity. Gen. Rel. Grav. 39(10), 1563-1582. doi:10.1007/s10714-007-0481-8,
   arXiv:gr-qc/0611086 (eqs. 8 and 25, numbered as in arXiv v2)
+- Johnson, M. D. et al. (2020). Universal interferometric signatures of a black hole's photon
+  ring. Sci. Adv. 6, eaaz1310. doi:10.1126/sciadv.aaz1310, arXiv:1907.04329 (eqs. 7, 12 and 14
+  and footnote 3, read in the HTML rendering of arXiv v2)
 - Jarzynski, M. and Olano, M. (2020). Hash functions for GPU rendering. Journal of Computer
   Graphics Techniques 9(3), 20-38. https://jcgt.org/published/0009/03/02/ (pcg3d, section 6.1)
 - Keeton, C. R. and Petters, A. O. (2005). Formalism for testing theories of gravity using lensing
