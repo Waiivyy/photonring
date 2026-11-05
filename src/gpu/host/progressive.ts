@@ -67,7 +67,12 @@ export class ProgressiveRenderer {
   private antialias = false;
   private current: Stage = 'done';
   private inFlight: FrameAction | null = null;
+  /** Render mode of the batch in flight: a batch's time is charged only to its own mode. */
+  private inFlightMode = '';
   private refineQueued = false;
+  /** Render mode the cost estimates belong to, and the estimates kept for the other modes. */
+  private mode = '';
+  private readonly costs = new Map<string, { trace: number | null; refine: number | null }>();
 
   constructor(width: number, height: number, options: ProgressiveOptions) {
     this.w = width;
@@ -100,8 +105,19 @@ export class ProgressiveRenderer {
     return this.trace.msPerPixel;
   }
 
-  /** The scene (camera, mode, disk, anti-aliasing) changed at time `now`. */
-  sceneChanged(now: number, antialias: boolean): void {
+  /**
+   * The scene (camera, mode, disk, anti-aliasing) changed at time `now`. `mode` names the render
+   * mode: its cost per pixel can differ many times from another mode's (long near-critical rays),
+   * so each mode keeps its own estimate and a mode never measured starts without one.
+   */
+  sceneChanged(now: number, antialias: boolean, mode = this.mode): void {
+    if (mode !== this.mode) {
+      this.costs.set(this.mode, { trace: this.trace.msPerPixel, refine: this.refine.msPerPixel });
+      const kept = this.costs.get(mode);
+      this.trace.setMsPerPixel(kept?.trace ?? null);
+      this.refine.setMsPerPixel(kept?.refine ?? null);
+      this.mode = mode;
+    }
     this.changed = true;
     this.lastChange = now;
     this.antialias = antialias;
@@ -164,6 +180,7 @@ export class ProgressiveRenderer {
   completed(action: FrameAction, ms: number): void {
     if (action !== this.inFlight) return;
     this.inFlight = null;
+    if (this.inFlightMode !== this.mode) return; // started in another mode: its time is not ours
     if (action.kind === 'preview') {
       const pixels = Math.ceil(this.w * action.scale) * Math.ceil(this.h * action.scale);
       this.trace.recordCost(pixels, ms);
@@ -187,6 +204,7 @@ export class ProgressiveRenderer {
 
   private dispatch(action: FrameAction): FrameAction {
     this.inFlight = action;
+    this.inFlightMode = this.mode;
     return action;
   }
 }

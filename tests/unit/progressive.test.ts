@@ -111,6 +111,37 @@ describe('progressive renderer', () => {
     expect(p.next(1130).kind).toBe('refine');
   });
 
+  it('keeps one cost estimate per render mode, so a new mode starts unmeasured', () => {
+    const p = new ProgressiveRenderer(W, H, options);
+    p.sceneChanged(0, false, 'colour');
+    p.completed(p.next(0), 1);
+    runUntilDone(p, 200); // full frame measured: cheap enough for full resolution
+    const colourCost = p.traceMsPerPixel;
+    expect(colourCost).not.toBeNull();
+    p.sceneChanged(1000, false, 'subrings');
+    expect(p.traceMsPerPixel).toBeNull();
+    // Unmeasured: a half-resolution preview, not the full frame the colour cost would allow.
+    const first = p.next(1000);
+    expect(first).toMatchObject({ kind: 'preview', scale: 0.5 });
+    p.completed(first, 40);
+    expect(p.traceMsPerPixel).not.toBeNull();
+    expect(p.traceMsPerPixel).not.toBe(colourCost);
+    // Back to colour: its own estimate again.
+    p.sceneChanged(2000, false, 'colour');
+    expect(p.traceMsPerPixel).toBe(colourCost);
+  });
+
+  it('does not charge a batch still in flight to a mode chosen after it started', () => {
+    const p = new ProgressiveRenderer(W, H, options);
+    p.sceneChanged(0, false, 'colour');
+    const batch = p.next(0);
+    p.sceneChanged(5, false, 'subrings');
+    p.completed(batch, 1000);
+    expect(p.traceMsPerPixel).toBeNull();
+    p.sceneChanged(10, false, 'colour');
+    expect(p.traceMsPerPixel).toBeNull();
+  });
+
   it('skips anti-aliasing when it is off', () => {
     const p = new ProgressiveRenderer(W, H, options);
     p.sceneChanged(0, false);

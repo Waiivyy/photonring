@@ -433,7 +433,7 @@ class App {
       disk: s.disk ? DEFAULT_DISK : null,
       antialias: s.antialias,
     });
-    this.plan.sceneChanged(performance.now(), this.renderer.antialiasing);
+    this.plan.sceneChanged(performance.now(), this.renderer.antialiasing, RENDER_MODE[s.view]);
   }
 
   private resizeIfNeeded(): void {
