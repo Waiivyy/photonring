@@ -13,8 +13,13 @@ import {
 
 /** Reduce factors, largest first. */
 const FACTORS = [16, 8, 4, 2, 1] as const;
-/** Smallest blur in low-resolution pixels that the reduce may leave (sigma / f). */
-const MIN_SIGMA_LOW = 4;
+/**
+ * Smallest blur the reduce may leave, in low-resolution pixels (sigma / f). The normalisation
+ * reads the peak on the reduced grid, where a peak between texels comes out low; with 6 the
+ * drop for a single point is at most 0.7 %, and every comparison with a direct full-resolution
+ * Gaussian holds 1 level of 255 (with 4, a render at 30 M differed by 2 levels).
+ */
+export const MIN_SIGMA_LOW = 6;
 /**
  * Normalisation floor: x = v / max(peak, NORMALISE_FLOOR). Continuous, so a nearly empty image
  * fades instead of flipping to full brightness (the disk's peak brightness is of order 0.1 to 1).

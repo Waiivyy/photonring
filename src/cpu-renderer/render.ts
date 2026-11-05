@@ -1,8 +1,10 @@
 // CPU reference renderer: traces every sample with the f64 physics library. Pure computation;
 // writing files is left to the callers (tools/ and tests/).
+import { colourMapTable, ehtPlan, postProcessEht } from '../gpu/host/eht-post.ts';
 import {
   cameraFrame,
   compositeDisk,
+  compositeDiskBolometric,
   pixelDirection,
   skyRadiance,
   srgbEncode,
@@ -23,10 +25,17 @@ export interface RenderSettings {
   readonly M: number;
   readonly camera: CameraParams;
   readonly disk: DiskSettings | null;
-  /** 'uniform' is a sky of radiance 1 in every direction, for validation renders. */
-  readonly sky: 'stars' | 'uniform';
-  /** 'termination' colours each sample by why its ray ended. */
-  readonly mode: 'colour' | 'termination';
+  /**
+   * 'uniform' is a sky of radiance 1 in every direction, for validation renders; 'black' adds
+   * nothing behind the disk.
+   */
+  readonly sky: 'stars' | 'uniform' | 'black';
+  /**
+   * 'termination' colours each sample by why its ray ended; 'eht' is the EHT-style view: the
+   * disk's brightness at all frequencies as a grey value (no sky), blurred and mapped to false
+   * colour by encodeImage (docs/PHYSICS.md, section 10d).
+   */
+  readonly mode: 'colour' | 'termination' | 'eht';
   /** Supersampling: n x n samples per pixel on a regular grid; 1 samples the pixel centre. */
   readonly samplesPerAxis: number;
   readonly dphi: number;
@@ -100,6 +109,17 @@ export function renderImage(s: RenderSettings): RenderOutput {
           let c: Vec3;
           if (s.mode === 'termination') {
             c = TERMINATION_COLOURS[ray.termination];
+          } else if (s.mode === 'eht') {
+            const v = s.disk
+              ? compositeDiskBolometric(
+                  s.disk,
+                  ray.crossings.map((x) => x.radius),
+                  ray.lzOverE,
+                  s.M,
+                  gObserver,
+                ).intensity
+              : 0;
+            c = [v, v, v];
           } else {
             c = shade(s, ray, gObserver);
           }
@@ -137,7 +157,7 @@ function shade(s: RenderSettings, ray: ReturnType<typeof traceRay>, gObserver: n
     : { emission: [0, 0, 0] as const, transmittance: 1 };
   let [r, g, b] = disk.emission;
   const transmittance = disk.transmittance;
-  if (ray.termination === 'escaped' && ray.direction && transmittance > 0) {
+  if (ray.termination === 'escaped' && ray.direction && transmittance > 0 && s.sky !== 'black') {
     const sky: Vec3 = s.sky === 'uniform' ? [1, 1, 1] : skyRadiance(ray.direction, gObserver);
     r += transmittance * sky[0];
     g += transmittance * sky[1];
@@ -146,8 +166,22 @@ function shade(s: RenderSettings, ray: ReturnType<typeof traceRay>, gObserver: n
   return [r, g, b];
 }
 
-/** 8-bit sRGB pixels: tone mapped (or clamped for validation and debug views), then encoded. */
+/** The grey intensity of an EHT-style render, one value per pixel. */
+export function ehtIntensity(out: RenderOutput): Float64Array {
+  const v = new Float64Array(out.width * out.height);
+  for (let p = 0; p < v.length; p++) v[p] = out.linear[3 * p]!;
+  return v;
+}
+
+/**
+ * 8-bit sRGB pixels: tone mapped (or clamped for validation and debug views), then encoded. The
+ * EHT-style view is blurred, normalised and mapped to its false colours, which are display values.
+ */
 export function encodeImage(out: RenderOutput, s: RenderSettings): Uint8Array {
+  if (s.mode === 'eht') {
+    const plan = ehtPlan(s.camera, out.width, out.height, s.M);
+    return postProcessEht(ehtIntensity(out), out.width, out.height, plan, colourMapTable());
+  }
   const rgb = new Uint8Array(out.width * out.height * 3);
   const tone = s.toneMapping && s.mode === 'colour';
   for (let k = 0; k < rgb.length; k++) {

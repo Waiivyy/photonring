@@ -10,6 +10,7 @@ import {
   ehtLinear,
   ehtPlan,
   lookupColour,
+  MIN_SIGMA_LOW,
   postProcessEht,
   reduceTent1D,
   upsampleBilinear1D,
@@ -86,7 +87,8 @@ describe('blur plan', () => {
     expect(plan.beamFwhmPx).toBeCloseTo(101.5, 1);
   });
 
-  it('reduces by the largest of 1, 2, 4, 8, 16 that keeps 4 low-resolution pixels per sigma', () => {
+  it('reduces by the largest of 1, 2, 4, 8, 16 that keeps 6 low-resolution pixels per sigma', () => {
+    expect(MIN_SIGMA_LOW).toBe(6);
     for (const [w, h] of [
       [160, 90],
       [480, 270],
@@ -95,7 +97,7 @@ describe('blur plan', () => {
       [3840, 2160],
     ] as const) {
       const plan = ehtPlan(PRESET(w / h), w, h);
-      const allowed = [1, 2, 4, 8, 16].filter((f) => plan.sigmaPx / f >= 4);
+      const allowed = [1, 2, 4, 8, 16].filter((f) => plan.sigmaPx / f >= MIN_SIGMA_LOW);
       expect(plan.f).toBe(allowed.length > 0 ? Math.max(...allowed) : 1);
       expect(plan.lowWidth).toBe(Math.ceil(w / plan.f));
       expect(plan.lowHeight).toBe(Math.ceil(h / plan.f));
@@ -103,7 +105,8 @@ describe('blur plan', () => {
       expect(plan.weights.reduce((a, b) => a + b)).toBeCloseTo(1, 14);
     }
     expect(ehtPlan(PRESET(16 / 9), 160, 90).f).toBe(1);
-    expect(ehtPlan(PRESET(16 / 9), 1920, 1080).f).toBe(8);
+    expect(ehtPlan(PRESET(16 / 9), 1920, 1080).f).toBe(4);
+    expect(ehtPlan(PRESET(16 / 9), 3840, 2160).f).toBe(8);
   });
 
   it('the chain adds exactly (f^2 + 1/2) / 3 px^2 to the kernel, averaged over sub-texel phase', () => {
@@ -180,13 +183,9 @@ describe('downsampled blur against a direct full-resolution Gaussian', () => {
     }, 60_000);
   }
 
-  it('thin features: a 1 px ring within 3 levels, a single bright pixel within 5', () => {
-    // The normalisation then follows one sharp feature, whose blurred peak height depends on
-    // where it sits inside a reduced texel (the tent reduce's width varies with that phase). For a
-    // single pixel this moves the whole map by a percent or two, about 4 levels where afmhot's
-    // slope is 2. The page never normalises to such a feature (the broad direct image of the disk
-    // dominates; the toy-disk test above holds 1 level), so these are bounded loosely and the
-    // values recorded. Proposed at 3 levels; the single pixel measured 4.
+  it('thin features: a 1 px ring and a single bright pixel also stay within 1 level', () => {
+    // The hardest inputs: the normalisation then follows one sharp feature, whose blurred peak on
+    // the reduced grid depends on where it sits inside a texel (MIN_SIGMA_LOW keeps that small).
     const w = 960;
     const h = 540;
     const plan = ehtPlan(PRESET(w / h), w, h);
@@ -201,9 +200,9 @@ describe('downsampled blur against a direct full-resolution Gaussian', () => {
     const point = new Float64Array(w * h);
     point[(h / 2 + 3) * w + w / 2 + 5] = 1;
     const table = colourMapTable();
-    for (const [name, img, bound] of [
-      ['1 px ring', ring, 3],
-      ['single pixel', point, 5],
+    for (const [name, img] of [
+      ['1 px ring', ring],
+      ['single pixel', point],
     ] as const) {
       const d = maxDiff(
         postProcessEht(img, w, h, plan, table),
@@ -211,7 +210,7 @@ describe('downsampled blur against a direct full-resolution Gaussian', () => {
       );
       expect(
         measured(`EHT blur: ${name} against a direct Gaussian, levels`, d),
-      ).toBeLessThanOrEqual(bound);
+      ).toBeLessThanOrEqual(1);
     }
   }, 60_000);
 });

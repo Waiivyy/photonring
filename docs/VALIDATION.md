@@ -205,7 +205,8 @@ the residual is the quantisation of the area count.
   default view, where $\varepsilon = 3.9\times10^{-8}$; both integrals agree with each other to
   about $10^{-14}$ there). The GPU subring tolerance is $4 \cdot 2^{-24}/\sin\psi_{sh}$, a bound for
   GPUs that round each operation; the design's guess was $10^{-6}$ at 30 M, and the M5 measured
-  bands of at most $4.9\times10^{-7}$ at every distance. The EHT blur of a single bright pixel
-  against a direct Gaussian was proposed at 3 levels of 255 and measured 4, so its bound is 5:
-  the normalisation then follows that one point, whose blurred peak height depends on where it
-  sits inside a reduced texel; the realistic toy-disk test holds 1 level.
+  bands of at most $4.9\times10^{-7}$ at every distance. The EHT blur keeps its proposed bound of 1
+  level of 255 against a direct Gaussian; the plan changed instead: the reduce now leaves at
+  least 6 low-resolution pixels per $\sigma$ (proposed 4), because with 4 a render at 30 M
+  differed by 2 levels and a single bright pixel by 4 (the normalisation reads the peak on the
+  reduced grid, where a peak between texels comes out low).
