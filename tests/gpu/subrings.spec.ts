@@ -376,48 +376,62 @@ test.describe('photon subrings in the rendered strip on the GPU', () => {
     });
   }
 
-  test('successive edges in the strip approach e^pi, face-on, 30 M, 4096 rows', async ({
-    page,
-  }) => {
-    test.setTimeout(300_000);
-    await openHarness(page);
-    const rObs = 30;
-    const camera: CameraParams = { distance: rObs, azimuthDeg: 0, elevationDeg: 90, fovYDeg: 60 };
-    const W = 8;
-    const H = 4096;
-    const orders = await stripOrders(page, stripRequest(camera, W, H));
-    const range = stripRange(rObs, M);
-    const decadesPerRow = (range.top - range.bottom) / H;
-    const floor = tolerance(rObs);
-    const col = Array.from({ length: H }, (_, j) => orders[j * W]!);
-    // Face-on every column has phi0 = pi/2; the edge of order n is where the column leaves or
-    // enters it, at the boundary between two rows.
-    const measuredEdge = (n: number, R: number) => {
-      const predicted = stripRowFromOffset(subringOffset(rObs, R, n, Math.PI / 2, M), H, range);
-      const found = changes(col, n);
-      const j = found.reduce((a, b) => (Math.abs(b - predicted) < Math.abs(a - predicted) ? b : a));
-      return stripOffsetAt(j, H, range);
-    };
-    for (const R of [DISK.rIn, DISK.rOut]) {
-      const parts: string[] = [];
-      for (const n of [1, 2, 3]) {
-        const gpu = measuredEdge(n, R) / measuredEdge(n + 1, R);
-        const exact =
-          subringOffset(rObs, R, n, Math.PI / 2, M) / subringOffset(rObs, R, n + 1, Math.PI / 2, M);
-        parts.push(`${n} to ${n + 1}: ${gpu.toFixed(3)} (f64 ${exact.toFixed(4)})`);
-        if (n === 3) continue; // order 4 is near the f32 limit: logged only
-        const allowed =
-          2 * (10 ** (decadesPerRow / 2) - 1) +
-          floor *
-            (1 / subringOffset(rObs, R, n, Math.PI / 2, M) +
-              1 / subringOffset(rObs, R, n + 1, Math.PI / 2, M));
-        expect(Math.abs(gpu / exact - 1), `R = ${R} M, ${n} to ${n + 1}`).toBeLessThanOrEqual(
-          allowed,
+  for (const rObs of DISTANCES) {
+    test(`successive edges in the strip approach e^pi, face-on, ${rObs} M, 4096 rows`, async ({
+      page,
+    }) => {
+      test.setTimeout(300_000);
+      await openHarness(page);
+      const camera: CameraParams = { distance: rObs, azimuthDeg: 0, elevationDeg: 90, fovYDeg: 60 };
+      const W = 8;
+      const H = 4096;
+      const orders = await stripOrders(page, stripRequest(camera, W, H));
+      const range = stripRange(rObs, M);
+      const decadesPerRow = (range.top - range.bottom) / H;
+      const floor = tolerance(rObs);
+      const col = Array.from({ length: H }, (_, j) => orders[j * W]!);
+      const exactEdge = (n: number, R: number) => subringOffset(rObs, R, n, Math.PI / 2, M);
+      // Face-on every column has phi0 = pi/2; the edge of order n is where the column leaves or
+      // enters it, at the boundary between two rows.
+      const measuredEdge = (n: number, R: number) => {
+        const predicted = stripRowFromOffset(exactEdge(n, R), H, range);
+        const found = changes(col, n);
+        expect(found.length, `order ${n}, R = ${R} M`).toBeGreaterThan(0);
+        const j = found.reduce((a, b) =>
+          Math.abs(b - predicted) < Math.abs(a - predicted) ? b : a,
+        );
+        return stripOffsetAt(j, H, range);
+      };
+      // The strip's own 32-bit limit: the offset error of the deepest edges resolved (orders 3
+      // and 4), beyond the half-row quantisation of the edge.
+      let stripFloor = 0;
+      for (const R of [DISK.rIn, DISK.rOut]) {
+        const parts: string[] = [];
+        for (const n of [1, 2, 3, 4]) {
+          if (n >= 3) {
+            const e = exactEdge(n, R);
+            const quantisation = e * (10 ** (decadesPerRow / 2) - 1);
+            stripFloor = Math.max(stripFloor, Math.abs(measuredEdge(n, R) - e) - quantisation);
+          }
+          if (n === 4) continue;
+          const gpu = measuredEdge(n, R) / measuredEdge(n + 1, R);
+          const exact = exactEdge(n, R) / exactEdge(n + 1, R);
+          parts.push(`${n} to ${n + 1}: ${gpu.toFixed(3)} (f64 ${exact.toFixed(4)})`);
+          if (n === 3) continue; // order 4 is near the 32-bit limit: logged only
+          const allowed =
+            2 * (10 ** (decadesPerRow / 2) - 1) +
+            floor * (1 / exactEdge(n, R) + 1 / exactEdge(n + 1, R));
+          expect(Math.abs(gpu / exact - 1), `R = ${R} M, ${n} to ${n + 1}`).toBeLessThanOrEqual(
+            allowed,
+          );
+        }
+        console.log(
+          `strip ratios at ${rObs} M, R = ${R} M: ${parts.join(', ')}; e^pi ${Math.exp(Math.PI).toFixed(4)}`,
         );
       }
       console.log(
-        `strip ratios at R = ${R} M: ${parts.join(', ')}; e^pi ${Math.exp(Math.PI).toFixed(4)}`,
+        `strip 32-bit limit at ${rObs} M: offset error ${Math.max(0, stripFloor).toExponential(2)}`,
       );
-    }
-  });
+    });
+  }
 });

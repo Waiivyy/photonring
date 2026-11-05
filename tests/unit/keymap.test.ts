@@ -18,6 +18,7 @@ describe('key map', () => {
     ['d', { type: 'toggle', target: 'disk' }],
     ['A', { type: 'toggle', target: 'antialias' }],
     ['b', { type: 'view', mode: 'eht' }],
+    ['n', { type: 'view', mode: 'subrings' }],
     ['t', { type: 'view', mode: 'termination' }],
     ['e', { type: 'overlay', id: 'edge' }],
     ['h', { type: 'overlay', id: 'horizon' }],

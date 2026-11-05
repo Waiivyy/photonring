@@ -6,6 +6,7 @@ import type { ViewMode } from './view-state.ts';
 const SUFFIX: Readonly<Record<ViewMode, string>> = {
   colour: '',
   eht: '-eht',
+  subrings: '-subrings',
   termination: '-termination',
 };
 

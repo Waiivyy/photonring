@@ -8,6 +8,7 @@ import { legendLayout } from './legend-layout.ts';
 import { HALO, OVERLAY_STYLES, type OverlayId } from './overlay-style.ts';
 import { rampColours } from './eht-legend.ts';
 import { legendEntries } from './legend-entries.ts';
+import { STRIP_STYLES, stripPoint, type StripDrawing } from './strip-overlay.ts';
 import { displayColour } from './swatch.ts';
 import type { ViewMode } from './view-state.ts';
 
@@ -23,6 +24,10 @@ export interface SaveScene {
   readonly rings: readonly { id: OverlayId; order: number; d: string }[];
   readonly overlays: readonly OverlayId[];
   readonly view: ViewMode;
+  /** Photon subring view only: the strip's lines and labels (in strip coordinates). */
+  readonly strip: StripDrawing | null;
+  /** What the view's labels depend on: the camera distance and whether the disk is shown. */
+  readonly labels: { readonly distance: number; readonly disk: boolean };
   /** EHT-style view only: its labels' inputs and the beam marker, in internal pixels. */
   readonly eht: {
     readonly distance: number;
@@ -84,8 +89,9 @@ export function composeImage(scene: SaveScene): Promise<Blob> {
   }
 
   if (scene.eht) drawBeam(ctx, scene.eht.beam, k);
+  if (scene.strip) drawStrip(ctx, scene.strip, scene.width, scene.height, k);
 
-  const entries = legendEntries(scene.overlays, scene.view, scene.eht);
+  const entries = legendEntries(scene.overlays, scene.view, scene.labels);
   const box = legendLayout(scene.width, scene.height, entries, k);
   if (box) {
     ctx.setLineDash([]);
@@ -134,6 +140,46 @@ export function composeImage(scene: SaveScene): Promise<Blob> {
       'image/png',
     );
   });
+}
+
+/** The photon subring view's lines and labels, as the page draws them, at the image's scale. */
+function drawStrip(
+  ctx: CanvasRenderingContext2D,
+  d: StripDrawing,
+  width: number,
+  height: number,
+  k: number,
+): void {
+  ctx.lineJoin = 'round';
+  for (const pass of ['halo', 'line'] as const) {
+    for (const line of d.lines) {
+      const style = STRIP_STYLES[line.kind];
+      ctx.setLineDash(pass === 'line' ? style.dash.map((v) => v * k) : []);
+      ctx.strokeStyle = pass === 'halo' ? `rgba(0, 0, 0, ${HALO.alpha})` : style.colour;
+      ctx.lineWidth = (pass === 'halo' ? style.width + HALO.extraWidth : style.width) * k;
+      ctx.beginPath();
+      line.points.forEach((p, i) => {
+        const [x, y] = stripPoint(p, d.range, width, height);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    }
+  }
+  ctx.setLineDash([]);
+  ctx.font = `${12 * k}px system-ui, -apple-system, 'Segoe UI', sans-serif`;
+  ctx.textBaseline = 'middle';
+  ctx.lineWidth = 3 * k;
+  ctx.strokeStyle = `rgba(0, 0, 0, ${HALO.alpha})`;
+  ctx.fillStyle = '#e8e6e3';
+  for (const label of d.labels) {
+    const [x, y] = stripPoint([label.x, label.logEps], d.range, width, height);
+    ctx.textAlign =
+      label.anchor === 'middle' ? 'center' : label.anchor === 'end' ? 'right' : 'left';
+    ctx.strokeText(label.text, x, y);
+    ctx.fillText(label.text, x, y);
+  }
+  ctx.textAlign = 'start';
 }
 
 /** The beam marker: a white circle on a dark halo, labelled "beam" below it. */

@@ -26,9 +26,9 @@ const BC = criticalImpactParameter(M);
 const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 
 describe('strip maps', () => {
-  it('runs from 10^0.5 (or the largest visible offset) down to 10^-6.5', () => {
-    expect(STRIP_BOTTOM_LOG10).toBe(-6.5);
-    expect(stripRange(200)).toEqual({ top: 0.5, bottom: -6.5 });
+  it('runs from 10^0.5 (or the largest visible offset) down to 10^-7.5', () => {
+    expect(STRIP_BOTTOM_LOG10).toBe(-7.5);
+    expect(stripRange(200)).toEqual({ top: 0.5, bottom: -7.5 });
     for (const rObs of [5, 10, 20]) {
       const k = Math.sqrt(1 - 2 / rObs) / rObs;
       const top = Math.log10(1 / (k * BC) - 1);

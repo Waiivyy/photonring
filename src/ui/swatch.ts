@@ -2,6 +2,7 @@
 import { srgbEncode, TERMINATION_COLOURS, type Vec3 } from '../physics/index.ts';
 import { svgEl } from './dom.ts';
 import { rampColours } from './eht-legend.ts';
+import { STRIP_STYLES, type StripLineKind } from './strip-overlay.ts';
 import { HALO, type OverlayStyle, type TerminationKind } from './overlay-style.ts';
 
 /** A short sample of an overlay line on its halo. */
@@ -39,6 +40,35 @@ export function displayColour(c: Vec3): string {
 }
 
 export { TERMINATION_LABELS, type TerminationKind } from './overlay-style.ts';
+
+/** A short sample of a strip overlay line on its halo. */
+export function stripLineSwatch(kind: StripLineKind): SVGSVGElement {
+  const style = STRIP_STYLES[kind];
+  const line = (stroke: string, width: number, dash: readonly number[], opacity = 1) =>
+    svgEl('line', {
+      x1: 2,
+      y1: 7,
+      x2: 30,
+      y2: 7,
+      stroke,
+      'stroke-width': width,
+      'stroke-opacity': opacity,
+      'stroke-dasharray': dash.length > 0 ? dash.join(' ') : null,
+    });
+  return svgEl(
+    'svg',
+    {
+      class: 'swatch',
+      width: 32,
+      height: 14,
+      viewBox: '0 0 32 14',
+      'aria-hidden': 'true',
+      focusable: 'false',
+    },
+    line('#000', style.width + HALO.extraWidth, [], HALO.alpha),
+    line(style.colour, style.width, style.dash),
+  );
+}
 
 /** The EHT-style view's colour ramp as thin bars (no gradient, so no element ids to clash). */
 export function rampSwatch(width = 48, height = 10): SVGSVGElement {

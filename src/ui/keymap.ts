@@ -81,6 +81,12 @@ export const KEYMAP: readonly KeyBinding[] = [
     repeat: false,
   },
   {
+    keys: ['n'],
+    action: { type: 'view', mode: 'subrings' },
+    label: 'Photon subring view (magnified)',
+    repeat: false,
+  },
+  {
     keys: ['t'],
     action: { type: 'view', mode: 'termination' },
     label: 'Termination view',

@@ -17,6 +17,7 @@ import {
   EHT_RAMP_LABEL,
   ehtLegendLines,
 } from './eht-legend.ts';
+import { stripLegendLines } from './strip-overlay.ts';
 import { rampSwatch } from './swatch.ts';
 import { VIEW_MODES, VIEW_NAMES, type ViewMode } from './view-state.ts';
 
@@ -33,8 +34,12 @@ export interface ControlsState {
 const VIEW_KEYS: Readonly<Record<ViewMode, string | null>> = {
   colour: null,
   eht: 'b',
+  subrings: 'n',
   termination: 't',
 };
+
+/** The photon subring view's description in the panel. */
+const SUBRINGS_DESCRIPTION = stripLegendLines({ disk: true, ratios: null }).join(' ');
 
 /** The EHT-style view's description in the panel: its labels as for a distant camera, disk on. */
 const EHT_DESCRIPTION = [
@@ -148,6 +153,7 @@ export function createControlsPanel(h: {
       preset,
       el('p', { class: 'desc', id: 'desc-eht-preset' }, EHT_PRESET_DESCRIPTION),
     ],
+    subrings: [el('p', { class: 'desc', id: 'desc-view-subrings' }, SUBRINGS_DESCRIPTION)],
     termination: [
       el('ul', { class: 'term-legend', 'aria-hidden': 'true' }, ...termItems),
       el('p', { class: 'desc', id: 'desc-view-termination' }, TERMINATION_LEGEND),

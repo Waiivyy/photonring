@@ -55,12 +55,14 @@ import {
 const RENDER_MODE: Readonly<Record<ViewMode, RenderMode>> = {
   colour: 'colour',
   eht: 'eht',
+  subrings: 'subrings',
   termination: 'termination',
 };
 /** What the camera line of the status adds for each view. */
 const HUD_VIEW: Readonly<Record<ViewMode, string>> = {
   colour: '',
   eht: ', EHT-style view (false colour)',
+  subrings: ', photon subring strip (magnified, logarithmic)',
   termination: ', termination view',
 };
 
@@ -437,7 +439,7 @@ class App {
       M: 1,
       camera: s.camera,
       mode: RENDER_MODE[s.view],
-      sky: s.view === 'eht' ? 'black' : 'stars',
+      sky: s.view === 'eht' || s.view === 'subrings' ? 'black' : 'stars',
       exposure: 1,
       toneMapping: true,
       disk: s.disk ? DEFAULT_DISK : null,
@@ -850,15 +852,22 @@ class App {
         ...(shown.camera.rollDeg ? { rollDeg: shown.camera.rollDeg } : {}),
       };
       const rgba = await this.renderer.readImageRGBA('full');
+      // The photon subring view draws its strip overlay instead of the ring overlays.
+      const strip = shown.view === 'subrings';
       const blob = await composeImage({
         width: W,
         height: H,
         scale: W / cssWidth,
         rgba,
-        edge: frame.overlays.includes('edge') ? edgeEllipse(shown.camera.distance, view) : null,
-        rings: this.overlay.paths(view, frame),
-        overlays: frame.overlays,
+        edge:
+          !strip && frame.overlays.includes('edge')
+            ? edgeEllipse(shown.camera.distance, view)
+            : null,
+        rings: strip ? [] : this.overlay.paths(view, frame),
+        overlays: strip ? [] : frame.overlays,
         view: shown.view,
+        strip: strip ? this.overlay.stripFor(shown.camera) : null,
+        labels: { distance: shown.camera.distance, disk: shown.disk },
         eht:
           shown.view === 'eht'
             ? {

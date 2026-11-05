@@ -30,11 +30,19 @@ function viewPart(d: Described): string {
       return `EHT-style view, false colour, blurred to the EHT resolution${d.disk ? '' : ', disk off'}`;
     case 'termination':
       return 'termination view';
+    case 'subrings':
+      return 'photon subring strip';
   }
 }
 
 /** Accessible name of the canvas: what the image shows. */
 export function sceneSummary(d: Described): string {
+  if (d.view === 'subrings') {
+    return (
+      'Black hole photon subrings: magnified strip just outside the shadow edge, logarithmic ' +
+      `scale, from ${d.distance.toFixed(1)} M, ${height(d.elevationDeg)}${d.disk ? '' : ', disk off'}.`
+    );
+  }
   const parts = [
     `Black hole seen from ${d.distance.toFixed(1)} M, ${height(d.elevationDeg)}`,
     viewPart(d),

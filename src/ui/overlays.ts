@@ -19,10 +19,19 @@ import {
 import { HALO, OVERLAY_STYLES, type OverlayId } from './overlay-style.ts';
 import { EHT_RAMP_LABEL, beamMarker, ehtLegendLines } from './eht-legend.ts';
 import {
+  STRIP_STYLES,
+  stripDrawingJob,
+  stripLegendLines,
+  stripPoint,
+  stripRatios,
+  type StripDrawing,
+} from './strip-overlay.ts';
+import {
   TERMINATION_LABELS,
   colourSwatch,
   lineSwatch,
   rampSwatch,
+  stripLineSwatch,
   type TerminationKind,
 } from './swatch.ts';
 import type { ViewMode } from './view-state.ts';
@@ -78,6 +87,11 @@ export class OverlayLayer {
   /** The EHT-style view's beam marker, and what it currently shows. */
   private readonly beam = svgEl('g', { 'data-overlay': 'beam', fill: 'none' });
   private beamKey = '';
+  /** The photon subring view's drawing: the group, what it shows, its cache and its job. */
+  private readonly strip = svgEl('g', { 'data-overlay': 'strip', fill: 'none' });
+  private stripKey = '';
+  private readonly stripCache = new Map<string, StripDrawing>();
+  private stripJob: { key: string; gen: Generator<void, StripDrawing, void> } | null = null;
   private viewBox = '';
   private state: RingsState = 'off';
   /** Main-thread ms spent on the rings of the current key, and of the last complete set. */
@@ -135,7 +149,12 @@ export class OverlayLayer {
     this.updateLegend(frame);
     const camera = frame.camera;
     if (!camera || frame.view !== 'eht') this.drawBeam(null);
+    if (!camera || frame.view !== 'subrings') this.drawStrip(null, frame);
     if (!camera) return;
+    if (frame.view === 'subrings') {
+      this.updateStrip(frame, camera, work);
+      return;
+    }
     const view: ImageView = {
       width: frame.cssWidth,
       height: frame.cssHeight,
@@ -265,6 +284,116 @@ export class OverlayLayer {
     this.drawn.delete(id);
   }
 
+  /**
+   * The photon subring view: the ring overlays are not drawn (their state is kept); the strip's
+   * drawing depends only on the distance and the elevation and is computed in slices after the
+   * settle time, then cached, like the ring curves.
+   */
+  private updateStrip(frame: OverlayFrame, camera: CameraParams, work: boolean): void {
+    for (const id of Object.keys(OVERLAY_STYLES) as OverlayId[]) this.removeGroup(id);
+    const key = `strip|${camera.distance}|${camera.elevationDeg}`;
+    const now = this.now();
+    if (key !== this.presentedKey) {
+      this.presentedKey = key;
+      this.keySince = now;
+      this.spent = 0;
+    }
+    const cached = this.stripCache.get(key);
+    if (cached) {
+      this.drawStrip(cached, frame);
+      if (this.state !== 'ready' && this.spent > 0) {
+        this.lastRingMs = this.spent;
+        this.lastLatency = now - (this.keySince + SETTLE_MS);
+      }
+      this.setState('ready');
+      return;
+    }
+    this.drawStrip(null, frame);
+    this.setState('pending');
+    if (!work || now - this.keySince < SETTLE_MS) return;
+    if (!this.stripJob || this.stripJob.key !== key) {
+      this.stripJob = { key, gen: stripDrawingJob(camera.distance, camera.elevationDeg) };
+    }
+    const start = this.now();
+    const job = this.stripJob;
+    for (;;) {
+      const r = job.gen.next();
+      if (r.done) {
+        this.stripCache.delete(key);
+        this.stripCache.set(key, r.value);
+        while (this.stripCache.size > CACHE_SIZE) {
+          this.stripCache.delete(this.stripCache.keys().next().value!);
+        }
+        this.stripJob = null;
+        break;
+      }
+      if (this.now() - start >= SLICE_MS) break;
+    }
+    this.spent += this.now() - start;
+  }
+
+  /** Draws (or, with null, removes) the strip's lines and labels in the box of the frame. */
+  private drawStrip(d: StripDrawing | null, frame: OverlayFrame): void {
+    const sig = d ? `${frame.cssWidth}x${frame.cssHeight}|${d.range.top}|${d.lines.length}` : '';
+    if (sig === this.stripKey && (d === null || this.strip.isConnected)) return;
+    this.stripKey = sig;
+    if (!d) {
+      this.strip.remove();
+      return;
+    }
+    const W = frame.cssWidth;
+    const H = frame.cssHeight;
+    const nodes: SVGElement[] = [];
+    for (const pass of ['halo', 'line'] as const) {
+      for (const line of d.lines) {
+        const style = STRIP_STYLES[line.kind];
+        const points = line.points.map((p) => stripPoint(p, d.range, W, H));
+        const path = points
+          .map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`)
+          .join('');
+        nodes.push(
+          svgEl('path', {
+            d: path,
+            stroke: pass === 'halo' ? '#000' : style.colour,
+            'stroke-width': pass === 'halo' ? style.width + HALO.extraWidth : style.width,
+            'stroke-opacity': pass === 'halo' ? HALO.alpha : 1,
+            'stroke-dasharray':
+              pass === 'line' && style.dash.length > 0 ? style.dash.join(' ') : null,
+          }),
+        );
+      }
+    }
+    for (const label of d.labels) {
+      const [x, y] = stripPoint([label.x, label.logEps], d.range, W, H);
+      nodes.push(
+        svgEl(
+          'text',
+          {
+            x,
+            y: y + 4,
+            'text-anchor': label.anchor,
+            fill: '#e8e6e3',
+            stroke: '#000',
+            'stroke-width': 3,
+            'stroke-opacity': HALO.alpha,
+            'paint-order': 'stroke',
+            'font-size': 12,
+          },
+          label.text,
+        ),
+      );
+    }
+    this.strip.replaceChildren(...nodes);
+    if (!this.strip.isConnected) this.svg.append(this.strip);
+  }
+
+  /** The strip drawing for saved images, once computed for the presented camera. */
+  stripFor(camera: CameraParams | null): StripDrawing | null {
+    return camera
+      ? (this.stripCache.get(`strip|${camera.distance}|${camera.elevationDeg}`) ?? null)
+      : null;
+  }
+
   /** The beam marker of the EHT-style view: a circle of the beam's FWHM, labelled "beam". */
   private drawBeam(b: { cx: number; cy: number; r: number } | null): void {
     const sig = b ? `${b.cx} ${b.cy} ${b.r}` : '';
@@ -376,16 +505,26 @@ export class OverlayLayer {
   }
 
   private updateLegend(frame: OverlayFrame): void {
-    const viewKey = frame.view === 'termination' || frame.view === 'eht';
-    const show = (frame.overlays.length > 0 || viewKey) && !frame.controlsOpen;
+    const viewKey = frame.view !== 'colour';
+    // The photon subring view draws none of the ring overlays.
+    const overlays = frame.view === 'subrings' ? [] : frame.overlays;
+    const show = (overlays.length > 0 || viewKey) && !frame.controlsOpen;
     const distance = frame.camera?.distance ?? Infinity;
-    const ehtLines = frame.view === 'eht' ? ehtLegendLines({ distance, disk: frame.disk }) : [];
-    const sig = show ? `${frame.overlays.join(',')}|${frame.view}|${ehtLines.join('|')}` : 'hidden';
+    const viewLines =
+      frame.view === 'eht'
+        ? ehtLegendLines({ distance, disk: frame.disk })
+        : frame.view === 'subrings'
+          ? stripLegendLines({
+              disk: frame.disk,
+              ratios: Number.isFinite(distance) ? stripRatios(distance) : null,
+            })
+          : [];
+    const sig = show ? `${overlays.join(',')}|${frame.view}|${viewLines.join('|')}` : 'hidden';
     if (sig === this.legendKey) return;
     this.legendKey = sig;
     this.legend.hidden = !show;
     if (!show) return;
-    const items: HTMLLIElement[] = frame.overlays.map((id) =>
+    const items: HTMLLIElement[] = overlays.map((id) =>
       el('li', {}, lineSwatch(OVERLAY_STYLES[id]), el('span', {}, OVERLAY_STYLES[id].label)),
     );
     if (frame.view === 'termination') {
@@ -394,7 +533,14 @@ export class OverlayLayer {
       }
     } else if (frame.view === 'eht') {
       items.unshift(el('li', {}, rampSwatch(), el('span', {}, EHT_RAMP_LABEL)));
-      for (const line of ehtLines) items.push(el('li', { class: 'text' }, el('span', {}, line)));
+      for (const line of viewLines) items.push(el('li', { class: 'text' }, el('span', {}, line)));
+    } else if (frame.view === 'subrings') {
+      items.push(
+        el('li', {}, stripLineSwatch('inner'), el('span', {}, "Disk's inner edge, 6 M")),
+        el('li', {}, stripLineSwatch('outer'), el('span', {}, "Disk's outer edge, 20 M")),
+        el('li', {}, stripLineSwatch('limit'), el('span', {}, '32-bit limit (Apple M5)')),
+      );
+      for (const line of viewLines) items.push(el('li', { class: 'text' }, el('span', {}, line)));
     }
     this.legend.replaceChildren(...items);
   }

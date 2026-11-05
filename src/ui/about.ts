@@ -92,6 +92,17 @@ export function createAbout(): About {
       el(
         'p',
         {},
+        'Photon subring view: the region just outside the shadow edge, unrolled once round the ' +
+          'image and magnified, with the distance from the edge on a logarithmic scale, so each ' +
+          'image of the disk made by light that circled the hole once more appears as a band of ' +
+          'the same height. The lines are the band edges the 64-bit library predicts; the ' +
+          'spacing between successive bands approaches a constant factor, as published ' +
+          'calculations predict for a non-rotating black hole. It is magnified and logarithmic, ' +
+          'not what a camera sees.',
+      ),
+      el(
+        'p',
+        {},
         "EHT-style view: the toy disk's brightness at all frequencies, blurred to the resolution " +
           "of the Event Horizon Telescope's first images of M87*, scaled to this black hole, and " +
           'drawn in false colour from black to the brightest point, after the widely used afmhot ' +

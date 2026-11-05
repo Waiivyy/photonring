@@ -8,8 +8,11 @@ import type { Vec3 } from './observer.ts';
 
 /** Top of the strip in log10(eps), unless the largest visible offset is smaller. */
 export const STRIP_TOP_LOG10 = 0.5;
-/** Bottom of the strip in log10(eps): orders 0 to 4 and the 32-bit limit are visible. */
-export const STRIP_BOTTOM_LOG10 = -6.5;
+/**
+ * Bottom of the strip in log10(eps): orders 0 to 5 are visible, and with them the strip's 32-bit
+ * limit, measured near 1e-7 to 2.4e-7 on the GPU (docs/VALIDATION.md).
+ */
+export const STRIP_BOTTOM_LOG10 = -7.5;
 
 export interface StripRange {
   /** log10(eps) at the top and at the bottom edge of the strip. */

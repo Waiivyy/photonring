@@ -6,7 +6,7 @@ describe('view modes', () => {
   it('lists the views in canonical order, colour first', () => {
     expect(VIEW_MODES[0]).toBe('colour');
     expect(new Set(VIEW_MODES).size).toBe(VIEW_MODES.length);
-    expect(VIEW_MODES).toEqual(['colour', 'eht', 'termination']);
+    expect(VIEW_MODES).toEqual(['colour', 'eht', 'subrings', 'termination']);
   });
 
   it('recognises exactly the listed names', () => {
