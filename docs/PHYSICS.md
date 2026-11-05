@@ -367,8 +367,10 @@ $\log_{10}\varepsilon = t - y\,(t - u)/H$, from $t = \min(0.5, \log_{10}\varepsi
 $u = -7.5$, where $\varepsilon_{max} = 1/(k\,b_c) - 1$ is the largest offset seen at all
 ($\sin\alpha = 1$; $-0.616$ at 5 M). The direction of a strip pixel is
 $\cos\alpha\,\text{forward} + \sin\alpha\,(\cos\theta\,\text{right} + \sin\theta\,\text{up})$
-with $\sin\alpha = k\,b_c(1 + \varepsilon)$. On this scale every band has the same height and
-successive bands are $\pi/\ln 10 = 1.364$ decades apart. The GPU gets $(\cos\theta, \sin\theta)$ per
+with $\sin\alpha = k\,b_c(1 + \varepsilon)$. On this scale the bands of the subrings have nearly
+the same height (face-on at 30 M: 0.358 decades for $n = 1$, 0.312 for $n = 2$, 0.310 from
+$n = 3$ on; the direct image's band is 0.819) and successive bands are $\pi/\ln 10 = 1.364$
+decades apart. The GPU gets $(\cos\theta, \sin\theta)$ per
 column and $(\cos\alpha, \sin\alpha)$ per row from tables computed in f64, and the tracer takes
 $\sin\psi$ from them directly instead of from the length of $d - \cos\psi\,e_1$, a difference of
 nearly equal numbers: that difference limits the ordinary image to about $10^{-7}$ to $10^{-6}$ in
@@ -758,8 +760,12 @@ the edge scale fits the shorter image side, $\tan(f_y/2) = (28\,k/\cos^3\psi_{sh
 number of pixels per M at every distance: 15.876 degrees at 200 M for a 16:9 image. The image is
 turned anticlockwise by 108 degrees (`M87_SKY_ROLL_DEG`): M87*'s approaching jet lies at position
 angle about 288 degrees (Paper V, section 2), its spin points away from Earth (Paper I,
-section 6), so the far end of the disk axis, which photonring draws up, projects to
-$288 - 180 = 108$ degrees; after the turn north is up and east left, as on the sky. The roll
+section 6). photonring draws the disk's angular momentum axis ($+z$) up; the turn puts its
+projection at $288 - 180 = 108$ degrees, where M87*'s spin axis projects, so north is up and east
+left as on the sky. That end of the axis points away from the camera, as M87*'s does from Earth,
+only for cameras below the disk, as at the preset; above the disk it points towards the camera
+and the disk turns anticlockwise on screen, so there the turn matches only the direction of the
+axis on the sky. The turn applies in this view at every camera. The roll
 turns the camera basis in the image plane (`CameraParams.rollDeg`), so the GPU, the CPU twin and
 the overlays all follow it. The preset "Tilt 17°, as for M87*" puts the camera at 200 M and
 elevation $-73$ degrees, so the disk axis and the line of sight make the 163 degrees of the EHT's
@@ -775,7 +781,7 @@ models (Paper V, Figures 2 and 4); seen from below, the disk turns clockwise, as
 3. A Gaussian of $\sigma_{low}$ low-resolution pixels, weights at offsets $-R$ to $R$,
    $R = \lceil 4\sigma_{low}\rceil$, normalised to sum 1, zero outside the reduced grid.
 4. The peak $m$ of the reduced grid and $x = v/\max(m, 10^{-4})$: linear, from black to the
-   brightest point, as the EHT shows its images (Paper V, Figure 2: "the colormap is linear"); the
+   brightest point, as the EHT shows its model images (Paper V, Figure 2: "the colormap is linear"); the
    floor makes a nearly empty image fade instead of jumping to full brightness.
 5. Bilinear upsample at the pixel centres, clamped to the edges, then the colour map.
 
@@ -786,7 +792,7 @@ $\sigma_{low} = \sqrt{\sigma_{px}^2 - (f^2 + 1/2)/3}\,/\,f$ for $f \ge 2$, and $
 $f = 1$. Six low-resolution pixels per $\sigma$ keep the peak that the normalisation reads on the
 reduced grid within 0.7 % for a single point between texels (with four, a render at 30 M
 differed from a direct full-resolution Gaussian by 2 levels of 255). At 1920 x 1080 the plan is
-$f = 4$, a 480 x 270 grid and 87 taps per pass.
+$f = 4$, a 480 x 270 grid and 89 taps per pass.
 
 **The colour map.** The afmhot formula, in display (sRGB-encoded) values: red $2x$, green
 $2x - 1/2$, blue $2x - 1$, each clipped to $[0, 1]$: black, red, orange, yellow, white (gnuplot's
@@ -812,7 +818,7 @@ direction around the ring, is at position angle 196.7 degrees, inside M87*'s pub
 2. A different ring: in the EHT's models the ring is "related to the lensed photon ring" (Paper I,
    section 6); here the bright ring is the disk's direct image near its flux peak, about twice the
    size in units of M (above). Nothing emits inside the ISCO, so the dark centre is wider than the
-   shadow (compare Chael, Johnson and Lupsasca 2021, section 6a).
+   shadow (compare section 6a, which cites Chael, Johnson and Lupsasca 2021).
 3. A different asymmetry: here the Keplerian disk's Doppler beaming; in the EHT's best-fitting
    models it arises in the funnel wall (Paper V, Figure 5).
 4. All frequencies, not 230 GHz.
