@@ -131,15 +131,28 @@ describe('EHT-style view on the CPU', () => {
       expect(peak).toBeLessThan(12);
     });
 
-    it('turned north up, its brightest point lies at the position angle M87*s brightest side has (150 to 200 degrees)', () => {
-      let best = 0;
-      for (let p = 1; p < blurred.length; p++) if (blurred[p]! > blurred[best]!) best = p;
-      const x = (best % s.width) + 0.5 - s.width / 2;
-      const y = s.height / 2 - (Math.floor(best / s.width) + 0.5);
+    it('turned north up, its bright side lies where M87*s does (position angle 150 to 200 degrees)', () => {
+      // The published angle comes from fitted crescent models: the orientation of the brightness
+      // asymmetry (EHT Paper I, Table 1). Its analogue here is the brightness-weighted direction
+      // around the ring (6 to 18 M), which is 196.7 degrees at every size from 192 to 640 px; the
+      // single brightest pixel of the broad crescent wanders from 199.5 to 201.0 degrees.
+      let sx = 0;
+      let sy = 0;
+      for (let j = 0; j < s.height; j++) {
+        for (let i = 0; i < s.width; i++) {
+          const dx = i + 0.5 - s.width / 2;
+          const dy = s.height / 2 - (j + 0.5);
+          const rho = Math.hypot(dx, dy);
+          const b = impactAt(rho, s);
+          if (b < 6 || b > 18) continue;
+          sx += (blurred[j * s.width + i]! * dx) / rho;
+          sy += (blurred[j * s.width + i]! * dy) / rho;
+        }
+      }
       // Position angle: from image up (north) towards image left (east).
-      const pa = ((Math.atan2(-x, y) * 180) / Math.PI + 360) % 360;
+      const pa = ((Math.atan2(-sx, sy) * 180) / Math.PI + 360) % 360;
       expect(
-        measured('EHT CPU: position angle of the brightest point, degrees', pa),
+        measured('EHT CPU: position angle of the bright side, degrees', pa),
       ).toBeGreaterThanOrEqual(150);
       expect(pa).toBeLessThanOrEqual(200);
     });

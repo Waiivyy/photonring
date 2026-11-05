@@ -688,6 +688,132 @@ either test holds:
 A refined pixel is then the CPU's $3 \times 3$ supersampled value up to f32 and f16 rounding,
 which the GPU tests check.
 
+## 10d. EHT-style view
+
+A display of the same toy disk at the resolution of the 2019 Event Horizon Telescope images of
+M87*, scaled to this black hole, in false colour. It is not a simulation of the EHT observation;
+the caveats at the end of this section say why, and the page says so wherever the view appears.
+
+**The quantity.** Per sample, the brightness summed over all frequencies, composited front to
+back over the disk crossings like the colour view (`compositeDiskBolometric`):
+
+$$I = \sum_k \tau_k\,a\,\left(g\,\hat T(r_k)\right)^4,\qquad \tau_0 = 1,\quad \tau_{k+1} = \tau_k (1 - a),$$
+
+with $g$ the frequency ratio of section 9 (including the static observer's factor), $\hat T$ the
+temperature profile of section 10 normalised to 1 at its peak, and $a$ the disk opacity. Because
+$I_\nu/\nu^3$ is invariant along a ray (section 9, Cunningham 1975, eq. 6), the observed
+frequency-integrated intensity of a blackbody is $g^4$ times the emitted $\sigma T^4/\pi$; in units
+of the peak emission that is $(g\hat T)^4$, so the peak temperature and the exposure drop out.
+Escaped and captured rays add nothing: the sky is black. It is not the brightness at one
+frequency, which would weight a power-law spectrum $I_\nu \propto \nu^{-\alpha_\nu}$ by
+$g^{3+\alpha_\nu}$ instead (from the same invariant). On the GPU this is two squarings of
+$g\hat T$, no `pow` (section 11).
+
+**The resolution.** The 2019 images were "blurred with a circular Gaussian to a common,
+conservative angular resolution of 20 μas" (EHT Collaboration 2019, Paper I, section 5; Paper V,
+Figure 1, convolves a model with a 20 μas FWHM Gaussian the same way); the diffraction limit of
+about 25 μas (Paper I, section 3) is not an applied blur and is not used. The mass scale is
+$\theta_g = GM/(c^2D) = 3.8 \pm 0.4$ μas (Paper I, Table 1). For a distant observer, angle and
+impact parameter are proportional, so the blur in units of $M$ is
+
+$$F_b = \frac{20}{3.8}\,M = 5.263\,M,\qquad \sigma_b = \frac{F_b}{2\sqrt{2\ln 2}} = 2.2351\,M$$
+
+(`ehtBeamFwhmM`, `ehtBeamSigmaM`), 4.76 to 5.88 M over the uncertainty of $\theta_g$. Paper I
+(section 7) calibrates the ring diameter in units of $\theta_g$ against its library of GRMHD
+images, so this scale carries that calibration.
+
+**Pixels per M.** With $k = \sqrt{1 - 2M/r_o}/r_o$, $\sin\psi = k\,b$ (section 6), and the
+pinhole radius $\rho = (H/2)\tan\psi/\tan(f_y/2)$ (section 7a), the scale at the shadow edge is
+
+$$s = \frac{d\rho}{db}\bigg|_{b_c} = \frac{H\,k}{2\tan(f_y/2)\cos^3\psi_{sh}}\ \text{px per } M$$
+
+(`edgePixelScale`), and the blur is $\sigma_{px} = \sigma_b\,s$. Scaling by the shadow's own image
+radius over $b_c$ instead would differ by exactly $\cos^2\psi_{sh}$ (0.99933 at 200 M, 0.972 at
+30 M); the local scale is used because a beam is a local resolution and the ring lies just
+outside the edge. Elsewhere the pinhole scale differs, so the beam is matched at the shadow edge
+and is exact only for a distant observer; below 100 M the page says so.
+
+**Framing and orientation.** The view chooses its own field of view: a circle of radius 28 M at
+the edge scale fits the shorter image side, $\tan(f_y/2) = (28\,k/\cos^3\psi_{sh})\max(1, H/W)$
+(`ehtFieldOfView`), capped at 120 degrees (closer than about 17.2 M), so the blur keeps the same
+number of pixels per M at every distance: 15.876 degrees at 200 M for a 16:9 image. The image is
+turned anticlockwise by 108 degrees (`M87_SKY_ROLL_DEG`): M87*'s approaching jet lies at position
+angle about 288 degrees (Paper V, section 2), its spin points away from Earth (Paper I,
+section 6), so the far end of the disk axis, which photonring draws up, projects to
+$288 - 180 = 108$ degrees; after the turn north is up and east left, as on the sky. The roll
+turns the camera basis in the image plane (`CameraParams.rollDeg`), so the GPU, the CPU twin and
+the overlays all follow it. The preset "Tilt 17°, as for M87*" puts the camera at 200 M and
+elevation $-73$ degrees, so the disk axis and the line of sight make the 163 degrees of the EHT's
+models (Paper V, Figures 2 and 4); seen from below, the disk turns clockwise, as M87*'s flow does.
+
+**The discrete blur** (`src/gpu/host/eht-post.ts`, the same plan on the GPU and in the CPU twin):
+
+1. Reduce factor: the largest $f$ of 1, 2, 4, 8 and 16 with $\sigma_{px}/f \ge 6$, else 1.
+2. Tent reduce, separably: reduced texel $l$, centred at $(l + 1/2)f$, takes
+   $\max(0, 1 - |x|/f)/f$ of each pixel at offset $x$ along each axis; pixels outside the image
+   count as 0. A tent keeps a point's centroid where it is; a box reduce would move it to the
+   centre of its block, up to $(f - 1)/2$ px.
+3. A Gaussian of $\sigma_{low}$ low-resolution pixels, weights at offsets $-R$ to $R$,
+   $R = \lceil 4\sigma_{low}\rceil$, normalised to sum 1, zero outside the reduced grid.
+4. The peak $m$ of the reduced grid and $x = v/\max(m, 10^{-4})$: linear, from black to the
+   brightest point, as the EHT shows its images (Paper V, Figure 2: "the colormap is linear"); the
+   floor makes a nearly empty image fade instead of jumping to full brightness.
+5. Bilinear upsample at the pixel centres, clamped to the edges, then the colour map.
+
+The tent reduce and the bilinear upsample each add the variance of a discrete hat function at
+half-integer offsets $a = 1/2, 3/2, \dots, f - 1/2$ from its nodes: $a(f - a)$, which averages to
+$(f^2 + 1/2)/6$ px² over the sub-texel phase. So
+$\sigma_{low} = \sqrt{\sigma_{px}^2 - (f^2 + 1/2)/3}\,/\,f$ for $f \ge 2$, and $\sigma_{px}$ for
+$f = 1$. Six low-resolution pixels per $\sigma$ keep the peak that the normalisation reads on the
+reduced grid within 0.7 % for a single point between texels (with four, a render at 30 M
+differed from a direct full-resolution Gaussian by 2 levels of 255). At 1920 x 1080 the plan is
+$f = 4$, a 480 x 270 grid and 87 taps per pass.
+
+**The colour map.** The afmhot formula, in display (sRGB-encoded) values: red $2x$, green
+$2x - 1/2$, blue $2x - 1$, each clipped to $[0, 1]$: black, red, orange, yellow, white (gnuplot's
+`rgbformulae 34,35,36`, described in its documentation as "AFM hot (black-red-yellow-white)";
+matplotlib's `afmhot`, `_cm.py`). It is written from the formula; no code or table was copied.
+A table of 1025 entries holds the knots 0.25, 0.5 and 0.75 exactly, so linear interpolation in
+it reproduces the formula. The EHT's own colour maps (the ehtplot library, GPL-3.0) were not
+used or opened. Over the top quarter of the range the colours change little in lightness, so the
+brightest regions merge.
+
+**Measured on the CPU twin** at the preset (`tests/unit/eht-render.test.ts`, 432 x 432, one
+sample per pixel): the ring, the peak of the azimuthal mean of the blurred image, lies at
+$b = 11.21M$, so it is 22.4 M across, about twice M87*'s ring of $11\,\theta_g$
+($11^{+0.5}_{-0.3}$, Paper I, Table 1) in units of M; the bright side, the brightness-weighted
+direction around the ring, is at position angle 196.7 degrees, inside M87*'s published 150 to
+200 degrees (Paper I, Table 1).
+
+**What it is not** (also in the page's legend, the About text and the README):
+
+1. Different light: M87*'s 1.3 mm light is synchrotron emission from a hot, geometrically thick,
+   optically thin flow (Paper I, section 1; Paper V, section 1); this disk is a thin, opaque,
+   Newtonian blackbody toy (section 10).
+2. A different ring: in the EHT's models the ring is "related to the lensed photon ring" (Paper I,
+   section 6); here the bright ring is the disk's direct image near its flux peak, about twice the
+   size in units of M (above). Nothing emits inside the ISCO, so the dark centre is wider than the
+   shadow (compare Chael, Johnson and Lupsasca 2021, section 6a).
+3. A different asymmetry: here the Keplerian disk's Doppler beaming; in the EHT's best-fitting
+   models it arises in the funnel wall (Paper V, Figure 5).
+4. All frequencies, not 230 GHz.
+5. A perfect image, blurred: no interferometric reconstruction, no artefacts, no scattering, no
+   variability, no turbulence.
+6. Schwarzschild only, and a camera at 200 M, not at M87*'s distance.
+7. False colour on a relative scale: the colours encode brightness only, linear from black to the
+   image's brightest point; the map is not the EHT's own.
+
+**Checks** (`tests/unit/eht.test.ts`, `tests/unit/eht-post.test.ts`,
+`tests/unit/eht-render.test.ts`, `tests/gpu/eht.spec.ts`, `tests/e2e/eht.spec.ts`; values in
+`docs/VALIDATION.md`). The bolometric compositing reproduces $(g\hat T)^4$ with the library's
+redshift; the pixel scale equals a central difference of the image radius; the framing fits 28 M
+into the shorter side; the roll turns the image and puts the disk axis at 108 degrees; the colour
+table reproduces the formula; the discrete chain's variance and the point response match the
+beam; the downsampled blur stays within 1 level of a direct full-resolution Gaussian on a toy
+annulus, a 1 px ring, a single pixel and the CPU renders at 200 M and 30 M; the images at
+$\pm 73$ degrees are mirror images; and on the GPU the brightness per crossing, the linear image,
+the post-process passes, the final image and the preview agree with the CPU reference.
+
 ## 11. Floating point
 
 - **f32 emulation.** `Math.fround(a op b)` on f32 inputs gives the f32 result rounded to nearest
@@ -752,6 +878,12 @@ Each entry was confirmed from its text, or, where the entry says so, from publis
   https://dlmf.nist.gov/19.29
 - Figueroa, S. A. (1995). When is double rounding innocuous? ACM SIGNUM Newsletter 30(3), 21-26.
   doi:10.1145/221332.221334 (metadata only; its result as restated and proved by Roux 2014)
+- Event Horizon Telescope Collaboration (2019). First M87 Event Horizon Telescope Results. I. The
+  Shadow of the Supermassive Black Hole. ApJL 875, L1. doi:10.3847/2041-8213/ab0ec7,
+  arXiv:1906.11238 (sections 1, 3, 5, 6 and 7, Table 1, Figure 3)
+- Event Horizon Telescope Collaboration (2019). First M87 Event Horizon Telescope Results. V.
+  Physical Origin of the Asymmetric Ring. ApJL 875, L5. doi:10.3847/2041-8213/ab0f43,
+  arXiv:1906.11242 (sections 1 and 2; Figures 1, 2, 4 and 5)
 - Gralla, S. E., Holz, D. E. and Wald, R. M. (2019). Black hole shadows, photon rings, and lensing
   rings. Phys. Rev. D 100, 024018. doi:10.1103/PhysRevD.100.024018, arXiv:1906.00873 (sections I
   to III, eqs. 2 and 13 to 15, read in the HTML rendering of arXiv v2)
@@ -786,6 +918,10 @@ Each entry was confirmed from its text, or, where the entry says so, from publis
   Reasoning 7(1), 131-142. doi:10.6092/issn.1972-5787/4359
 - Shakura, N. I. and Sunyaev, R. A. (1973). Black holes in binary systems. Observational
   appearance. A&A 24, 337-355. ADS 1973A&A....24..337S, no DOI (eq. 2.6; p. 344)
+- Software consulted for the afmhot formula only (no code copied): gnuplot 6.1 documentation,
+  "rgbformulae", https://gnuplot.sourceforge.net/docs_6.1/loc15420.html; matplotlib
+  `lib/matplotlib/_cm.py` (`_g34`, `_g35`, `_g36`, `_afmhot_data`), commit
+  95a3d2929ba2a1c2c2f3afbf343d38e04066de7d
 - Synge, J. L. (1966). The escape of photons from gravitationally intense stars. MNRAS 131,
   463-466. doi:10.1093/mnras/131.3.463 (eqs. 8 to 11 and 14)
 - W3C CSS Color Module Level 4, Candidate Recommendation Draft, 27 October 2026, section 19
