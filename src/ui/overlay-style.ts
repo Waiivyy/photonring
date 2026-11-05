@@ -2,7 +2,17 @@
 // contrast test all read it. Okabe-Ito colours, each with its own dash pattern, so colour is
 // never the only cue, and a dark halo under every line so it reads on the bright disk too.
 
+import type { TERMINATION_COLOURS } from '../physics/index.ts';
+
 export type OverlayId = 'edge' | 'horizon' | 'photon' | 'isco';
+
+export type TerminationKind = keyof typeof TERMINATION_COLOURS;
+
+export const TERMINATION_LABELS: Readonly<Record<TerminationKind, string>> = {
+  escaped: 'Escaped',
+  captured: 'Captured',
+  stepLimit: 'Step limit',
+};
 
 /** Canonical order: also the order in the URL, the Controls panel and the legends. */
 export const OVERLAY_IDS: readonly OverlayId[] = ['edge', 'horizon', 'photon', 'isco'];

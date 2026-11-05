@@ -2,6 +2,7 @@
 export * from './constants.ts';
 export * from './deflection.ts';
 export * from './disk.ts';
+export * from './eht.ts';
 export * from './numerics.ts';
 export * from './observer.ts';
 export * from './orbits.ts';
@@ -12,3 +13,4 @@ export * from './raytrace.ts';
 export * from './lensing.ts';
 export * from './colour.ts';
 export * from './starfield.ts';
+export * from './strip.ts';

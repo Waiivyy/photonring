@@ -10,6 +10,11 @@ export interface CameraParams {
   readonly elevationDeg: number;
   /** Vertical field of view, strictly between 0 and 180. */
   readonly fovYDeg: number;
+  /**
+   * Roll about the line of sight: the image turns anticlockwise by this angle (0 when absent).
+   * Only the EHT-style view uses it, to put north up as for M87* on the sky.
+   */
+  readonly rollDeg?: number;
 }
 
 /** Camera position and orthonormal basis; right = forward x up, so up x right = forward. */
@@ -29,7 +34,8 @@ export const MAX_AUTO_FOV_DEG = 120;
 export const MAX_SHADOW_FRACTION = 0.6;
 
 export function cameraFrame(p: CameraParams, M = 1): CameraFrame {
-  const finite = [p.distance, p.azimuthDeg, p.elevationDeg, p.fovYDeg].every(Number.isFinite);
+  const roll = (p.rollDeg ?? 0) * DEG;
+  const finite = [p.distance, p.azimuthDeg, p.elevationDeg, p.fovYDeg, roll].every(Number.isFinite);
   if (!finite) throw new RangeError('camera parameters must be finite numbers');
   if (!(p.distance > 2 * M)) throw new RangeError(`camera must be outside the horizon`);
   if (Math.abs(p.elevationDeg) > 90) throw new RangeError('elevation must be within [-90, 90]');
@@ -43,13 +49,24 @@ export function cameraFrame(p: CameraParams, M = 1): CameraFrame {
   const sa = Math.sin(az);
   const outward: Vec3 = [ce * ca, ce * sa, se];
   // up is the derivative of the position with respect to elevation: defined at the poles too.
-  const up: Vec3 = [-se * ca, -se * sa, ce];
+  const up0: Vec3 = [-se * ca, -se * sa, ce];
   const forward: Vec3 = [-outward[0], -outward[1], -outward[2]];
-  const right: Vec3 = [
-    forward[1] * up[2] - forward[2] * up[1],
-    forward[2] * up[0] - forward[0] * up[2],
-    forward[0] * up[1] - forward[1] * up[0],
+  const right0: Vec3 = [
+    forward[1] * up0[2] - forward[2] * up0[1],
+    forward[2] * up0[0] - forward[0] * up0[2],
+    forward[0] * up0[1] - forward[1] * up0[0],
   ];
+  // A roll turns the basis within the image plane; the image then turns anticlockwise.
+  const cr = Math.cos(roll);
+  const sr = Math.sin(roll);
+  const right: Vec3 =
+    roll === 0
+      ? right0
+      : [cr * right0[0] - sr * up0[0], cr * right0[1] - sr * up0[1], cr * right0[2] - sr * up0[2]];
+  const up: Vec3 =
+    roll === 0
+      ? up0
+      : [sr * right0[0] + cr * up0[0], sr * right0[1] + cr * up0[1], sr * right0[2] + cr * up0[2]];
   return {
     position: [p.distance * outward[0], p.distance * outward[1], p.distance * outward[2]],
     forward,
@@ -128,4 +145,27 @@ export function autoFieldOfView(rObs: number, M: number, baseFovDeg: number): nu
   if (shadow >= Math.PI / 2) return MAX_AUTO_FOV_DEG;
   const needed = (2 * Math.atan(Math.tan(shadow) / MAX_SHADOW_FRACTION)) / DEG;
   return Math.min(MAX_AUTO_FOV_DEG, Math.max(baseFovDeg, needed));
+}
+
+/**
+ * Pixels per unit of impact parameter at the shadow edge: with sin(psi) = k b,
+ * k = sqrt(1 - 2M/r_o) / r_o, and the pinhole radius (H/2) tan(psi) / tan(fovY/2),
+ * d(radius)/db = H k / (2 tan(fovY/2) cos^3(psi_sh)) (docs/PHYSICS.md, section 10d).
+ */
+export function edgePixelScale(rObs: number, height: number, tanHalfFovY: number, M = 1): number {
+  const k = Math.sqrt(1 - (2 * M) / rObs) / rObs;
+  const c = Math.cos(shadowAngularRadius(rObs, M));
+  return (height * k) / (2 * tanHalfFovY * c * c * c);
+}
+
+/**
+ * Vertical field of view of the EHT-style view, in degrees: a circle of radius frameRadius (in M,
+ * at the edge scale) fits the shorter image side, so the blur keeps the same number of pixels per
+ * M at any distance. Capped at MAX_AUTO_FOV_DEG, which applies below about 17.23 M.
+ */
+export function ehtFieldOfView(rObs: number, aspect: number, frameRadius = 28, M = 1): number {
+  const k = Math.sqrt(1 - (2 * M) / rObs) / rObs;
+  const c = Math.cos(shadowAngularRadius(rObs, M));
+  const t = ((frameRadius * k) / (c * c * c)) * Math.max(1, 1 / aspect);
+  return Math.min(MAX_AUTO_FOV_DEG, (2 * Math.atan(t)) / DEG);
 }

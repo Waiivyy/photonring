@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" width="960" height="540" role="img" aria-labelledby="title desc">
+<title id="title">Frequency shift across the disk</title>
+<desc id="desc">Lines of constant g on the direct image of the disk, seen by the page's opening camera at 30 M, 12 degrees above the disk. The left side moves towards the camera and is blueshifted. g runs from 0.493 to 1.430.</desc>
+<rect width="960" height="540" fill="#101217"/>
+<g font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="15">
+<circle cx="480" cy="270" r="79.4" fill="#000000"/>
+<path d="M462 171.9L452.7 174 444 176.8 436 180.1 428 184.3 422 188 413.9 194 407 200 399.3 208 391.3 218 384.5 228 372.6 248 367.6 258 366.3 264 366.9 268 369.3 272 372 274.6 378 278.4 388 282.5 400 285.8 414 288.6 430 290.8 448 292.4 466 293.2 486 293.4 504 292.9 522 291.6 538 289.8 554 287.1 567 284 578.5 280 586.1 276 590.7 272 592.2 270 593.6 266 593.1 260 589.6 252 582.8 240 572.9 224 564.1 212 555.1 202 544 192.3 534.8 186 526 181.1 516 176.8 506 173.7 496 171.6 484 170.4 474 170.5 462 171.9ZM460 117.8L442 120.9 424 125.8 407.9 132 391.5 140 378 148 363.3 158 324 188.7 310 198.9 296 207.6 280 215.9 264 222.7 248 228.7 169.7 254 137 266 122.7 272 105.9 280 91.7 288 79.8 296 72.4 302 66.2 308 61.3 314 57.5 320 54.9 326 53.5 332 53.2 338 54 344 56.1 350 59.3 356 63.7 362 68 366.6 74 372 81.9 378 90 383.2 100 388.8 116 396.5 134 403.7 156 411.2 178 417.6 202 423.5 230 429.4 258 434.4 288 438.9 318 442.5 350 445.6 384 448.1 416 449.8 450 450.8 484 451 518 450.6 552 449.4 586 447.5 618 444.9 650 441.6 680 437.8 708 433.4 736 428.2 762 422.6 786 416.5 810 409.3 830 402.2 848 394.7 864 386.7 878 378.1 888.4 370 896.3 362 900 357.1 903 352 906 343.8 906.8 338 906.8 334 905.7 328 904.4 324 900.1 316 895.6 310 891.9 306 882.8 298 871.5 290 857.9 282 837.3 272 812.7 262 784.3 252 712 228.7 692 221.1 676 214 660 205.3 646 196.1 634 187.2 602.1 162 585.1 150 566 138.7 548 130.3 536.5 126 526 122.8 514 120 504 118.3 494 117.3 482 116.7 472 116.9 460 117.8Z" fill="#262a33" stroke="#b3b0ab" stroke-width="1" stroke-linejoin="round" fill-rule="evenodd"/>
+<path d="M530.8 183.6L540 187.4 548.6 192 557.7 198 565.4 204 576.2 214 600 238.3 626.9 260 631.9 266 633.2 270 633 272 632.3 274 630.8 276 626 279.6 618 283 606 286.2 590 288.8 572 290.4 552 291.1 529.9 290.8" fill="none" stroke="#e69f00" stroke-width="1.5" stroke-dasharray="5 3" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M490.4 170.9L498 169.9 506 169.5 514 169.9 522 170.9 530 172.5 538 174.8 546 177.8 554 181.5 564 187.1 574.3 194 584.7 202 608 221.2 624 232.2 640 240.5 686.3 260 701.9 268 707.8 272 712.3 276 715.3 280 716.6 284 715.9 288 712.9 292 707 296 698 299.6 688 302.2 676 304.3 662 305.8 646 306.8 612 306.9 572 304.6 550 302.4 526 299.4 490.2 293.3" fill="none" stroke="#e69f00" stroke-width="1.5" stroke-dasharray="5 3" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M460.3 172.2L468 167.4 478 162.7 488 159.4 498 157.3 508 156.2 520 156.2 530 157.3 542 159.7 558 164.9 576 173.3 592 182.8 618 200.3 630.3 208 645.3 216 660 222.3 678 228.4 702 235.1 802.8 258.4M460.6 293.1L486 303.2 524 316.8 670 365.3 714 379.1 748 389.2 784 399.1 816.3 407.2" fill="none" stroke="#e69f00" stroke-width="1.5" stroke-dasharray="5 3" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M436.8 179.8L441.3 172 446 165.5 452 158.7 458 153.3 464 148.8 472 144 480 140.2 488 137.2 496 135 506 133.2 516 132.3 526 132.2 536 132.8 546 134.2 558 136.8 567.6 139.5M437.5 291.6L450 305.1 491.3 346 504.4 360 516.6 374 529.6 390 543.2 408 557.1 428 570.4 448.5" fill="none" stroke="#e69f00" stroke-width="1.5" stroke-dasharray="5 3" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M413.7 129.6L412 136 411 142 410.6 148 410.9 156 412.9 170 418 190.9M418.8 289.3L416.1 300 414.3 310 412.3 334 411.7 362 412 449.6" fill="none" stroke="#e8e6e3" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M402.5 204.5L396 202.3 388 201 380 200.7 370 201.2 356 203.1 308 211.8 280.6 215.6M403.2 286.5L382 302 364.9 316 347.7 332 332.6 348 317.5 366 302.5 386 286.2 410 269.8 436.3" fill="none" stroke="#56b4e9" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M389.6 220.3L382 222.5 350 233.3 339.9 236 324 239.3 295.5 244 197.4 258 161 264 126.6 270.3M390.2 283.1L318.7 308 261.6 330 200.6 356 114.1 395.6" fill="none" stroke="#56b4e9" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M378.6 237.7L366 243.7 352 248.9 304.5 262 285.8 268 272.6 274 267.7 278 266.8 280 267.4 282 270 283.8 276 285.5 286 286.7 298 287 316 286.3 336 284.6 356 282.2 378.9 278.8" fill="none" stroke="#56b4e9" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+<rect x="617" y="264" width="32" height="16" rx="3" fill="#262a33"/>
+<text x="633" y="276.5" font-size="13" fill="#e69f00" text-anchor="middle">0.6</text>
+<rect x="660" y="296.3" width="32" height="16" rx="3" fill="#262a33"/>
+<text x="676" y="308.8" font-size="13" fill="#e69f00" text-anchor="middle">0.7</text>
+<rect x="542" y="320.3" width="32" height="16" rx="3" fill="#262a33"/>
+<text x="558" y="332.8" font-size="13" fill="#e69f00" text-anchor="middle">0.8</text>
+<rect x="461.5" y="324" width="32" height="16" rx="3" fill="#262a33"/>
+<text x="477.5" y="336.5" font-size="13" fill="#e69f00" text-anchor="middle">0.9</text>
+<rect x="396.5" y="322" width="32" height="16" rx="3" fill="#262a33"/>
+<text x="412.5" y="334.5" font-size="13" fill="#e8e6e3" text-anchor="middle">1.0</text>
+<rect x="340" y="316" width="32" height="16" rx="3" fill="#262a33"/>
+<text x="356" y="328.5" font-size="13" fill="#56b4e9" text-anchor="middle">1.1</text>
+<rect x="290" y="304.7" width="32" height="16" rx="3" fill="#262a33"/>
+<text x="306" y="317.2" font-size="13" fill="#56b4e9" text-anchor="middle">1.2</text>
+<rect x="250.8" y="272" width="32" height="16" rx="3" fill="#262a33"/>
+<text x="266.8" y="284.5" font-size="13" fill="#56b4e9" text-anchor="middle">1.3</text>
+<text x="480" y="240" font-size="13" fill="#b3b0ab" text-anchor="middle">shadow</text>
+<text x="16" y="34" fill="#e8e6e3">Lines of constant g = ν<tspan dy="4" font-size="11">seen</tspan><tspan dy="-4"> / ν</tspan><tspan dy="4" font-size="11">emitted</tspan><tspan dy="-4"> on the direct image of the disk</tspan></text>
+<text x="16" y="56" font-size="13" fill="#b3b0ab">Camera at 30 M, 12° above the disk, 60° field of view (the page's opening view): a camera image, not r and phi</text>
+<text x="16" y="150" fill="#56b4e9">approaching side:</text>
+<text x="16" y="170" font-size="13" fill="#b3b0ab">moves towards the camera,</text>
+<text x="16" y="188" font-size="13" fill="#b3b0ab">blueshifted (g &gt; 1)</text>
+<text x="944" y="150" fill="#e69f00" text-anchor="end">receding side:</text>
+<text x="944" y="170" font-size="13" fill="#b3b0ab" text-anchor="end">moves away from the camera,</text>
+<text x="944" y="188" font-size="13" fill="#b3b0ab" text-anchor="end">redshifted (g &lt; 1)</text>
+<line x1="16" y1="447" x2="46" y2="447" stroke="#56b4e9" stroke-width="1.5"/>
+<text x="54" y="452" font-size="13" fill="#56b4e9">g &gt; 1</text>
+<line x1="16" y1="467" x2="46" y2="467" stroke="#e8e6e3" stroke-width="2"/>
+<text x="54" y="472" font-size="13" fill="#e8e6e3">g = 1</text>
+<line x1="16" y1="487" x2="46" y2="487" stroke="#e69f00" stroke-width="1.5" stroke-dasharray="5 3"/>
+<text x="54" y="492" font-size="13" fill="#e69f00">g &lt; 1</text>
+<rect x="0" y="506" width="960" height="34" fill="#101217"/>
+<line x1="0" y1="506.5" x2="960" y2="506.5" stroke="#2c3038" stroke-width="1"/>
+<text x="16" y="527" font-size="13" fill="#b3b0ab">On this image g runs from 0.493 to 1.430. Brightness summed over all frequencies scales as g⁴, which differs by a factor of 71 between them.</text>
+</g>
+</svg>

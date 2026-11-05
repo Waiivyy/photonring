@@ -2,6 +2,7 @@
 // then the hand-written shader files, which Vite imports as text.
 import blitSource from '../shaders/blit.wgsl?raw';
 import diskSource from '../shaders/disk.wgsl?raw';
+import ehtSource from '../shaders/eht.wgsl?raw';
 import geodesicSource from '../shaders/geodesic.wgsl?raw';
 import refineSource from '../shaders/refine.wgsl?raw';
 import renderSource from '../shaders/render.wgsl?raw';
@@ -21,4 +22,8 @@ export function computeShaderSource(lut: LutParams): string {
 
 export function blitShaderSource(lut: LutParams): string {
   return [wgslHeader(lut), blitSource].join('\n');
+}
+
+export function ehtShaderSource(lut: LutParams): string {
+  return [wgslHeader(lut), ehtSource].join('\n');
 }

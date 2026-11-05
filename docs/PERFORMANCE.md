@@ -143,6 +143,77 @@ from the cache.
   rings at 2, 3 and 6 M, sweeps up to $4\pi$), and one curve 8.4 ms on average over 336 curves
   (7 distances, 12 elevations, 4 curves each), with at most 513 vertices.
 
+## EHT-style view: the post-process (Stage 7)
+
+`npm run bench:gpu` (`tests/bench/eht.spec.ts`): Google Chrome 156.0.8078.80, headless, driven by
+Playwright; adapter "apple / metal-3". Measured on 2026-11-05 on the code of commit 8e1a4f1
+(`artifacts/stage7/benchmark.json`). Each present renders the image once (first pass, no
+anti-aliasing), then times one present into an offscreen target: in the EHT-style view the six
+compute passes (tent reduce along x and y, blur along x and y, peak, normalisation) and the
+colour-mapped upsample; in the colour view the tone-mapping blit. GPU milliseconds from one pair
+of timestamp queries around the whole present, median of 15 after 10 untimed presents. Chrome
+rounds these timestamps to steps of 0.0655 ms, so differences below that are not resolved. A
+first run without that warm-up measured the same 960 x 540 present at 2.43 ms first and
+0.52 ms a few presents later, so the GPU's clock state matters.
+
+| Present                                | Camera                         | Resolution  | Reduce $f$ | Reduced grid | GPU ms                 |
+| -------------------------------------- | ------------------------------ | ----------- | ---------- | ------------ | ---------------------- |
+| EHT-style                              | preset (200 M, -73 deg)        | 960 x 540   | 2          | 480 x 270    | 0.459                  |
+| EHT-style                              | preset                         | 1920 x 1080 | 4          | 480 x 270    | 0.655                  |
+| EHT-style                              | preset                         | 3840 x 2160 | 8          | 480 x 270    | 1.769                  |
+| EHT-style                              | default camera (30 M, 12 deg)  | 960 x 540   | 2          | 480 x 270    | 0.393                  |
+| EHT-style                              | default camera                 | 1920 x 1080 | 4          | 480 x 270    | 0.721                  |
+| EHT-style                              | default camera                 | 3840 x 2160 | 8          | 480 x 270    | 1.769                  |
+| EHT-style without the reduce ($f = 1$) | preset                         | 960 x 540   | 1          | 960 x 540    | 2.425                  |
+| Colour view blit                       | default (30 M, 12 deg, fov 60) | 960 x 540   |            |              | 0.000 (below one step) |
+| Colour view blit                       | default                        | 1920 x 1080 |            |              | 0.066                  |
+| Colour view blit                       | default                        | 3840 x 2160 |            |              | 0.262                  |
+
+The reduced grid is the same at every size, because the framing ties the beam to the shorter
+image side: the cost grows only with the reduce, which reads $2f$ pixels per output along each
+axis. An earlier version reduced in one two-dimensional pass ($(2f)^2$ reads per reduced texel)
+and measured 1.57 ms at 1920 x 1080 and 9.6 ms at 3840 x 2160; doing it along x and then y
+brought those to 0.66 to 0.72 ms and 1.77 ms. Without the reduce, the blur at 960 x 540 costs
+five times as much. The page's frame budget of 12 ms counts only the tiles; the design's rule was
+to subtract the post-process from it if it took more than 1 ms at 1920 x 1080, which it does not,
+so the budget is unchanged. At 4K each present adds about 1.8 ms to its frame.
+
+## Photon subring view: the strip (Stage 7)
+
+`npm run bench:gpu` (`tests/bench/subrings.spec.ts`): Google Chrome 156.0.8078.80, headless;
+adapter "apple / metal-3"; measured on 2026-11-05 on the code of commit d68c8e6
+(`artifacts/stage7/benchmark-subrings.json`). Default disk, no anti-aliasing (the strip view has
+none), black sky for the strip and the star field for the colour view, $d\phi = 0.05$, step cap 1000. GPU milliseconds from timestamp queries, median of nine runs after a warm-up run.
+
+| View   | Camera                 | Resolution  | First pass ms | Preview 1/2 ms | Preview 1/4 ms |
+| ------ | ---------------------- | ----------- | ------------- | -------------- | -------------- |
+| Strip  | default (30 M, 12 deg) | 960 x 540   | 2.82          | 0.79           | 0.20           |
+| Colour | default (30 M, 12 deg) | 960 x 540   | 1.57          | 0.39           | 0.13           |
+| Strip  | default                | 1920 x 1080 | 8.19          | 2.23           | 0.66           |
+| Colour | default                | 1920 x 1080 | 5.51          | 1.57           | 0.46           |
+| Strip  | face-on (30 M, 90 deg) | 960 x 540   | 3.41          | 0.92           | 0.26           |
+| Colour | face-on                | 960 x 540   | 1.25          | 0.33           | 0.13           |
+| Strip  | face-on                | 1920 x 1080 | 13.24         | 3.41           | 0.92           |
+| Colour | face-on                | 1920 x 1080 | 4.59          | 1.31           | 0.39           |
+
+Every strip pixel traces a ray close to the photon sphere, so the strip costs 1.5 to 2.9 times
+the colour view of the same camera. The page keeps a separate cost estimate per view, so its
+first frames after switching are planned without the colour view's estimate.
+
+## What the page's status line measures (Stage 7)
+
+The status line's "GPU time" is the sum of the timestamp-query times of the batches that made the
+current image (the first pass, then anti-aliasing), each from the start of its first tile to the
+end of its last; the page keeps one batch in flight, so every batch gets the query set and no
+queue wait is counted. It is often much larger than the benchmark above, because the GPU's clock
+depends on how busy it has been. Measured on 2026-11-05 at commit 36a298d in headless Chrome
+156.0.8078.80, viewport 960 x 540 at device pixel ratio 1 (internal 960 x 540), default view,
+with a throwaway script (`artifacts/stage7/scratch/timing.ts`, not in the repository): the first
+pass took 7.86 ms on first load, 3.93 to 4.00 ms when re-rendered every few hundred
+milliseconds, and 8.13 ms again after 5 s idle; the benchmark of the same size, which renders
+back to back, gives 1.51 ms (table above). Both are GPU times; they differ by the GPU's state.
+Screenshots of the page show the status line as it was when they were taken.
+
 ## Download size (Stage 6)
 
 `npm run build`, then `npm run size` (Node 25.6.1; gzip level 9 and brotli quality 11 from

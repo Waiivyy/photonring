@@ -36,9 +36,17 @@ const get = async (): Promise<GpuRenderer> => {
   return renderer;
 };
 
+function toBase64(bytes: Uint8Array): string {
+  let text = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    text += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(text);
+}
+
 const harness: Harness = {
   ready,
-  async traceRays(rays, disk = null) {
+  async traceRays(rays, disk = null, mode = 'colour') {
     const r = await get();
     // The observer's frequency factor is a per-frame uniform, so one call needs one distance.
     const distances = rays.map((ray) => Math.hypot(...ray.origin));
@@ -46,7 +54,7 @@ const harness: Harness = {
     if (distances.some((d) => Math.abs(d / distance - 1) > 1e-12)) {
       throw new Error('rays in one call must start at the same distance from the black hole');
     }
-    r.setScene({ ...parityScene, camera: { ...parityScene.camera, distance }, disk });
+    r.setScene({ ...parityScene, camera: { ...parityScene.camera, distance }, disk, mode });
     return r.traceRays(rays);
   },
   async skyRadiance(directions, g) {
@@ -73,11 +81,34 @@ const harness: Harness = {
       await r.renderPreview(previewScale);
       rgb = await r.readImageRGB8('preview');
     }
-    let text = '';
-    for (let i = 0; i < rgb.length; i += 0x8000) {
-      text += String.fromCharCode(...rgb.subarray(i, i + 0x8000));
-    }
-    return btoa(text);
+    return toBase64(rgb);
+  },
+  async renderEht(request, previewScale) {
+    const r = await get();
+    r.resize(request.width, request.height);
+    r.setScene({ ...parityScene, ...request });
+    await r.renderAll();
+    if (previewScale !== undefined) await r.renderPreview(previewScale);
+    const counts = async () => [...(await r.readSampleCounts())];
+    const linearBefore = await r.readLinearImage();
+    const countsBefore = await counts();
+    const rgb = await r.readImageRGB8(previewScale === undefined ? 'full' : 'preview');
+    const peak = await r.readEhtPeak();
+    const linear = await r.readLinearImage();
+    const countsAfter = await counts();
+    const untouched =
+      linear.every((v, i) => Object.is(v, linearBefore[i])) &&
+      countsAfter.every((c, i) => c === countsBefore[i]);
+    return { rgb: toBase64(rgb), linear: toBase64(new Uint8Array(linear.buffer)), peak, untouched };
+  },
+  async renderStrip(request) {
+    const r = await get();
+    r.resize(request.width, request.height);
+    r.setScene({ ...parityScene, ...request });
+    await r.renderAll();
+    const rgb = await r.readImageRGB8();
+    const order = await r.readLinearImage(3);
+    return { rgb: toBase64(rgb), order: toBase64(new Uint8Array(order.buffer)) };
   },
   async benchmark(request, repeats) {
     const r = await get();
@@ -107,6 +138,23 @@ const harness: Harness = {
     const counts = await r.readSampleCounts();
     const refinedFraction = counts.reduce((n, c) => n + (c > 1 ? 1 : 0), 0) / counts.length;
     return { ...result, refinedFraction };
+  },
+  async benchmarkPresent(request, repeats, factor) {
+    const r = await get();
+    r.resize(request.width, request.height);
+    r.setScene({ ...parityScene, ...request });
+    await r.renderAll();
+    // Warm-up: pipelines, reduced images, and GPU clocks (a cold first present measured several
+    // times slower than the same present later).
+    for (let i = 0; i < 10; i++) await r.timePresent('full', factor);
+    const ms: number[] = [];
+    let timing = '';
+    for (let i = 0; i < repeats; i++) {
+      const t = await r.timePresent('full', factor);
+      ms.push(t.ms);
+      timing = t.timing;
+    }
+    return { timing, ms };
   },
   async measureShadow(request) {
     const r = await get();

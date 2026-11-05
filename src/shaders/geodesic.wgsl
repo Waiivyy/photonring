@@ -85,7 +85,7 @@ fn atanSmall(x: f32) -> f32 {
 }
 
 // Records a disk-plane crossing at radius r and composites its light front to back, as in
-// compositeDisk (src/physics/disk.ts). Returns true when nothing behind it can be seen.
+// compositeDisk (or compositeDiskBolometric in the EHT-style view, src/physics/disk.ts). Returns true when nothing behind it can be seen.
 fn addCrossing(out: ptr<function, Trace>, r: f32, lzOverE: f32) -> bool {
   if (LOG_CROSSINGS && (*out).crossings < CROSSING_LOG_SIZE) {
     crossingLog[(*out).crossings] = r;
@@ -94,7 +94,7 @@ fn addCrossing(out: ptr<function, Trace>, r: f32, lzOverE: f32) -> bool {
   if (r < params.diskInner || r > params.diskOuter) {
     return false;
   }
-  (*out).emission += (*out).transmittance * params.diskOpacity * diskEmission(r, lzOverE);
+  (*out).emission += (*out).transmittance * params.diskOpacity * diskLight(r, lzOverE);
   (*out).transmittance *= 1.0 - params.diskOpacity;
   return (*out).transmittance == 0.0;
 }
@@ -102,6 +102,23 @@ fn addCrossing(out: ptr<function, Trace>, r: f32, lzOverE: f32) -> bool {
 // Traces a ray backwards from a static observer at `origin` with unit local direction d. With
 // stopWhenOpaque, tracing ends at the first crossing that leaves no transmittance (OPAQUE).
 fn traceGeodesic(origin: vec3f, d: vec3f, stopWhenOpaque: bool) -> Trace {
+  let r0 = length(origin);
+  let e1 = origin / r0;
+  let cosPsi = dot(d, e1);
+  let tangential = d - cosPsi * e1;
+  let sinPsi = length(tangential);
+  if (sinPsi < RADIAL_SIN) {
+    // Radial rays are straight lines; inward ones end at the centre without meeting the disk.
+    var out = startTrace(d);
+    if (cosPsi <= 0.0 && params.M != 0.0) {
+      out.termination = CAPTURED;
+    }
+    return out;
+  }
+  return traceInPlane(origin, d, e1, tangential / sinPsi, cosPsi, sinPsi, stopWhenOpaque);
+}
+
+fn startTrace(d: vec3f) -> Trace {
   var out: Trace;
   out.termination = ESCAPED;
   out.dir = d;
@@ -110,22 +127,25 @@ fn traceGeodesic(origin: vec3f, d: vec3f, stopWhenOpaque: bool) -> Trace {
   out.crossings = 0u;
   out.emission = vec3f(0.0);
   out.transmittance = 1.0;
+  return out;
+}
 
+// The same, with the ray plane (e1 towards the observer, e2) and the angle psi to e1 given. The
+// photon subring strip passes cos and sin of psi from tables computed in f64 on the host, so sin
+// psi does not come from a difference of nearly equal f32 numbers.
+fn traceInPlane(
+  origin: vec3f,
+  d: vec3f,
+  e1: vec3f,
+  e2: vec3f,
+  cosPsi: f32,
+  sinPsi: f32,
+  stopWhenOpaque: bool,
+) -> Trace {
+  var out = startTrace(d);
   let r0 = length(origin);
-  let e1 = origin / r0;
-  let cosPsi = dot(d, e1);
-  let tangential = d - cosPsi * e1;
-  let sinPsi = length(tangential);
   let mass = params.M;
   let diskOn = params.disk != 0u;
-  if (sinPsi < RADIAL_SIN) {
-    // Radial rays are straight lines; inward ones end at the centre without meeting the disk.
-    if (cosPsi <= 0.0 && mass != 0.0) {
-      out.termination = CAPTURED;
-    }
-    return out;
-  }
-  let e2 = tangential / sinPsi;
   // Conserved L_z / E of the physical photon (opposite to the traced ray), as in traceRay.
   let lzOverE = -(r0 * sinPsi / sqrt(1.0 - 2.0 * mass / r0)) * (e1.x * e2.y - e1.y * e2.x);
   if (mass == 0.0) {

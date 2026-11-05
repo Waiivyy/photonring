@@ -3,11 +3,14 @@
 // active while the view has focus (WCAG 2.1.4); any key with Ctrl, Cmd or Alt is left to the
 // browser. Toggles ignore auto-repeat, so holding a key cannot make the image flash.
 import type { OverlayId } from './overlay-style.ts';
+import type { ViewMode } from './view-state.ts';
 
 export type Action =
   | { readonly type: 'orbit'; readonly dAzimuthDeg: number; readonly dElevationDeg: number }
   | { readonly type: 'zoom'; readonly factor: number }
-  | { readonly type: 'toggle'; readonly target: 'disk' | 'antialias' | 'termination' }
+  | { readonly type: 'toggle'; readonly target: 'disk' | 'antialias' }
+  /** Shows the view, or returns to colour when it is already shown. */
+  | { readonly type: 'view'; readonly mode: ViewMode }
   | { readonly type: 'overlay'; readonly id: OverlayId }
   | { readonly type: 'panel'; readonly panel: 'controls' | 'validation' }
   | { readonly type: 'save' }
@@ -72,8 +75,20 @@ export const KEYMAP: readonly KeyBinding[] = [
     repeat: false,
   },
   {
+    keys: ['b'],
+    action: { type: 'view', mode: 'eht' },
+    label: 'EHT-style view (false colour)',
+    repeat: false,
+  },
+  {
+    keys: ['n'],
+    action: { type: 'view', mode: 'subrings' },
+    label: 'Photon subring view (magnified)',
+    repeat: false,
+  },
+  {
     keys: ['t'],
-    action: { type: 'toggle', target: 'termination' },
+    action: { type: 'view', mode: 'termination' },
     label: 'Termination view',
     repeat: false,
   },

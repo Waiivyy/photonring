@@ -4,16 +4,30 @@ import {
   cameraFrame,
   diskTemperatureScale,
   staticObserverFactor,
+  stripColumnAngle,
+  stripRange,
+  stripRowOffset,
+  stripSinAlpha,
   type CameraParams,
   type DiskSettings,
 } from '../physics/index.ts';
 import { AA_THRESHOLD, criticalBand } from './host/antialias.ts';
+import { colourMapTable, ehtPlan, NORMALISE_FLOOR, TABLE_SIZE } from './host/eht-post.ts';
 import { halfToFloat } from './host/half.ts';
 import { layoutStruct, packStruct } from './host/layout.ts';
 import { BLACKBODY_LUT } from './host/lut.ts';
 import { planTiles, type Tile } from './host/tiles.ts';
-import { BLIT_FIELDS, CROSSING_LOG_SIZE, FRAME_FIELDS } from './host/wgsl.ts';
-import { blitShaderSource, computeShaderSource } from './shaders.ts';
+import {
+  BLIT_FIELDS,
+  CROSSING_LOG_SIZE,
+  EHT_FIELDS,
+  FRAME_FIELDS,
+  RENDER_MODES,
+  SKIES,
+  type RenderMode,
+  type Sky,
+} from './host/wgsl.ts';
+import { blitShaderSource, computeShaderSource, ehtShaderSource } from './shaders.ts';
 
 /** Orbital-angle step and step cap of the GPU integrator (chosen in Stage 0, docs/DESIGN.md). */
 export const GPU_DPHI = 0.05;
@@ -21,16 +35,18 @@ export const GPU_MAX_STEPS = 1000;
 export const TILE_SIZE = 256;
 const IMAGE_FORMAT: GPUTextureFormat = 'rgba16float';
 
+export type { RenderMode, Sky } from './host/wgsl.ts';
+
 export interface SceneParams {
   readonly M: number;
   readonly camera: CameraParams;
-  readonly mode: 'colour' | 'termination';
-  readonly sky: 'stars' | 'uniform';
+  readonly mode: RenderMode;
+  readonly sky: Sky;
   readonly exposure: number;
   readonly toneMapping: boolean;
   /** Thin disk, or null for none. Inner edge outside the photon sphere (3M). */
   readonly disk: DiskSettings | null;
-  /** Adaptive 3 x 3 supersampling after the one-sample pass (colour mode only). */
+  /** Adaptive 3 x 3 supersampling after the one-sample pass (colour and EHT modes). */
   readonly antialias: boolean;
   /** Contrast threshold override for measurements; -1 refines every pixel (uniform 3 x 3). */
   readonly aaThreshold?: number;
@@ -74,6 +90,10 @@ type Layouts = Record<
   GPUBindGroupLayout
 >;
 type Pipelines = Record<'render' | 'refine' | 'rays' | 'sky', GPUComputePipeline>;
+type EhtPipelines = Record<
+  'reduceX' | 'reduceY' | 'blurH' | 'blurV' | 'max' | 'normalise',
+  GPUComputePipeline
+>;
 
 /** Which compute pass a tile dispatch runs: one sample per pixel, or anti-aliasing. */
 export type TilePass = 'trace' | 'refine';
@@ -82,10 +102,29 @@ export class GpuRenderer {
   readonly device: GPUDevice;
   private readonly uniform: GPUBuffer;
   private readonly blitUniform: GPUBuffer;
-  private readonly common: GPUBindGroup;
+  private common: GPUBindGroup;
+  private readonly lut: GPUBuffer;
+  /** The photon subring strip's tables (a small placeholder in the other modes), and their key. */
+  private stripBuffer: GPUBuffer;
+  private stripKey = '';
   private readonly empty: GPUBindGroup;
   private readonly sampler: GPUSampler;
-  private readonly blitPipelines = new Map<GPUTextureFormat, GPURenderPipeline>();
+  private readonly blitPipelines = new Map<string, GPURenderPipeline>();
+  /** EHT-style post-process: parameters, colour table, weights, peak and the reduced images. */
+  private readonly ehtUniform: GPUBuffer;
+  private readonly ehtTable: GPUBuffer;
+  private readonly ehtPeak: GPUBuffer;
+  private ehtWeights: GPUBuffer | null = null;
+  /** The reduced images, and the reduced-width image between the two reduce passes. */
+  private ehtLow: readonly [GPUTexture, GPUTexture, GPUTexture] | null = null;
+  /** Benchmarks only: a fixed reduce factor for the EHT post-process. */
+  private ehtFactorOverride: number | undefined = undefined;
+  /** Timestamp queries for timed presents, apart from the tile timing. */
+  private readonly presentQuery: {
+    readonly set: GPUQuerySet;
+    readonly resolve: GPUBuffer;
+    readonly read: GPUBuffer;
+  } | null;
   /** One sample per pixel (first pass). */
   private image: GPUTexture | null = null;
   private imageGroup: GPUBindGroup | null = null;
@@ -112,19 +151,41 @@ export class GpuRenderer {
   private queryBusy = false;
   private readonly layouts: Layouts;
   private readonly pipelines: Pipelines;
+  private readonly ehtPipelines: EhtPipelines;
   private readonly blitModule: GPUShaderModule;
 
   private constructor(
     device: GPUDevice,
     layouts: Layouts,
     pipelines: Pipelines,
+    ehtPipelines: EhtPipelines,
     blitModule: GPUShaderModule,
     timestampQuery: boolean,
   ) {
     this.device = device;
     this.layouts = layouts;
     this.pipelines = pipelines;
+    this.ehtPipelines = ehtPipelines;
     this.blitModule = blitModule;
+    this.ehtUniform = device.createBuffer({
+      label: 'EHT post-process parameters',
+      size: layoutStruct(EHT_FIELDS).size,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+    const table = colourMapTable();
+    const rows = new Float32Array(TABLE_SIZE * 4);
+    for (let i = 0; i < TABLE_SIZE; i++) rows.set([...table.subarray(3 * i, 3 * i + 3), 1], 4 * i);
+    this.ehtTable = device.createBuffer({
+      label: 'EHT colour table',
+      size: rows.byteLength,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+    device.queue.writeBuffer(this.ehtTable, 0, rows);
+    this.ehtPeak = device.createBuffer({
+      label: 'EHT peak',
+      size: 16,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+    });
     this.uniform = device.createBuffer({
       label: 'frame parameters',
       size: layoutStruct(FRAME_FIELDS).size,
@@ -135,21 +196,33 @@ export class GpuRenderer {
       size: layoutStruct(BLIT_FIELDS).size,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
-    const lut = device.createBuffer({
+    this.lut = device.createBuffer({
       label: 'blackbody table',
       size: BLACKBODY_LUT.data.byteLength,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
-    device.queue.writeBuffer(lut, 0, BLACKBODY_LUT.data);
-    this.common = device.createBindGroup({
-      layout: layouts.common,
-      entries: [
-        { binding: 0, resource: { buffer: this.uniform } },
-        { binding: 1, resource: { buffer: lut } },
-      ],
+    device.queue.writeBuffer(this.lut, 0, BLACKBODY_LUT.data);
+    this.stripBuffer = device.createBuffer({
+      label: 'strip tables (placeholder)',
+      size: 16,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
+    this.common = this.commonGroup();
     this.empty = device.createBindGroup({ layout: layouts.empty, entries: [] });
     this.sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
+    this.presentQuery = timestampQuery
+      ? {
+          set: device.createQuerySet({ type: 'timestamp', count: 2 }),
+          resolve: device.createBuffer({
+            size: 16,
+            usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC,
+          }),
+          read: device.createBuffer({
+            size: 16,
+            usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+          }),
+        }
+      : null;
     if (timestampQuery) {
       this.querySet = device.createQuerySet({ type: 'timestamp', count: 2 });
       this.queryResolve = device.createBuffer({
@@ -166,12 +239,14 @@ export class GpuRenderer {
   static async create(device: GPUDevice, timestampQuery = false): Promise<GpuRenderer> {
     const computeModule = await compile(device, computeShaderSource(BLACKBODY_LUT), 'compute');
     const blitModule = await compile(device, blitShaderSource(BLACKBODY_LUT), 'blit');
+    const ehtModule = await compile(device, ehtShaderSource(BLACKBODY_LUT), 'eht');
     const C = GPUShaderStage.COMPUTE;
     const layouts = {
       common: device.createBindGroupLayout({
         entries: [
           { binding: 0, visibility: C, buffer: { type: 'uniform' } },
           { binding: 1, visibility: C, buffer: { type: 'read-only-storage' } },
+          { binding: 2, visibility: C, buffer: { type: 'read-only-storage' } },
         ],
       }),
       image: device.createBindGroupLayout({
@@ -234,7 +309,21 @@ export class GpuRenderer {
       }),
       sky: await pipeline([layouts.common, layouts.empty, layouts.sky], 'skySamples'),
     };
-    return new GpuRenderer(device, layouts, pipelines, blitModule, timestampQuery);
+    const eht = (entryPoint: string) =>
+      device.createComputePipelineAsync({
+        label: entryPoint,
+        layout: 'auto',
+        compute: { module: ehtModule, entryPoint },
+      });
+    const ehtPipelines = {
+      reduceX: await eht('ehtReduceX'),
+      reduceY: await eht('ehtReduceY'),
+      blurH: await eht('ehtBlurH'),
+      blurV: await eht('ehtBlurV'),
+      max: await eht('ehtMax'),
+      normalise: await eht('ehtNormalise'),
+    };
+    return new GpuRenderer(device, layouts, pipelines, ehtPipelines, blitModule, timestampQuery);
   }
 
   get width(): number {
@@ -307,7 +396,11 @@ export class GpuRenderer {
 
   /** True when the current scene asks for the anti-aliasing pass. */
   get antialiasing(): boolean {
-    return this.scene !== null && this.scene.antialias && this.scene.mode === 'colour';
+    return (
+      this.scene !== null &&
+      this.scene.antialias &&
+      (this.scene.mode === 'colour' || this.scene.mode === 'eht')
+    );
   }
 
   setScene(scene: SceneParams): void {
@@ -316,6 +409,52 @@ export class GpuRenderer {
       throw new RangeError('disk needs 3M < rIn < rOut and opacity in [0, 1]');
     }
     this.scene = scene;
+  }
+
+  private commonGroup(): GPUBindGroup {
+    return this.device.createBindGroup({
+      layout: this.layouts.common,
+      entries: [
+        { binding: 0, resource: { buffer: this.uniform } },
+        { binding: 1, resource: { buffer: this.lut } },
+        { binding: 2, resource: { buffer: this.stripBuffer } },
+      ],
+    });
+  }
+
+  /**
+   * The photon subring strip's tables for the full-size image: (cos, sin) of each column's image
+   * angle, then of each row's view angle alpha, in f64 and rounded once to f32. Rebuilt when the
+   * distance or the image size changes.
+   */
+  private updateStripTables(scene: SceneParams): void {
+    const { width, height } = this;
+    const key = `${width}x${height}|${scene.camera.distance}|${scene.M}`;
+    if (key === this.stripKey) return;
+    this.stripKey = key;
+    const range = stripRange(scene.camera.distance, scene.M);
+    const table = new Float32Array(2 * (width + height));
+    for (let i = 0; i < width; i++) {
+      const theta = stripColumnAngle(i, width);
+      table.set([Math.cos(theta), Math.sin(theta)], 2 * i);
+    }
+    for (let j = 0; j < height; j++) {
+      const s = Math.min(
+        1,
+        stripSinAlpha(scene.camera.distance, stripRowOffset(j, height, range), scene.M),
+      );
+      table.set([Math.sqrt(1 - s * s), s], 2 * (width + j));
+    }
+    if (this.stripBuffer.size < table.byteLength) {
+      this.stripBuffer.destroy();
+      this.stripBuffer = this.device.createBuffer({
+        label: 'strip tables',
+        size: table.byteLength,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      });
+      this.common = this.commonGroup();
+    }
+    this.device.queue.writeBuffer(this.stripBuffer, 0, table);
   }
 
   /**
@@ -329,6 +468,7 @@ export class GpuRenderer {
     scene: SceneParams | null = this.scene,
   ): void {
     if (!scene) throw new Error('setScene must be called before rendering');
+    if (scene.mode === 'subrings') this.updateStripTables(scene);
     const f = cameraFrame(scene.camera, scene.M);
     const width = Math.max(1, imageWidth);
     const height = Math.max(1, imageHeight);
@@ -349,20 +489,25 @@ export class GpuRenderer {
       width,
       height,
       maxSteps: GPU_MAX_STEPS,
-      mode: scene.mode === 'termination' ? 1 : 0,
+      mode: RENDER_MODES.indexOf(scene.mode),
       tileOrigin: [tile.x, tile.y],
       tileSize: [tile.width, tile.height],
-      sky: scene.sky === 'uniform' ? 1 : 0,
+      sky: SKIES.indexOf(scene.sky),
       disk: scene.disk ? 1 : 0,
       diskInner: scene.disk?.rIn ?? 0,
       diskOuter: scene.disk?.rOut ?? 0,
       diskOpacity: scene.disk?.opacity ?? 0,
-      diskTemperatureScale: scene.disk ? diskTemperatureScale(scene.disk.peakTemperature) : 0,
+      // The EHT-style view works with T-hat, the temperature over its peak value.
+      diskTemperatureScale: scene.disk
+        ? diskTemperatureScale(scene.mode === 'eht' ? 1 : scene.disk.peakTemperature)
+        : 0,
       bandCosMin: band.cosMin,
       bandCosMax: band.cosMax,
       aaThreshold: scene.aaThreshold ?? AA_THRESHOLD,
       exposure: scene.exposure,
-      toneMapping: scene.toneMapping && scene.mode === 'colour' ? 1 : 0,
+      toneMapping:
+        scene.toneMapping && (scene.mode === 'colour' || scene.mode === 'subrings') ? 1 : 0,
+      stripSize: [Math.max(1, this.width), Math.max(1, this.height)],
     });
     this.device.queue.writeBuffer(this.uniform, 0, data);
   }
@@ -579,19 +724,224 @@ export class GpuRenderer {
     else free();
   }
 
-  private blitPipeline(format: GPUTextureFormat): GPURenderPipeline {
-    let p = this.blitPipelines.get(format);
+  private blitPipeline(
+    format: GPUTextureFormat,
+    kind: 'normal' | 'eht' = 'normal',
+  ): GPURenderPipeline {
+    const key = `${format}|${kind}`;
+    let p = this.blitPipelines.get(key);
     if (!p) {
       p = this.device.createRenderPipeline({
-        label: `blit ${format}`,
-        layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.layouts.blit] }),
+        label: `blit ${kind} ${format}`,
+        layout:
+          kind === 'eht'
+            ? 'auto'
+            : this.device.createPipelineLayout({ bindGroupLayouts: [this.layouts.blit] }),
         vertex: { module: this.blitModule, entryPoint: 'vertexMain' },
-        fragment: { module: this.blitModule, entryPoint: 'fragmentMain', targets: [{ format }] },
+        fragment: {
+          module: this.blitModule,
+          entryPoint: kind === 'eht' ? 'fragmentEht' : 'fragmentMain',
+          targets: [{ format }],
+        },
         primitive: { topology: 'triangle-list' },
       });
-      this.blitPipelines.set(format, p);
+      this.blitPipelines.set(key, p);
     }
     return p;
+  }
+
+  /**
+   * The reduced images of the EHT post-process (two of the reduced size, one of reduced width and
+   * full height), reallocated when the sizes change.
+   */
+  private ehtTargets(
+    width: number,
+    height: number,
+    fullHeight: number,
+  ): readonly [GPUTexture, GPUTexture, GPUTexture] {
+    const cur = this.ehtLow;
+    if (cur && cur[0].width === width && cur[0].height === height && cur[2].height === fullHeight) {
+      return cur;
+    }
+    cur?.forEach((t) => t.destroy());
+    const make = (label: string, h: number) =>
+      this.device.createTexture({
+        label,
+        size: { width, height: h },
+        format: IMAGE_FORMAT,
+        usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING,
+      });
+    this.ehtLow = [
+      make('EHT reduced A', height),
+      make('EHT reduced B', height),
+      make('EHT reduced along x', fullHeight),
+    ];
+    return this.ehtLow;
+  }
+
+  /**
+   * The EHT-style view's present: reduce along x and y, blur along x and y, peak and
+   * normalisation in six compute passes, then the colour-mapped upsample, all in one command encoder, so the peak
+   * always belongs to the frame it normalises. Reads the interactive images and never writes them.
+   */
+  private blitEht(
+    target: GPUTextureView,
+    format: GPUTextureFormat,
+    source: 'full' | 'preview',
+    timed = false,
+  ): void {
+    const scene = this.scene;
+    if (!this.image || !this.refined || !this.preview || !scene) return;
+    const d = this.device;
+    const plan = ehtPlan(scene.camera, this.width, this.height, scene.M, this.ehtFactorOverride);
+    const q = timed ? this.presentQuery : null;
+    const [a, b, c] = this.ehtTargets(plan.lowWidth, plan.lowHeight, this.height);
+    const weights = new Float32Array(plan.weights);
+    if (!this.ehtWeights || this.ehtWeights.size < weights.byteLength) {
+      this.ehtWeights?.destroy();
+      this.ehtWeights = d.createBuffer({
+        label: 'EHT blur weights',
+        size: Math.max(16, weights.byteLength),
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      });
+    }
+    d.queue.writeBuffer(this.ehtWeights, 0, weights);
+    d.queue.writeBuffer(
+      this.ehtUniform,
+      0,
+      packStruct(EHT_FIELDS, {
+        imageSize: [this.width, this.height],
+        lowSize: [plan.lowWidth, plan.lowHeight],
+        previewScale: [
+          this.previewSize[0] / this.preview.width,
+          this.previewSize[1] / this.preview.height,
+        ],
+        factor: plan.f,
+        radius: (weights.length - 1) / 2,
+        source: source === 'preview' ? 1 : 0,
+        floor: NORMALISE_FLOOR,
+      }),
+    );
+    const params: GPUBindGroupEntry = { binding: 0, resource: { buffer: this.ehtUniform } };
+    const weightsEntry: GPUBindGroupEntry = { binding: 6, resource: { buffer: this.ehtWeights } };
+    const peakEntry: GPUBindGroupEntry = { binding: 8, resource: { buffer: this.ehtPeak } };
+    const tex = (binding: number, t: GPUTexture): GPUBindGroupEntry => ({
+      binding,
+      resource: t.createView(),
+    });
+    const groups = (n: number) => Math.ceil(n / 8);
+    const passes: [GPUComputePipeline, GPUBindGroupEntry[], number, number][] = [
+      [
+        this.ehtPipelines.reduceX,
+        [
+          params,
+          tex(1, this.image),
+          tex(2, this.refined),
+          tex(3, this.preview),
+          { binding: 4, resource: this.sampler },
+          tex(5, c),
+        ],
+        groups(plan.lowWidth),
+        groups(this.height),
+      ],
+      [
+        this.ehtPipelines.reduceY,
+        [params, tex(7, c), tex(5, a)],
+        groups(plan.lowWidth),
+        groups(plan.lowHeight),
+      ],
+      [
+        this.ehtPipelines.blurH,
+        [params, weightsEntry, tex(7, a), tex(5, b)],
+        groups(plan.lowWidth),
+        groups(plan.lowHeight),
+      ],
+      [
+        this.ehtPipelines.blurV,
+        [params, weightsEntry, tex(7, b), tex(5, a)],
+        groups(plan.lowWidth),
+        groups(plan.lowHeight),
+      ],
+      [this.ehtPipelines.max, [params, tex(7, a), peakEntry], 1, 1],
+      [
+        this.ehtPipelines.normalise,
+        [params, tex(7, a), peakEntry, tex(5, b)],
+        groups(plan.lowWidth),
+        groups(plan.lowHeight),
+      ],
+    ];
+    const encoder = d.createCommandEncoder();
+    for (const [k, [pipeline, entries, x, y]] of passes.entries()) {
+      const pass = encoder.beginComputePass(
+        q && k === 0 ? { timestampWrites: { querySet: q.set, beginningOfPassWriteIndex: 0 } } : {},
+      );
+      pass.setPipeline(pipeline);
+      pass.setBindGroup(0, d.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries }));
+      pass.dispatchWorkgroups(x, y);
+      pass.end();
+    }
+    const pipeline = this.blitPipeline(format, 'eht');
+    const render = encoder.beginRenderPass({
+      colorAttachments: [
+        { view: target, loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 1] },
+      ],
+      ...(q ? { timestampWrites: { querySet: q.set, endOfPassWriteIndex: 1 } } : {}),
+    });
+    render.setPipeline(pipeline);
+    render.setBindGroup(
+      0,
+      d.createBindGroup({
+        layout: pipeline.getBindGroupLayout(0),
+        entries: [
+          { binding: 2, resource: this.sampler },
+          tex(5, b),
+          { binding: 6, resource: { buffer: this.ehtTable } },
+          { binding: 7, resource: { buffer: this.ehtUniform } },
+        ],
+      }),
+    );
+    render.draw(3);
+    render.end();
+    if (q) {
+      encoder.resolveQuerySet(q.set, 0, 2, q.resolve, 0);
+      encoder.copyBufferToBuffer(q.resolve, 0, q.read, 0, 16);
+    }
+    d.queue.submit([encoder.finish()]);
+  }
+
+  /**
+   * Benchmarks: GPU milliseconds of one present into an offscreen target (in the EHT-style view,
+   * its six passes and the colour-mapped upsample; otherwise the tone-mapping blit), from
+   * timestamp queries, or wall-clock milliseconds until the queue drains without them. `factor`
+   * fixes the EHT reduce factor for a comparison.
+   */
+  async timePresent(
+    source: 'full' | 'preview' = 'full',
+    factor?: number,
+  ): Promise<{ ms: number; timing: 'timestamp-query' | 'wall-clock' }> {
+    const target = this.device.createTexture({
+      size: { width: this.width, height: this.height },
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT,
+    });
+    this.ehtFactorOverride = factor;
+    const q = this.presentQuery;
+    try {
+      const t0 = performance.now();
+      this.blit(target.createView(), 'rgba8unorm', source, true);
+      if (q) {
+        await q.read.mapAsync(GPUMapMode.READ);
+        const t = new BigUint64Array(q.read.getMappedRange());
+        const ms = Number((t[1] as bigint) - (t[0] as bigint)) / 1e6;
+        q.read.unmap();
+        return { ms, timing: 'timestamp-query' };
+      }
+      await this.device.queue.onSubmittedWorkDone();
+      return { ms: performance.now() - t0, timing: 'wall-clock' };
+    } finally {
+      this.ehtFactorOverride = undefined;
+      target.destroy();
+    }
   }
 
   /**
@@ -602,9 +952,16 @@ export class GpuRenderer {
     target: GPUTextureView,
     format: GPUTextureFormat,
     source: 'full' | 'preview' = 'full',
+    timed = false,
   ): void {
     if (!this.image || !this.refined || !this.preview || !this.scene) return;
-    const tone = this.scene.toneMapping && this.scene.mode === 'colour';
+    if (this.scene.mode === 'eht') {
+      this.blitEht(target, format, source, timed);
+      return;
+    }
+    const q = timed ? this.presentQuery : null;
+    const tone =
+      this.scene.toneMapping && (this.scene.mode === 'colour' || this.scene.mode === 'subrings');
     this.device.queue.writeBuffer(
       this.blitUniform,
       0,
@@ -633,12 +990,73 @@ export class GpuRenderer {
       colorAttachments: [
         { view: target, loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 1] },
       ],
+      ...(q
+        ? {
+            timestampWrites: {
+              querySet: q.set,
+              beginningOfPassWriteIndex: 0,
+              endOfPassWriteIndex: 1,
+            },
+          }
+        : {}),
     });
     pass.setPipeline(this.blitPipeline(format));
     pass.setBindGroup(0, group);
     pass.draw(3);
     pass.end();
+    if (q) {
+      encoder.resolveQuerySet(q.set, 0, 2, q.resolve, 0);
+      encoder.copyBufferToBuffer(q.resolve, 0, q.read, 0, 16);
+    }
     this.device.queue.submit([encoder.finish()]);
+  }
+
+  /**
+   * One channel of the first pass, row-major (for tests): red is the EHT-style view's linear
+   * brightness, alpha the photon subring strip's image order plus one.
+   */
+  async readLinearImage(channel = 0): Promise<Float32Array> {
+    if (!this.image) throw new Error('resize must be called before reading');
+    const { width, height } = this;
+    const bytesPerRow = Math.ceil((width * 8) / 256) * 256;
+    const read = this.device.createBuffer({
+      size: bytesPerRow * height,
+      usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+    });
+    const encoder = this.device.createCommandEncoder();
+    encoder.copyTextureToBuffer(
+      { texture: this.image },
+      { buffer: read, bytesPerRow },
+      { width, height },
+    );
+    this.device.queue.submit([encoder.finish()]);
+    await read.mapAsync(GPUMapMode.READ);
+    const halves = new Uint16Array(read.getMappedRange());
+    const out = new Float32Array(width * height);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        out[y * width + x] = halfToFloat(halves[(y * bytesPerRow) / 2 + x * 4 + channel] as number);
+      }
+    }
+    read.unmap();
+    read.destroy();
+    return out;
+  }
+
+  /** The peak the last EHT-style present was normalised to (for tests). */
+  async readEhtPeak(): Promise<number> {
+    const read = this.device.createBuffer({
+      size: 16,
+      usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+    });
+    const encoder = this.device.createCommandEncoder();
+    encoder.copyBufferToBuffer(this.ehtPeak, 0, read, 0, 16);
+    this.device.queue.submit([encoder.finish()]);
+    await read.mapAsync(GPUMapMode.READ);
+    const peak = new Float32Array(read.getMappedRange())[0] as number;
+    read.unmap();
+    read.destroy();
+    return peak;
   }
 
   /** Samples behind each pixel of the presented image, row-major (for tests). */
@@ -834,8 +1252,18 @@ export class GpuRenderer {
     this.preview?.destroy();
     this.uniform.destroy();
     this.blitUniform.destroy();
+    this.stripBuffer.destroy();
+    this.lut.destroy();
+    this.ehtUniform.destroy();
+    this.ehtTable.destroy();
+    this.ehtPeak.destroy();
+    this.ehtWeights?.destroy();
+    this.ehtLow?.forEach((t) => t.destroy());
     this.querySet?.destroy();
     this.queryResolve?.destroy();
     this.queryRead?.destroy();
+    this.presentQuery?.set.destroy();
+    this.presentQuery?.resolve.destroy();
+    this.presentQuery?.read.destroy();
   }
 }

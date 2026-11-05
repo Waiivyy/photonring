@@ -1,8 +1,9 @@
-// Repository text hygiene: fails if any tracked or staged text file contains an em-dash (U+2014).
+// Repository text hygiene: fails if any tracked or staged text file contains an em-dash (U+2014)
+// or an en-dash (U+2013). The rule itself is in tools/text-rules.ts.
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { dashOffences } from './text-rules.ts';
 
-const EM_DASH = String.fromCharCode(0x2014);
 const BINARY = /\.(png|jpg|jpeg|gif|webp|ico|woff2?|ttf|otf|pdf)$/i;
 
 const listed = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], {
@@ -18,14 +19,12 @@ for (const file of files) {
   } catch {
     continue; // deleted in the working tree
   }
-  text.split('\n').forEach((line, i) => {
-    if (line.includes(EM_DASH)) offenders.push(`${file}:${i + 1}`);
-  });
+  offenders.push(...dashOffences(file, text));
 }
 
 if (offenders.length > 0) {
   console.error(
-    `Em-dash found (use a comma, colon or parentheses instead):\n${offenders.join('\n')}`,
+    `Em-dash or en-dash found (use a comma, colon, parentheses or a hyphen instead):\n${offenders.join('\n')}`,
   );
   process.exit(1);
 }

@@ -47,7 +47,7 @@ test('a shared link opens the view it describes', { tag: '@smoke' }, async ({ pa
   await expect(
     page.getByRole('checkbox', { name: 'Accretion disk', exact: true }),
   ).not.toBeChecked();
-  await expect(page.getByRole('checkbox', { name: 'Termination view', exact: true })).toBeChecked();
+  await expect(page.getByRole('radio', { name: 'Termination (debug)', exact: true })).toBeChecked();
   await expect(page.getByRole('checkbox', { name: 'ISCO ring', exact: true })).toBeChecked();
 });
 

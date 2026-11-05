@@ -1,5 +1,6 @@
 // Contract between the GPU test harness page (tests/gpu/harness.ts) and the Playwright specs.
 import type { ValidationCounts } from '../../src/gpu/host/shadow-count.ts';
+import type { RenderMode, Sky } from '../../src/gpu/host/wgsl.ts';
 import type { DiskSettings } from '../../src/physics/index.ts';
 
 export interface HarnessInfo {
@@ -32,8 +33,8 @@ export interface HarnessImageRequest {
   readonly width: number;
   readonly height: number;
   readonly camera: { distance: number; azimuthDeg: number; elevationDeg: number; fovYDeg: number };
-  readonly mode: 'colour' | 'termination';
-  readonly sky: 'stars' | 'uniform';
+  readonly mode: RenderMode;
+  readonly sky: Sky;
   readonly exposure: number;
   readonly toneMapping: boolean;
   readonly disk: DiskSettings | null;
@@ -47,6 +48,17 @@ export interface HarnessImage {
   readonly rgb: number[];
   /** Samples behind each pixel: 1, or 9 where anti-aliasing refined it. */
   readonly samples: number[];
+}
+
+export interface HarnessEhtImage {
+  /** Base64 of the 8-bit RGB after the blit (the EHT post-process in the EHT-style view). */
+  readonly rgb: string;
+  /** Base64 of the first pass's red channel as little-endian Float32 (the linear brightness). */
+  readonly linear: string;
+  /** The peak the present was normalised to. */
+  readonly peak: number;
+  /** Whether the present left the first pass and the anti-aliased pixels unchanged. */
+  readonly untouched: boolean;
 }
 
 export interface HarnessBenchmark {
@@ -89,7 +101,11 @@ export interface Harness {
    * Traces rays (mass 1) with an optional disk, through the shipped WGSL. All rays must start at
    * the same distance, which sets the static observer's frequency factor.
    */
-  traceRays(rays: readonly HarnessRay[], disk?: DiskSettings | null): Promise<HarnessRayResult[]>;
+  traceRays(
+    rays: readonly HarnessRay[],
+    disk?: DiskSettings | null,
+    mode?: RenderMode,
+  ): Promise<HarnessRayResult[]>;
   /** Sky radiance for unit directions as seen with frequency shift g. */
   skyRadiance(
     directions: readonly (readonly [number, number, number])[],
@@ -103,11 +119,32 @@ export interface Harness {
    */
   renderImageBase64(request: HarnessImageRequest, previewScale?: number): Promise<string>;
   /**
+   * Renders the image (and, with previewScale, a preview presented instead of the full image),
+   * then reads the presented image, the linear first pass and the normalisation peak.
+   */
+  renderEht(request: HarnessImageRequest, previewScale?: number): Promise<HarnessEhtImage>;
+  /**
+   * Renders the photon subring strip (mode 'subrings') and returns the presented 8-bit RGB and the
+   * first pass's alpha channel (image order plus one on the disk, 0 elsewhere), both base64
+   * (the alpha as little-endian Float32).
+   */
+  renderStrip(request: HarnessImageRequest): Promise<{ rgb: string; order: string }>;
+  /**
    * Renders the full image `repeats` times after a warm-up run, and a preview at 1/2 and 1/4
    * scale after each. Milliseconds are GPU time from timestamp queries when available (else
    * wall-clock): for a pass, from the start of its first tile to the end of its last.
    */
   benchmark(request: HarnessImageRequest, repeats: number): Promise<HarnessBenchmark>;
+  /**
+   * Renders the image once, then times `repeats` presents of it (the EHT post-process and blit,
+   * or the tone-mapping blit), after ten warm-up presents whose times are discarded. `factor`
+   * fixes the EHT reduce.
+   */
+  benchmarkPresent(
+    request: HarnessImageRequest,
+    repeats: number,
+    factor?: number,
+  ): Promise<{ timing: string; ms: number[] }>;
   /**
    * The Validation panel's measurement: the colour validation render (disk off, uniform sky, no
    * tone mapping, one sample per pixel) and the termination render of the same view, offscreen,

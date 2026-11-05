@@ -66,6 +66,11 @@ export class TileScheduler {
     return this.queue.splice(0, count);
   }
 
+  /** Replaces the estimate, for example with one kept for another render mode (null: none). */
+  setMsPerPixel(cost: number | null): void {
+    this.cost = cost;
+  }
+
   /** Feeds back the measured GPU time for a batch of pixels (moving average). */
   recordCost(pixels: number, ms: number): void {
     if (!(pixels > 0 && ms >= 0 && Number.isFinite(ms))) return;

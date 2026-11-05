@@ -5,12 +5,13 @@
 import { initWebGpu } from '../gpu/device.ts';
 import { ProgressiveRenderer, type FrameAction } from '../gpu/host/progressive.ts';
 import { chooseInternalResolution, type Resolution } from '../gpu/host/resolution.ts';
-import { GpuRenderer, TILE_SIZE } from '../gpu/renderer.ts';
+import { GpuRenderer, TILE_SIZE, type RenderMode } from '../gpu/renderer.ts';
 import { DEFAULT_DISK, shadowAngularRadius, type CameraParams } from '../physics/index.ts';
 import { createAbout, type About } from './about.ts';
 import { createAnnouncer, type Announcer } from './announcer.ts';
 import { createControlsPanel, type ControlsPanel, type SceneToggle } from './controls-panel.ts';
 import { cameraSentence, sceneSummary } from './describe.ts';
+import { EHT_PRESET, EHT_PRESET_LABEL, beamMarker } from './eht-legend.ts';
 import { el } from './dom.ts';
 import { bindCanvasInput } from './input.ts';
 import { KEYMAP, ariaKeyshortcuts, keyAction, type Action } from './keymap.ts';
@@ -41,7 +42,29 @@ import {
   createValidationPanel,
   type ValidationPanel,
 } from './validation-panel.ts';
-import { DEFAULT_VIEW, toggleOverlay, type ViewMode, type ViewState } from './view-state.ts';
+import {
+  DEFAULT_VIEW,
+  VIEW_NAMES,
+  toggleOverlay,
+  toggledView,
+  type ViewMode,
+  type ViewState,
+} from './view-state.ts';
+
+/** What the renderer draws for each view. */
+const RENDER_MODE: Readonly<Record<ViewMode, RenderMode>> = {
+  colour: 'colour',
+  eht: 'eht',
+  subrings: 'subrings',
+  termination: 'termination',
+};
+/** What the camera line of the status adds for each view. */
+const HUD_VIEW: Readonly<Record<ViewMode, string>> = {
+  colour: '',
+  eht: ', EHT-style view (false colour)',
+  subrings: ', photon subring strip (magnified, logarithmic)',
+  termination: ', termination view',
+};
 
 /** GPU time per animation frame the renderer aims for. */
 const FRAME_BUDGET_MS = 12;
@@ -259,11 +282,13 @@ class App {
         }
       },
       now: () => performance.now(),
-      current: () => viewCamera(this.view.orbit),
+      current: () => this.cameraNow(),
     });
     this.controls = createControlsPanel({
       action: (a) => this.dispatch(a, 'button'),
       scene: (toggle, on) => this.setSceneToggle(toggle, on, false),
+      view: (mode) => this.setView(mode, false),
+      preset: () => this.applyEhtPreset(),
       overlay: (id, on) => this.setOverlay(id, on, false),
       close: () => this.closePanel('controls', true),
     });
@@ -347,8 +372,14 @@ class App {
     this.life.frame(this.frame);
   }
 
+  /** The camera the applied view renders with, at the internal image's aspect. */
+  private cameraNow() {
+    const { width, height } = this.resolution;
+    return viewCamera(this.view.orbit, this.applied.view, height > 0 ? width / height : 16 / 9);
+  }
+
   private stats(): AppStats {
-    const camera = viewCamera(this.view.orbit);
+    const camera = this.cameraNow();
     return {
       state: this.state,
       frames: this.frames,
@@ -390,7 +421,7 @@ class App {
   /** The scene the renderer draws: the requested camera and settings, the applied brightness. */
   private sceneNow(): SceneView {
     return {
-      camera: viewCamera(this.view.orbit),
+      camera: this.cameraNow(),
       disk: this.applied.disk,
       view: this.applied.view,
       antialias: this.view.antialias,
@@ -407,14 +438,14 @@ class App {
     this.renderer.setScene({
       M: 1,
       camera: s.camera,
-      mode: s.view,
-      sky: 'stars',
+      mode: RENDER_MODE[s.view],
+      sky: s.view === 'eht' || s.view === 'subrings' ? 'black' : 'stars',
       exposure: 1,
       toneMapping: true,
       disk: s.disk ? DEFAULT_DISK : null,
       antialias: s.antialias,
     });
-    this.plan.sceneChanged(performance.now(), this.renderer.antialiasing);
+    this.plan.sceneChanged(performance.now(), this.renderer.antialiasing, RENDER_MODE[s.view]);
   }
 
   private resizeIfNeeded(): void {
@@ -435,6 +466,9 @@ class App {
     this.canvas.height = this.resolution.height;
     this.renderer.resize(this.resolution.width, this.resolution.height);
     this.plan.resize(this.resolution.width, this.resolution.height, performance.now());
+    // The EHT-style view's camera depends on the aspect of the image: give the renderer the
+    // camera of the new size (the first scene is set before the canvas has one).
+    this.applyScene();
   }
 
   private readonly frame = (now: number): void => {
@@ -510,7 +544,9 @@ class App {
       cssWidth: this.canvas.clientWidth,
       cssHeight: this.canvas.clientHeight,
       overlays: this.view.overlays,
-      termination: this.applied.view === 'termination',
+      // The view and disk of the presented image, like its camera, so overlays never run ahead.
+      view: this.presented?.view ?? this.applied.view,
+      disk: this.presented?.disk ?? this.applied.disk,
       controlsOpen: this.panels.includes('controls'),
     };
   }
@@ -554,16 +590,15 @@ class App {
     const camera =
       `${o.distance.toFixed(1)} M, elevation ${formatNumber(o.elevationDeg, 2)} degrees, ` +
       `azimuth ${formatNumber(o.azimuthDeg, 2)} degrees`;
-    const view = this.applied.view === 'termination' ? ', termination view' : '';
-    this.hudCamera.textContent = `${camera}${view}.`;
+    this.hudCamera.textContent = `${camera}${HUD_VIEW[this.applied.view]}.`;
     this.hudTiming.textContent = ` ${width} x ${height}, ${timing} time: ${status}`;
   }
 
   // ---- State changes ------------------------------------------------------------------------
 
   /**
-   * Makes `next` the requested view: the camera and anti-aliasing apply at once, disk and
-   * termination view go through the brightness limiter, and the URL follows (debounced).
+   * Makes `next` the requested view: the camera and anti-aliasing apply at once, the disk and
+   * the view go through the brightness limiter, and the URL follows (debounced).
    */
   private commit(next: ViewState): void {
     const prev = this.view;
@@ -586,14 +621,23 @@ class App {
   private setSceneToggle(toggle: SceneToggle, on: boolean, announce: boolean): void {
     const v = this.view;
     if (toggle === 'disk') this.commit({ ...v, disk: on });
-    else if (toggle === 'termination') this.commit({ ...v, view: on ? 'termination' : 'colour' });
     else this.commit({ ...v, antialias: on });
     if (announce) {
-      const name = { disk: 'Disk', antialias: 'Anti-aliasing', termination: 'Termination view' }[
-        toggle
-      ];
+      const name = { disk: 'Disk', antialias: 'Anti-aliasing' }[toggle];
       this.announcer.announce(`${name} ${on ? 'on' : 'off'}`);
     }
+  }
+
+  /** The preset: camera, EHT-style view and disk in one change, so the limiter counts it once. */
+  private applyEhtPreset(): void {
+    const v = this.view;
+    this.commit({ ...v, orbit: { ...v.orbit, ...EHT_PRESET }, view: 'eht', disk: true });
+    this.announcer.announce(`${EHT_PRESET_LABEL}: ${cameraSentence(EHT_PRESET)}`);
+  }
+
+  private setView(mode: ViewMode, announce: boolean): void {
+    if (this.view.view !== mode) this.commit({ ...this.view, view: mode });
+    if (announce) this.announcer.announce(`View: ${VIEW_NAMES[mode]}`);
   }
 
   private setOverlay(id: OverlayId, on: boolean, announce: boolean): void {
@@ -647,7 +691,7 @@ class App {
     this.controls.sync({
       disk: this.view.disk,
       antialias: this.view.antialias,
-      termination: this.view.view === 'termination',
+      view: this.view.view,
       overlays: this.view.overlays,
     });
   }
@@ -679,16 +723,16 @@ class App {
         this.announceCamera = false;
         this.announcer.announce('View reset');
         return;
-      case 'toggle': {
-        const on =
-          a.target === 'disk'
-            ? !v.disk
-            : a.target === 'antialias'
-              ? !v.antialias
-              : v.view !== 'termination';
-        this.setSceneToggle(a.target, on, source === 'key');
+      case 'toggle':
+        this.setSceneToggle(
+          a.target,
+          a.target === 'disk' ? !v.disk : !v.antialias,
+          source === 'key',
+        );
         return;
-      }
+      case 'view':
+        this.setView(toggledView(v.view, a.mode), source === 'key');
+        return;
       case 'overlay':
         this.setOverlay(a.id, !v.overlays.includes(a.id), source === 'key');
         return;
@@ -809,17 +853,33 @@ class App {
         height: H,
         aspect: W / H,
         tanHalfFovY: Math.tan((shown.camera.fovYDeg * Math.PI) / 360),
+        ...(shown.camera.rollDeg ? { rollDeg: shown.camera.rollDeg } : {}),
       };
       const rgba = await this.renderer.readImageRGBA('full');
+      // The photon subring view draws its strip overlay instead of the ring overlays.
+      const strip = shown.view === 'subrings';
       const blob = await composeImage({
         width: W,
         height: H,
         scale: W / cssWidth,
         rgba,
-        edge: frame.overlays.includes('edge') ? edgeEllipse(shown.camera.distance, view) : null,
-        rings: this.overlay.paths(view, frame),
-        overlays: frame.overlays,
-        termination: shown.view === 'termination',
+        edge:
+          !strip && frame.overlays.includes('edge')
+            ? edgeEllipse(shown.camera.distance, view)
+            : null,
+        rings: strip ? [] : this.overlay.paths(view, frame),
+        overlays: strip ? [] : frame.overlays,
+        view: shown.view,
+        strip: strip ? this.overlay.stripFor(shown.camera) : null,
+        labels: { distance: shown.camera.distance, disk: shown.disk },
+        eht:
+          shown.view === 'eht'
+            ? {
+                distance: shown.camera.distance,
+                disk: shown.disk,
+                beam: beamMarker(shown.camera.distance, W, H, view.tanHalfFovY),
+              }
+            : null,
       });
       if (this.life.disposed) return;
       const name = screenshotName({ ...shown.camera, view: shown.view });

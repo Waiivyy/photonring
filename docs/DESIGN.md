@@ -50,7 +50,7 @@ What could still set this project apart, for the check-in decision:
   tolerances, plus measured error budgets per pixel (section 3 already has the f32 one).
 - Two independent reference methods for the deflection (quadrature and elliptic integrals) that
   agree to about $10^{-15}$ near $b_c$ ($1.05\times10^{-15}$ relative at the test's values up to
-  $1.1\,b_c$, `npm run measure`), and an integrator chosen by measurement with the comparison
+  $1.1\thinspace b_c$, `npm run measure`), and an integrator chosen by measurement with the comparison
   published.
 - A narrow, finished, documented Schwarzschild scope rather than a broad Kerr feature list.
 
@@ -154,10 +154,10 @@ divided by $\alpha(b)$:
 | Cartesian leapfrog | 0.0025 | f64       | $9.9\times10^{-6}$               | $1.3\times10^{-4}$ | $5.0\times10^{-7}$ |
 
 Read the relative numbers with care at large $b$, where $\alpha$ is tiny. At $d\phi = 0.05$ the
-f64 Binet error there is the RK4 phase error, about $\pi\,d\phi^4/120 \approx 1.6\times10^{-7}$ rad
+f64 Binet error there is the RK4 phase error, about $\pi\thinspace d\phi^4/120 \approx 1.6\times10^{-7}$ rad
 regardless of $b$; in f32 the rounding of the final angle (about $2\times10^{-7}$ rad near $\pi$)
 happened to partly cancel it at those sample points, which is why the f32 row looks better than
-the f64 row there. Near $b_c$ f32 is the worse of the two, as expected (at $1.02\,b_c$:
+the f64 row there. Near $b_c$ f32 is the worse of the two, as expected (at $1.02\thinspace b_c$:
 $1.4\times10^{-6}$ against $1.6\times10^{-7}$).
 
 ### Near $b_c$
@@ -172,7 +172,7 @@ All methods show the same growth, roughly as $1/(b - b_c)$, because the exact es
 diverges like $-\ln(b - b_c)$ and the photon sphere amplifies rounding errors by $e^{\phi}$ (see
 `docs/PHYSICS.md`, section 2). This is a property of the problem, not of the integrator. It matters
 little in the image: the band $b/b_c - 1 < 10^{-4}$, where errors exceed about 1 px, is
-$\delta\psi = \sqrt{1-2M/r_o}\,\delta b/(r_o\cos\psi_{sh})$ wide, which is 0.14 px at $5M$,
+$\delta\psi = \sqrt{1-2M/r_o} \delta b/(r_o\cos\psi_{sh})$ wide, which is 0.14 px at $5M$,
 0.018 px at $30M$ and 0.003 px at $200M$, on the escaping side of the shadow edge only. Inside
 that band the true image is itself a thin stack of higher-order images of the whole sky, and
 supersampling averages it.
@@ -394,7 +394,7 @@ Derivations and references are in `docs/PHYSICS.md`.
 | Horizon 2M, photon sphere 3M, ISCO 6M, $b_c = 3\sqrt3 M$                             | Verified (derivation; Bardeen, Press and Teukolsky 1972; tests)                                                                                                                                                                                                                                      |
 | $(du/d\phi)^2 = 1/b^2 - u^2(1-2Mu)$, $u'' + u = 3Mu^2$                               | Verified                                                                                                                                                                                                                                                                                             |
 | $\mathbf{x}'' = -3Mh^2\mathbf{x}/r^5$, $h$ conserved                                 | Verified. $\lambda$ is affine (scaled by $h/L$). Clarification: $\lvert\mathbf{x}'\rvert^2 = h^2(1/b^2 + 2M/r^3)$ is not constant, and the initial velocity must shrink the radial component of the view direction by $\sqrt{1-2M/r_o}$; a unit vector along the pixel direction gives the wrong $b$ |
-| $\alpha(b) = 2\int_0^{u_0} du/\sqrt{1/b^2 - u^2 + 2Mu^3} - \pi$                      | Verified (two independent methods agree to $1.05\times10^{-15}$ relative at the test's values up to $1.1\,b_c$, `npm run measure`)                                                                                                                                                                   |
+| $\alpha(b) = 2\int_0^{u_0} du/\sqrt{1/b^2 - u^2 + 2Mu^3} - \pi$                      | Verified (two independent methods agree to $1.05\times10^{-15}$ relative at the test's values up to $1.1\thinspace b_c$, `npm run measure`)                                                                                                                                                          |
 | Weak field $\alpha \approx 4M/b$                                                     | Verified, with the next five coefficients (Keeton and Petters 2005)                                                                                                                                                                                                                                  |
 | Strong field, Bozza 2002                                                             | Verified: $\bar a = 1$, $\bar b = \ln[216(7-4\sqrt3)] - \pi \approx -0.4002$                                                                                                                                                                                                                         |
 | $\sin\psi_{sh} = (3\sqrt3 M/r_o)\sqrt{1-2M/r_o}$                                     | Verified (Perlick and Tsupko 2022, Synge 1966); the angle is $\pi - \arcsin$ inside $3M$                                                                                                                                                                                                             |
@@ -402,7 +402,7 @@ Derivations and references are in `docs/PHYSICS.md`.
 | $g = 1/(u^t(1 - \Omega L/E))$, observer at infinity                                  | Verified (Luminet 1979, Cunningham 1975). **Correction for this renderer:** the camera is a static observer at $r_o$, so $g_{obs} = g/\sqrt{1-2M/r_o}$ (1.035 at 30M, 1.29 at 5M)                                                                                                                    |
 | Face-on $g = \sqrt{1-3M/r}$; static emitter $\sqrt{1-2M/r}$; intensity $\propto g^4$ | Verified                                                                                                                                                                                                                                                                                             |
 | $T \propto r^{-3/4}(1-\sqrt{r_{in}/r})^{1/4}$                                        | Verified as the Newtonian Shakura-Sunyaev profile (not Page-Thorne); peak at $(49/36)r_{in}$                                                                                                                                                                                                         |
-| $T_{obs} = g\,T_{emit}$                                                              | Verified ($I_\nu/\nu^3$ invariance)                                                                                                                                                                                                                                                                  |
+| $T_{obs} = g\thinspace T_{emit}$                                                     | Verified ($I_\nu/\nu^3$ invariance)                                                                                                                                                                                                                                                                  |
 
 Also found: the starless write-up prints $u'' + u = \tfrac32 u^3$ and a force along
 $\hat r/r^5$, both typos (its code is correct); this project cites the code, not the page.
@@ -543,7 +543,7 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
   (1.29 against 1.035, an 8 times brightness error at 2700 K). The harness now takes the observer
   distance from the rays, and one call must use one distance.
 - **Anti-aliasing is adaptive.** A second pass supersamples a pixel 3 x 3 when its footprint
-  can reach the critical band ($b_c$ to $1.02\,b_c$: shadow edge, photon ring and higher-order
+  can reach the critical band ($b_c$ to $1.02\thinspace b_c$: shadow edge, photon ring and higher-order
   images, which a one-sample image can miss) or when it differs visibly from a neighbour
   (0.05 in sRGB-encoded, tone-mapped luminance). The grid is the CPU renderer's, so refined
   pixels can be checked against the CPU 3 x 3 render; the tests also check that the band and every
@@ -638,7 +638,9 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
   `replaceState` and a fragment-only URL, 300 ms after the last change (no history entries, no
   dependence on the write succeeding); edits in the address bar apply the whole view at once.
   Not in the URL: the field of view (automatic), whether the Controls panel or About is open, and
-  the diagnostic `?maxdim` and `?budget`.
+  the diagnostic `?maxdim` and `?budget`. Stage 7 added the view values `eht` and `subrings` to
+  `colour` and `termination`, still version 1: every older link stays valid, and a page from
+  before Stage 7 shows a link with a new value in the colour view and says the link was adjusted.
 - **Keyboard and touch.** Single-key shortcuts work only while the view has focus (WCAG 2.1.4);
   every action is also a native button or checkbox, including orbit and zoom (Camera buttons in
   the Controls panel, a single-pointer alternative to dragging and pinching). Keys with Ctrl, Cmd
@@ -650,7 +652,8 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
   view's ring is an element drawn above the canvas, because a canvas's own outline shadow is
   painted under its WebGPU content.
 - **Photosensitivity.** The two toggles that change the brightness of the whole image (disk and
-  termination view) share one limiter, whether they come from keys, checkboxes or the URL: a
+  view: since Stage 7 any of the four views, and the EHT preset, which changes camera, view and
+  disk as one change) share one limiter, whether they come from keys, checkboxes or the URL: a
   change from rest applies at once, and later ones are coalesced so that consecutive changes are
   at least 500 ms apart, at most 3 in any one second and 2 flashes per second, below the 3 of
   WCAG 2.3.1. The controls and the URL show what was asked for; the image, the stats and the saved
@@ -929,3 +932,93 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
   M5, 152 on the macOS runner, 155 and 156 with SwiftShader on the Ubuntu runner); VoiceOver and
   other screen readers; real touch devices (only Chrome's mobile emulation); the deployed site,
   including the headers GitHub Pages sends for it; the frame rate presented in a visible window.
+
+## 16. Stage 7 decisions
+
+Stretch work after Stage 6, asked for by the owner on 2026-11-04 (their message asked how the ring
+"actually looks" and whether photonring could prove something new). The answer given then, and
+kept in the README: photonring models a toy disk around a non-rotating hole and uses no
+observational data, so it can reproduce published predictions with its own code and show them,
+not discover anything about real black holes. The owner chose three features, all designed by a
+research-and-design pass with an independent critique (`artifacts/stage7/design/`, gitignored)
+and built test-first on the branch `stage-7` with a pull request, which reaches `main` only after
+the owner's visual check-in (the owner's choice; every commit is still pushed).
+
+- **EHT-style view** (`view=eht`, key B; `docs/PHYSICS.md`, section 10d). The toy disk's
+  brightness summed over all frequencies, $(g\hat T)^4$, blurred to the 20 μas resolution of the
+  2019 M87* images scaled to this hole (5.263 M), normalised linearly to its brightest point and
+  mapped to false colour. Owner's choices at check-in A: the afmhot formula (vivid orange; a
+  lightness-linear map of our own was the alternative), the image turned 108 degrees so that north
+  is up as for M87* (option R2: a camera roll used only in this view, so the GPU, the CPU twin and
+  the overlays follow it with no extra code), smooth (no turbulence), and a preset button named
+  "Tilt 17°, as for M87*", never "M87*" alone, because brief section 3 forbids presenting the
+  output as a simulation of a real observation. The preset changes only the camera, the view and
+  the disk. Every label says "false colour" and "not a simulation of the EHT observation", on the
+  page, in the Controls panel, in About and in saved images, and the saved image carries the
+  labels and the beam marker in its pixels.
+- **Where the blur runs.** Inside the blit, the one path every present, save and test readback
+  takes, as six compute passes and a colour-mapped upsample in one command encoder, so the peak
+  always belongs to the frame it normalises and the interactive images are never written. It runs
+  on a reduced grid: a tent reduce (a box would move a point's light to the centre of its block),
+  done separably (the two-dimensional reduce took 9.6 ms per present at 3840 x 2160; separable,
+  1.77 ms), a Gaussian of at least 6 low-resolution pixels per sigma (with 4, a render at 30 M
+  differed from a direct full-resolution Gaussian by 2 levels; with 6, every comparison holds 1),
+  and a bilinear upsample. The tent and the upsample each add $(f^2 + 1/2)/6$ px² of variance,
+  averaged over sub-texel phase, and the kernel supplies the rest. Measured cost: 0.39 to 0.72 ms
+  per present at 960 x 540 and 1920 x 1080, 1.77 ms at 3840 x 2160 (`docs/PERFORMANCE.md`); the
+  design's rule to subtract it from the 12 ms tile budget above 1 ms at 1920 x 1080 does not
+  trigger.
+- **Purity rule.** `src/gpu/host/eht-post.ts` imports only the physics library and holds no GPU
+  calls, so the CPU renderer, the tools and the tests share the exact plan the GPU uses (the same
+  status as `antialias.ts`).
+- **The EHT-style view never adds the sky**, on the CPU or the GPU, whatever the scene asks for: a
+  page test found that the GPU added the star field, invisible under the disk but the whole image
+  with the disk off.
+- **Photon subrings, measured** (`view=subrings`, key N; `docs/PHYSICS.md`, section 6b). A 64-bit
+  solver for the image of a disk ring after any number of half-turns, checked against an
+  independent quadrature and the Binet integrator; GPU ray fans that locate each band edge at 5,
+  30 and 200 M; and a page view of the strip just outside the shadow edge, unrolled and on a
+  logarithmic scale, with the predicted band edges drawn over it. Framed as a verification of a
+  published prediction (Gralla, Holz and Wald 2019; Johnson et al. 2020), not a discovery.
+- **The strip's architecture.** The host computes, in f64, the image angle of each column and the
+  view angle of each row and uploads them as one table; the tracer takes $\sin\psi$ from it instead
+  of from the length of $d - \cos\psi\thinspace e_1$, so the strip's 32-bit limit is the integrator's (about
+  $1.2\times10^{-7}$ to $2.5\times10^{-7}$ in $\varepsilon$, measured on the M5), not the setup's.
+  Because of that the strip goes down to $10^{-7.5}$ instead of the planned $10^{-6.5}$, so the limit
+  and order 5 near it are visible. The first pass's alpha, unused before, carries the image order
+  plus one, which the GPU tests read. The strip view has no anti-aliasing and draws none of the
+  ring overlays, whose state stays in the link.
+- **A cost estimate per render mode** (`src/gpu/host/progressive.ts`): the strip's rays cost 1.5
+  to 2.9 times the colour view's (measured), so a view switch must not plan its first frames with
+  the previous view's cost; a batch still in flight across a switch is not charged to the new view.
+- **The view became a mode** (`ViewMode`: colour, eht, subrings, termination, in that canonical
+  order): one radio group in the Controls panel, one key per view that toggles back to colour, and
+  tables keyed by the view, so the type checker lists every place a new view must be handled.
+- **Status line.** Its GPU time is real timestamp-query time, larger than the benchmark because
+  the GPU's clock depends on how busy it has been (`docs/PERFORMANCE.md`); the suspected queue
+  waits were not the cause, so nothing in the timing changed.
+- **Non-refereed note:** that the 2019 figures used ehtplot's `afmhot_10us`, not plain afmhot, is
+  a maintainer's comment in eht-imaging issue #85 (https://github.com/achael/eht-imaging/issues/85),
+  not a paper; photonring uses neither, only the afmhot formula.
+- **Review.** An adversarial review of the branch (four reviewers, each finding checked by a
+  skeptical verifier) confirmed 27 findings, 24 of them distinct, all fixed in e78e425 and 187bd91: among them the
+  EHT-style view kept a 16:9 camera after the canvas turned to portrait, the strip overlay could
+  show the previous camera's edges, the beam marker left the image below about 17 M, the strip
+  drew outward direct images it cannot show, the solver returned offsets below its own floor,
+  several tests could not fail, and some documented GPU values predated the tracer's split.
+- **Visual check-in B (2026-11-05):** the owner approved the README images (gallery, five
+  diagrams, six page screenshots, 2.2 MB) and the README as drafted, kept the 108 degree turn at
+  every camera and the legends as they are, and asked for the pull request to be merged once CI is
+  green.
+- **README images.** The gallery is drawn by the CPU reference renderer (`npm run render:readme`);
+  the two images that need labels in their pixels, the EHT-style view and the subring strip, are
+  composed by the page's own Save image code in headless Chrome (`npm run shots:readme`), which
+  also captures the page screenshots; the diagrams are drawn from the physics library
+  (`npm run diagrams`). All write to `artifacts/` first; `tools/accept-readme.ts` and
+  `npm run diagrams -- --accept` copy only what the owner approved into `docs/images/`, after
+  checking each file against its manifest's sha256 and its byte cap, and
+  `tests/unit/readme-images.test.ts` keeps the total within 3,000,000 bytes and every file used.
+- **Not verified:** everything here ran only in Google Chrome on the M5 and on CI's macOS runner;
+  the EHT-style view and the strip have not been seen in Safari, Firefox or on a real phone; the
+  strip's 32-bit limit is an estimate from four edges per distance on one GPU; the page labels
+  say "measured on an Apple M5".

@@ -2,7 +2,26 @@
 import { initialOrbit, type OrbitState } from './orbit.ts';
 import { OVERLAY_IDS, type OverlayId } from './overlay-style.ts';
 
-export type ViewMode = 'colour' | 'termination';
+/** The views, in canonical order: the URL parser, the Controls panel and the tests use it. */
+export const VIEW_MODES = ['colour', 'eht', 'subrings', 'termination'] as const;
+export type ViewMode = (typeof VIEW_MODES)[number];
+
+/** Name of each view in the Controls panel and in announcements. */
+export const VIEW_NAMES: Readonly<Record<ViewMode, string>> = {
+  colour: 'Colour',
+  eht: 'EHT-style (false colour)',
+  subrings: 'Photon subrings (magnified)',
+  termination: 'Termination (debug)',
+};
+
+export function isViewMode(v: string): v is ViewMode {
+  return (VIEW_MODES as readonly string[]).includes(v);
+}
+
+/** The view a view key or button leads to: its view, or colour when that view is shown. */
+export function toggledView(current: ViewMode, mode: ViewMode): ViewMode {
+  return current === mode ? 'colour' : mode;
+}
 
 export interface ViewState {
   readonly orbit: OrbitState;

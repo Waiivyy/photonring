@@ -80,6 +80,30 @@ test('Space toggles the scene and overlay checkboxes', async ({ page }) => {
   expect((await stats(page)).overlays).toEqual(['edge']);
 });
 
+test('arrow keys in the View radio group switch the view through the brightness limiter', async ({
+  page,
+}) => {
+  await page.getByRole('button', { name: 'Controls', exact: true }).click();
+  const colour = page.getByRole('radio', { name: 'Colour', exact: true });
+  // The next view in the group's order (colour, EHT-style, termination).
+  const next = page.getByRole('radio', { name: 'EHT-style (false colour)', exact: true });
+  await expect(colour).toBeChecked();
+  await colour.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(next).toBeChecked();
+  await expect.poll(async () => (await stats(page)).mode).toBe('eht');
+  // The arrow keys moved the selection, not the camera.
+  expect(await camera(page)).toEqual(DEFAULT);
+  await page.keyboard.press('ArrowUp');
+  await expect(colour).toBeChecked();
+  await expect.poll(async () => (await stats(page)).mode).toBe('colour');
+  const s = await stats(page);
+  // Two view changes, each through the limiter, at least 500 ms apart.
+  const times = s.toggleApplyTimes.slice(-2);
+  expect(times).toHaveLength(2);
+  expect(times[1]! - times[0]!).toBeGreaterThanOrEqual(500);
+});
+
 test('every shortcut works from the view', async ({ page }) => {
   await view(page).focus();
   const key = async (k: string) => page.keyboard.press(k);

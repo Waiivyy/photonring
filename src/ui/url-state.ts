@@ -11,7 +11,13 @@ import {
   formatNumber,
   quantiseOrbit,
 } from './quantise.ts';
-import { DEFAULT_VIEW, canonicalOverlays, type ViewMode, type ViewState } from './view-state.ts';
+import {
+  DEFAULT_VIEW,
+  canonicalOverlays,
+  isViewMode,
+  type ViewMode,
+  type ViewState,
+} from './view-state.ts';
 
 export const MAX_HASH_LENGTH = 512;
 export const MAX_PAIRS = 32;
@@ -158,9 +164,7 @@ function parseUnsafe(hash: string): ParsedHash {
   );
   const azimuthDeg = number('az', initialOrbit.azimuthDeg, 0, 360, false);
   const elevationDeg = number('el', initialOrbit.elevationDeg, -90, 90, true);
-  const view = field<ViewMode>('view', DEFAULT_VIEW.view, (v) =>
-    v === 'colour' || v === 'termination' ? v : null,
-  );
+  const view = field<ViewMode>('view', DEFAULT_VIEW.view, (v) => (isViewMode(v) ? v : null));
   const overlays = field<OverlayId[]>('ov', [], (raw) => {
     if (raw === '' || raw === 'none') return [];
     const tokens = raw.split(',', MAX_OVERLAY_TOKENS);

@@ -5,7 +5,12 @@ import { cameraFrame } from '../../src/physics/index.ts';
 import { ORBIT_LIMITS, orbitBy, resetOrbit, viewCamera, zoomBy } from '../../src/ui/orbit.ts';
 import { OVERLAY_IDS } from '../../src/ui/overlay-style.ts';
 import { formatHash, parseHash } from '../../src/ui/url-state.ts';
-import { DEFAULT_VIEW, toggleOverlay, type ViewState } from '../../src/ui/view-state.ts';
+import {
+  DEFAULT_VIEW,
+  VIEW_MODES,
+  toggleOverlay,
+  type ViewState,
+} from '../../src/ui/view-state.ts';
 import { seededRandom } from '../helpers/random.ts';
 
 const ALPHABET = [
@@ -85,7 +90,7 @@ describe('URL hash properties', () => {
         else if (op === 6) s = { ...s, orbit: resetOrbit(s.orbit) };
         else if (op === 7) s = toggleOverlay(s, pick(OVERLAY_IDS));
         else if (op === 8)
-          s = { ...s, disk: !s.disk, view: rand() < 0.5 ? 'colour' : 'termination' };
+          s = { ...s, disk: !s.disk, view: VIEW_MODES[Math.floor(rand() * VIEW_MODES.length)]! };
         else s = { ...s, antialias: !s.antialias, validationOpen: rand() < 0.5 };
       }
       const hash = formatHash(s);

@@ -6,7 +6,13 @@ import { TERMINATION_COLOURS } from '../physics/index.ts';
 import type { Lifecycle } from './lifecycle.ts';
 import { legendLayout } from './legend-layout.ts';
 import { HALO, OVERLAY_STYLES, type OverlayId } from './overlay-style.ts';
-import { TERMINATION_LABELS, displayColour, type TerminationKind } from './swatch.ts';
+import { rampColours } from './eht-legend.ts';
+import { legendEntries } from './legend-entries.ts';
+import { STRIP_STYLES, stripPoint, type StripDrawing } from './strip-overlay.ts';
+import { displayColour } from './swatch.ts';
+import type { ViewMode } from './view-state.ts';
+
+export { legendEntries };
 
 export interface SaveScene {
   readonly width: number;
@@ -17,26 +23,18 @@ export interface SaveScene {
   readonly edge: { cx: number; cy: number; rx: number; ry: number } | null;
   readonly rings: readonly { id: OverlayId; order: number; d: string }[];
   readonly overlays: readonly OverlayId[];
-  readonly termination: boolean;
-}
-
-type LegendEntry =
-  | { readonly kind: 'overlay'; readonly id: OverlayId; readonly label: string }
-  | { readonly kind: 'termination'; readonly id: TerminationKind; readonly label: string };
-
-/** The legend of a saved image: the enabled overlays, then the termination colours. */
-export function legendEntries(overlays: readonly OverlayId[], termination: boolean): LegendEntry[] {
-  const out: LegendEntry[] = overlays.map((id) => ({
-    kind: 'overlay',
-    id,
-    label: OVERLAY_STYLES[id].label,
-  }));
-  if (termination) {
-    for (const id of Object.keys(TERMINATION_LABELS) as TerminationKind[]) {
-      out.push({ kind: 'termination', id, label: TERMINATION_LABELS[id] });
-    }
-  }
-  return out;
+  readonly view: ViewMode;
+  /** Photon subring view only: the strip's lines and labels (in strip coordinates). */
+  readonly strip: StripDrawing | null;
+  /** What the view's labels depend on: the camera distance and whether the disk is shown. */
+  readonly labels: { readonly distance: number; readonly disk: boolean };
+  /** EHT-style view only: its labels' inputs and the beam marker, in internal pixels. */
+  readonly eht: {
+    readonly distance: number;
+    readonly disk: boolean;
+    /** Null when the beam is too wide for the image (close to the hole). */
+    readonly beam: { readonly cx: number; readonly cy: number; readonly r: number } | null;
+  } | null;
 }
 
 function stroke(
@@ -91,7 +89,10 @@ export function composeImage(scene: SaveScene): Promise<Blob> {
     stroke(ctx, () => ctx.stroke(path), r.id, k, r.order);
   }
 
-  const entries = legendEntries(scene.overlays, scene.termination);
+  if (scene.eht?.beam) drawBeam(ctx, scene.eht.beam, k);
+  if (scene.strip) drawStrip(ctx, scene.strip, scene.width, scene.height, k);
+
+  const entries = legendEntries(scene.overlays, scene.view, scene.labels);
   const box = legendLayout(scene.width, scene.height, entries, k);
   if (box) {
     ctx.setLineDash([]);
@@ -115,13 +116,20 @@ export function composeImage(scene: SaveScene): Promise<Blob> {
           k,
           0,
         );
-      } else {
+      } else if (entry.kind === 'termination') {
         const size = box.fontSize;
         ctx.fillStyle = displayColour(TERMINATION_COLOURS[entry.id]);
         ctx.fillRect(x, y - size / 2, size, size);
         ctx.strokeStyle = '#e8e6e3';
         ctx.lineWidth = k;
         ctx.strokeRect(x, y - size / 2, size, size);
+      } else if (entry.kind === 'ramp') {
+        const size = box.fontSize;
+        const gradient = ctx.createLinearGradient(x, 0, x + box.swatchWidth, 0);
+        const stops = rampColours(5);
+        stops.forEach((c, j) => gradient.addColorStop(j / (stops.length - 1), c));
+        ctx.fillStyle = gradient;
+        ctx.fillRect(x, y - size / 2, box.swatchWidth, size);
       }
       ctx.fillStyle = '#e8e6e3';
       ctx.fillText(entry.label, x + box.swatchWidth + box.gap, y);
@@ -133,6 +141,71 @@ export function composeImage(scene: SaveScene): Promise<Blob> {
       'image/png',
     );
   });
+}
+
+/** The photon subring view's lines and labels, as the page draws them, at the image's scale. */
+function drawStrip(
+  ctx: CanvasRenderingContext2D,
+  d: StripDrawing,
+  width: number,
+  height: number,
+  k: number,
+): void {
+  ctx.lineJoin = 'round';
+  for (const pass of ['halo', 'line'] as const) {
+    for (const line of d.lines) {
+      const style = STRIP_STYLES[line.kind];
+      ctx.setLineDash(pass === 'line' ? style.dash.map((v) => v * k) : []);
+      ctx.strokeStyle = pass === 'halo' ? `rgba(0, 0, 0, ${HALO.alpha})` : style.colour;
+      ctx.lineWidth = (pass === 'halo' ? style.width + HALO.extraWidth : style.width) * k;
+      ctx.beginPath();
+      line.points.forEach((p, i) => {
+        const [x, y] = stripPoint(p, d.range, width, height);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    }
+  }
+  ctx.setLineDash([]);
+  ctx.font = `${12 * k}px system-ui, -apple-system, 'Segoe UI', sans-serif`;
+  ctx.textBaseline = 'middle';
+  ctx.lineWidth = 3 * k;
+  ctx.strokeStyle = `rgba(0, 0, 0, ${HALO.alpha})`;
+  ctx.fillStyle = '#e8e6e3';
+  for (const label of d.labels) {
+    const [x, y] = stripPoint([label.x, label.logEps], d.range, width, height);
+    ctx.textAlign =
+      label.anchor === 'middle' ? 'center' : label.anchor === 'end' ? 'right' : 'left';
+    ctx.strokeText(label.text, x, y);
+    ctx.fillText(label.text, x, y);
+  }
+  ctx.textAlign = 'start';
+}
+
+/** The beam marker: a white circle on a dark halo, labelled "beam" below it. */
+function drawBeam(
+  ctx: CanvasRenderingContext2D,
+  beam: { readonly cx: number; readonly cy: number; readonly r: number },
+  k: number,
+): void {
+  ctx.setLineDash([]);
+  for (const [colour, width] of [
+    [`rgba(0, 0, 0, ${HALO.alpha})`, 1.5 * k + HALO.extraWidth * k],
+    ['#e8e6e3', 1.5 * k],
+  ] as const) {
+    ctx.strokeStyle = colour;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.arc(beam.cx, beam.cy, beam.r, 0, 2 * Math.PI);
+    ctx.stroke();
+  }
+  ctx.font = `${12 * k}px system-ui, -apple-system, 'Segoe UI', sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = '#e8e6e3';
+  ctx.fillText('beam', beam.cx, beam.cy + beam.r + 4 * k);
+  ctx.textAlign = 'start';
 }
 
 /** Offers the blob as a file download and frees its object URL after a while. */
