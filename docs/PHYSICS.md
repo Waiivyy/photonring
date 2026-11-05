@@ -35,7 +35,7 @@ u'^2 = P(u) \equiv \frac{1}{b^2} - u^2 + 2Mu^3, \qquad u'' + u = 3Mu^2 .
 
 **Photon sphere and $b_c$.** Turning points satisfy $V(r) = 1/b^2$ with the photon potential
 $V(r) = (1-2M/r)/r^2$. $V'(r) = 0$ at $r = 3M$, $V(3M) = 1/(27M^2)$, so
-$b_c = 3\sqrt{3}\thinspace M \approx 5.196\thinspace M$. The photon orbit is Bardeen, Press and Teukolsky (1972), eq. (2.18) with
+$b_c = 3\sqrt{3} M \approx 5.196\thinspace M$. The photon orbit is Bardeen, Press and Teukolsky (1972), eq. (2.18) with
 $a = 0$, and $b_c$ is Perlick and Tsupko (2022), eq. (8). $V''(3M) < 0$: the circular null orbit
 is a maximum of $V$ and is unstable. Equivalently $P(1/3M) = P'(1/3M) = 0$ at $b = b_c$ (a double
 root). Tested numerically by a golden-section search for the maximum of $V$.
@@ -162,7 +162,7 @@ $r_o = 30M$ it is $9.633°$ against $9.974°$, 3.4 % smaller (`npm run measure`)
 formula is confirmed.
 
 **Local direction to Euclidean velocity.** A local unit direction $d$ has coordinate velocity
-proportional to $(\sqrt{1-2M/r}\thinspace d_{\hat r},\ d_{\hat\theta}/r,\ d_{\hat\phi}/(r\sin\theta))$, so
+proportional to $(\sqrt{1-2M/r} d_{\hat r},\ d_{\hat\theta}/r,\ d_{\hat\phi}/(r\sin\theta))$, so
 in the Euclidean picture of section 4
 
 ```math
@@ -317,7 +317,7 @@ while $du = \tanh x\thinspace(1 - \tanh^2 x)\thinspace dx/M$; hence $du/\sqrt{P_
 $u = 0$ ($\tanh x = 1/\sqrt3$) to $u$:
 
 ```math
-\Delta\phi_c(u) = 2\left[\operatorname{artanh}\sqrt{2Mu + \tfrac13} - \operatorname{artanh}\tfrac{1}{\sqrt3}\right],\qquad 0 \le u < \tfrac{1}{3M}.
+\Delta\phi_c(u) = 2\left[\mathrm{artanh}\,\sqrt{2Mu + \tfrac13} - \mathrm{artanh}\,\tfrac{1}{\sqrt3}\right],\qquad 0 \le u < \tfrac{1}{3M}.
 ```
 
 Values: $\Delta\phi_c(1/30) = 0.174038$, $\Delta\phi_c(1/20) = 0.262589$,
@@ -439,7 +439,7 @@ from $P(u_0) = u_0^2(1-2Mu_0)\cot^2\psi$, with the sign chosen so that an outwar
 - **Capture** uses the exact criterion of section 2 at a capture radius in $(2M, 3M]$ (default
   $3M$); the capture point is also refined on the Hermite interpolant.
 - **Disk crossings.** On the ray plane, $z(\phi) = r(e_{1z}\cos\phi + e_{2z}\sin\phi)$
-  vanishes at $\phi_0 + k\pi$ with $\phi_0 = \operatorname{atan2}(-e_{1z}, e_{2z})$ reduced to
+  vanishes at $\phi_0 + k\pi$ with $\phi_0 = \mathrm{atan2}(-e_{1z}, e_{2z})$ reduced to
   $(0, \pi]$; an observer exactly in the plane ($e_{1z} = 0$) gets $\phi_0 = \pi$, so the
   observer's own position never counts. Because $\phi$ only increases, each crossing angle is met
   once, in order: a crossing can be neither missed nor counted twice, at any step size. The
@@ -711,7 +711,7 @@ no tone mapping, so captured pixels are exactly 0 and escaped pixels exactly 1.
 **On the GPU** (`src/shaders/render.wgsl` and `disk.wgsl`) the same compositing runs at each
 crossing. $T$ and $g$ use only square roots and divisions, because WGSL's `pow` inherits the
 loose error bounds of `exp2` and `log2`: $T = k\thinspace s^{3/2}(1-s)^{1/4}$ with $s = \sqrt{r_{in}/r}$,
-and $g = g_{obs}\sqrt{1-3M/r}\thinspace/\thinspace(1 - \Omega L_z/E)$ with $\Omega = \sqrt{M/r}/r$. Once the
+and $g = g_{obs}\sqrt{1-3M/r} /\thinspace(1 - \Omega L_z/E)$ with $\Omega = \sqrt{M/r}/r$. Once the
 transmittance is zero (an opaque disk) tracing stops, since nothing behind can be seen.
 
 **Anti-aliasing** (`src/shaders/refine.wgsl`, `src/gpu/host/antialias.ts`). A second pass gives a

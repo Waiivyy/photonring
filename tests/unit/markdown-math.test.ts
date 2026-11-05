@@ -3,6 +3,7 @@
 // - inside $...$ and $$...$$ it drops the backslash of escaped punctuation, so \, shows as a comma
 //   and \{ loses its brace; only ```math blocks keep TeX as written, and \thinspace survives;
 // - it leaves inline math inside _..._ or *...* emphasis as raw TeX (bold is fine);
+// - its pages refuse some macros ("The following macros are not allowed: operatorname");
 // - Prettier reads a line that starts with $$ and does not end with one as an open math block,
 //   strips escapes from it and appends a $$ at the end of the file.
 import { readdirSync, readFileSync } from 'node:fs';
@@ -40,6 +41,15 @@ function unrenderedInlineMath(text: string): string[] {
       return !/[\s(*]/.test(before) || /^\s|\s$/.test(m[1]!);
     });
   });
+}
+
+/** Macros GitHub's pages refuse to render, as seen there; \mathrm works instead. */
+const REFUSED_MACROS = ['\\operatorname'];
+
+/** Every math span of a file: the bodies of ```math blocks and the inline spans outside code. */
+function allMath(markdown: string): string[] {
+  const blocks = [...markdown.matchAll(/^```math\n([\s\S]*?)^```$/gm)].map((m) => m[1]!);
+  return [...blocks, ...inlineMath(prose(markdown))];
 }
 
 /** Backslash escapes of ASCII punctuation, which GitHub turns into the bare character. */
@@ -87,6 +97,11 @@ describe('Markdown math as GitHub renders it', () => {
     expect(bad).toEqual([]);
   });
 
+  it.each(FILES)('%s uses no macro GitHub refuses', (file) => {
+    const math = allMath(readFileSync(new URL(file, ROOT), 'utf8'));
+    expect(math.filter((s) => REFUSED_MACROS.some((m) => s.includes(m)))).toEqual([]);
+  });
+
   it.each(FILES)('%s puts no inline math inside italics', (file) => {
     const bad = emphasisSpans(texts.get(file)!).filter((s) => s.includes(MATH));
     expect(bad).toEqual([]);
@@ -104,6 +119,10 @@ describe('Markdown math as GitHub renders it', () => {
     expect(escapedPunctuation('3\\sqrt3\\,M \\{x\\} 2\\%')).toEqual(['\\,', '\\{', '\\}', '\\%']);
     expect(escapedPunctuation('3\\sqrt3\\thinspace M \\lbrace x \\rbrace')).toEqual([]);
     expect(prose('a\n```math\n$$x\\,y$$\n```\nb $c$')).toBe('a\n\nb $c$');
+    expect(allMath('a $x$\n```math\n\\operatorname{f}(y)\n```\n`$z$`')).toEqual([
+      '\\operatorname{f}(y)\n',
+      'x',
+    ]);
     expect(
       unrenderedInlineMath(
         [

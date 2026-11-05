@@ -172,7 +172,7 @@ All methods show the same growth, roughly as $1/(b - b_c)$, because the exact es
 diverges like $-\ln(b - b_c)$ and the photon sphere amplifies rounding errors by $e^{\phi}$ (see
 `docs/PHYSICS.md`, section 2). This is a property of the problem, not of the integrator. It matters
 little in the image: the band $b/b_c - 1 < 10^{-4}$, where errors exceed about 1 px, is
-$\delta\psi = \sqrt{1-2M/r_o}\thinspace\delta b/(r_o\cos\psi_{sh})$ wide, which is 0.14 px at $5M$,
+$\delta\psi = \sqrt{1-2M/r_o} \delta b/(r_o\cos\psi_{sh})$ wide, which is 0.14 px at $5M$,
 0.018 px at $30M$ and 0.003 px at $200M$, on the escaping side of the shadow edge only. Inside
 that band the true image is itself a thin stack of higher-order images of the whole sky, and
 supersampling averages it.

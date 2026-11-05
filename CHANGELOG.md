@@ -169,9 +169,10 @@ branch.
   and `\%` inside `$...$` and `$$...$$`, so thin spaces showed as commas (for example
   $u^2\thinspace(1 - 2Mu)$ as "u²,(1 - 2Mu)"), braces vanished and a percent sign cut a formula
   short; it also showed inline math inside italics, after a hyphen, with a space before the
-  closing `$` or broken across lines as raw TeX. Display equations are now fenced `math` code
-  blocks, inline thin spaces are `\thinspace`, and `tests/unit/markdown-math.test.ts` checks
-  these rules in every Markdown file. Every math span of the README and docs/ was compared with
-  GitHub's rendering of it, and all match.
+  closing `$` or broken across lines as raw TeX, and its pages refuse `\operatorname`. Display
+  equations are now fenced `math` code blocks, inline thin spaces are `\thinspace`, operator
+  names use `\mathrm`, and `tests/unit/markdown-math.test.ts` checks these rules in every
+  Markdown file. Every math span of the README and docs/ was compared with GitHub's rendering of
+  it, and all match.
 
 [Unreleased]: https://github.com/Waiivyy/photonring/commits/main

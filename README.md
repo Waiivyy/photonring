@@ -162,7 +162,7 @@ and angles on the page are not what a local observer measures.
 
 **The names used everywhere.** The event horizon at $r = 2M$; the photon sphere at $r = 3M$, where
 light can circle the hole; the innermost stable circular orbit (ISCO) at $r = 6M$, where the toy
-disk ends; and the critical impact parameter $b_c = 3\sqrt3\thinspace M \approx 5.196\thinspace M$, the aim that
+disk ends; and the critical impact parameter $b_c = 3\sqrt3 M \approx 5.196\thinspace M$, the aim that
 separates light that falls in from light that escapes. $M$ is the black hole's mass in geometric
 units ($G = c = 1$).
 
@@ -179,7 +179,7 @@ orbit equation of the Schwarzschild metric is
 ```
 
 A ray turns back where $1/b^2 = V(r) = (1 - 2M/r)/r^2$; $V$ peaks at $r = 3M$ with
-$V = 1/(27M^2)$, so rays aimed with $b < b_c = 3\sqrt3\thinspace M$ never turn and fall in. The deflection is
+$V = 1/(27M^2)$, so rays aimed with $b < b_c = 3\sqrt3 M$ never turn and fall in. The deflection is
 $\alpha(b) = 2\int_0^{u_2} du/\sqrt{P(u)} - \pi$, with $P$ the right-hand side above and $u_2$ the
 turning point: about $4M/b$ far away, and much more near $b_c$ (41.3 degrees at $1.7\thinspace b_c$, where
 $4M/b$ gives 25.9). photonring computes it two independent ways (Gauss-Legendre quadrature and
@@ -351,7 +351,7 @@ A test loads the built page and fails on any request to another origin or for a 
 
 ## FAQ
 
-**How can I check these numbers myself?** `npm test` runs the 895 Vitest tests (physics, CPU renderer and golden images, URL state, page logic, README tools). `npm run measure` runs them again and prints the worst values the test files record, among them the CPU deflection and photon subring numbers above (the tolerances are in [docs/VALIDATION.md](docs/VALIDATION.md)). `npm run test:gpu` runs the 30 GPU tests in your installed Google Chrome and logs their errors, and `npm run render:cpu` writes the CPU reference renders to `artifacts/stage1/` and prints the shadow-size table. On another machine or browser the values can differ; the tests check that each stays within its tolerance.
+**How can I check these numbers myself?** `npm test` runs the 901 Vitest tests (physics, CPU renderer and golden images, URL state, page logic, README tools). `npm run measure` runs them again and prints the worst values the test files record, among them the CPU deflection and photon subring numbers above (the tolerances are in [docs/VALIDATION.md](docs/VALIDATION.md)). `npm run test:gpu` runs the 30 GPU tests in your installed Google Chrome and logs their errors, and `npm run render:cpu` writes the CPU reference renders to `artifacts/stage1/` and prints the shadow-size table. On another machine or browser the values can differ; the tests check that each stays within its tolerance.
 
 **Why is the black shadow so much larger than the event horizon? What are the thin rings just outside it? Why is one side of the disk brighter?** See [How it works](#how-it-works): the shadow is larger than the horizon, rings inside rings, and one side is brighter.
 
