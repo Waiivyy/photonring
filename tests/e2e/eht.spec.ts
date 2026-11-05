@@ -113,7 +113,7 @@ test('a saved image is named -eht and carries the labels and the beam marker', a
     legendEntries([], 'eht', { distance: 200, disk: true }),
     w / css,
   )!;
-  const beam = beamMarker(200, w, png.height, Math.tan((s.fovYDeg * Math.PI) / 360));
+  const beam = beamMarker(200, w, png.height, Math.tan((s.fovYDeg * Math.PI) / 360))!;
   const differs = (x: number, y: number) => {
     const i = 4 * (y * w + x);
     return (
@@ -151,4 +151,40 @@ test('the Validation panel measures the shadow of the current camera in this vie
   await expect(panel).toContainText("does not use the view's blur or colours");
   const result = await page.evaluate(() => window.photonring!.debug.validation());
   expect(result?.pass).toBe(true);
+});
+
+test('in portrait the ring is framed for the narrow side, as the overlays assume', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApp(page, hash({ view: 'eht', r: '200', el: '-73' }));
+  const s = await stats(page);
+  const img = await page.evaluate(() => window.photonring!.debug.presentedImage());
+  const rgba = Buffer.from(img.rgba, 'base64');
+  const w = img.width;
+  const h = img.height;
+  // The brightest pixel lies on the ring, about 11 M from the centre; 28 M fits half the width.
+  let best = 0;
+  for (let p = 1; p < w * h; p++) {
+    const v = (q: number) => rgba[4 * q]! + rgba[4 * q + 1]! + rgba[4 * q + 2]!;
+    if (v(p) > v(best)) best = p;
+  }
+  const dx = (best % w) + 0.5 - w / 2;
+  const dy = Math.floor(best / w) + 0.5 - h / 2;
+  const radiusM = (Math.hypot(dx, dy) * 56) / Math.min(w, h);
+  expect(s.internalWidth).toBeLessThan(s.internalHeight);
+  expect(radiusM).toBeGreaterThan(8);
+  expect(radiusM).toBeLessThan(14);
+});
+
+test('on a small screen with a panel open the legend keeps its key line clear of the toolbar', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 360, height: 640 });
+  await openApp(page, hash({ view: 'eht', r: '200', el: '-73', val: '1' }));
+  const key = legend(page).getByText('Not a simulation of the EHT observation', { exact: false });
+  await expect(key).toBeVisible();
+  const toolbar = await page.locator('.toolbar').boundingBox();
+  const line = await key.boundingBox();
+  expect(line!.y).toBeGreaterThan(toolbar!.y + toolbar!.height);
 });

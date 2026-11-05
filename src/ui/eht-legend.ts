@@ -70,18 +70,24 @@ const BEAM_OFFSET_M = 21;
 /**
  * The beam marker: a circle of the beam's FWHM at the shadow edge's scale, at the upper left of
  * the framing square, clear of the ring and of the page's status lines and legend (EHT figures
- * put it at the lower right, where the page's legend sits). In the units of the image box.
+ * put it at the lower right, where the page's legend sits). In the units of the image box. Close
+ * to the hole the framing square is larger than the image, so the marker moves in to stay inside
+ * with room for its label; null when the beam is too wide for the image to show it.
  */
 export function beamMarker(
   distance: number,
   width: number,
   height: number,
   tanHalfFovY: number,
-): { cx: number; cy: number; r: number } {
+): { cx: number; cy: number; r: number } | null {
   const s = edgePixelScale(distance, height, tanHalfFovY);
+  const r = (ehtBeamFwhmM() * s) / 2;
+  const margin = 0.02 * Math.min(width, height);
+  const label = 0.05 * Math.min(width, height);
+  if (2 * r + 2 * margin > width || 2 * r + 2 * margin + label > height) return null;
   return {
-    cx: width / 2 - BEAM_OFFSET_M * s,
-    cy: height / 2 - BEAM_OFFSET_M * s,
-    r: (ehtBeamFwhmM() * s) / 2,
+    cx: Math.min(width - margin - r, Math.max(margin + r, width / 2 - BEAM_OFFSET_M * s)),
+    cy: Math.min(height - margin - label - r, Math.max(margin + r, height / 2 - BEAM_OFFSET_M * s)),
+    r,
   };
 }

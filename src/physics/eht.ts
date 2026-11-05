@@ -22,9 +22,11 @@ export const EHT_THETA_G_UAS = 3.8;
 export const M87_JET_PA_DEG = 288;
 
 /**
- * Camera roll that turns photonring's image (disk axis up) so that north is up and east left as
- * on the sky for M87*: the disk axis then points to position angle 288 - 180 = 108 degrees, where
- * M87*'s spin axis, which points away from Earth, projects (Paper I, section 6).
+ * Camera roll that turns photonring's image so that north is up and east left as on the sky for
+ * M87*: photonring draws the disk's angular momentum axis (+z) up, and the roll puts its
+ * projection at position angle 288 - 180 = 108 degrees, where M87*'s spin axis projects (Paper I,
+ * section 6). As for M87*, that end of the axis points away from the camera only for cameras below
+ * the disk, as at the preset.
  */
 export const M87_SKY_ROLL_DEG = M87_JET_PA_DEG - 180;
 

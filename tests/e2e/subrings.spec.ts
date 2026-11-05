@@ -113,3 +113,35 @@ test('the Validation panel measures the shadow of the current camera in this vie
   await expect(panel).toContainText('Within tolerance');
   expect((await page.evaluate(() => window.photonring!.debug.validation()))?.pass).toBe(true);
 });
+
+test("returning to an earlier camera shows that camera's edges again, not the last one drawn", async ({
+  page,
+}) => {
+  await openApp(page, hash());
+  await waitForSettled(page);
+  const paths = () =>
+    strip(page)
+      .locator('path')
+      .evaluateAll((ps) => ps.map((p) => p.getAttribute('d')).join('|'));
+  const first = await paths();
+  await view(page).focus();
+  await page.keyboard.press('ArrowUp');
+  await waitForSettled(page);
+  const other = await paths();
+  expect(other).not.toBe(first);
+  await page.keyboard.press('ArrowDown');
+  await waitForSettled(page);
+  expect(await paths()).toBe(first);
+});
+
+test('on a small screen with a panel open the legend keeps its key line clear of the toolbar', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 360, height: 640 });
+  await openApp(page, hash({ val: '1' }));
+  const key = legend(page).getByText('not what a camera sees', { exact: false });
+  await expect(key).toBeVisible();
+  const toolbar = await page.locator('.toolbar').boundingBox();
+  const line = await key.boundingBox();
+  expect(line!.y).toBeGreaterThan(toolbar!.y + toolbar!.height);
+});

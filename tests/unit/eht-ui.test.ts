@@ -7,6 +7,7 @@ import { sceneSummary } from '../../src/ui/describe.ts';
 import {
   EHT_PRESET,
   EHT_PRESET_LABEL,
+  beamMarker,
   EHT_RAMP_LABEL,
   ehtLegendLines,
   rampColours,
@@ -108,5 +109,41 @@ describe('EHT-style view: labels', () => {
     expect(screenshotName({ distance: 200, azimuthDeg: 0, elevationDeg: -73, view: 'eht' })).toBe(
       'photonring-r200-az0-el-73-eht.png',
     );
+  });
+});
+
+describe('EHT-style view: beam marker', () => {
+  it('sits at the upper left of the framing square, clear of the ring, when that is in the image', () => {
+    const W = 1280;
+    const H = 720;
+    const fov = ehtFieldOfView(200, W / H);
+    const b = beamMarker(200, W, H, Math.tan((fov * Math.PI) / 360))!;
+    const s = H / 56; // the framing puts 28 M in the half-height
+    expect(b.r).toBeCloseTo((ehtBeamFwhmM() * s) / 2, 6);
+    expect(b.cx).toBeCloseTo(W / 2 - 21 * s, 6);
+    expect(b.cy).toBeCloseTo(H / 2 - 21 * s, 6);
+  });
+
+  it('stays inside the image with its label when the camera is close or the screen is tall', () => {
+    for (const [W, H] of [
+      [1280, 720],
+      [390, 844],
+    ] as const) {
+      for (const distance of [5, 8, 10, 14, 20, 25, 30, 60, 200]) {
+        const fov = ehtFieldOfView(distance, W / H);
+        const b = beamMarker(distance, W, H, Math.tan((fov * Math.PI) / 360));
+        if (b === null) continue;
+        expect(b.cx - b.r).toBeGreaterThan(0);
+        expect(b.cy - b.r).toBeGreaterThan(0);
+        expect(b.cx + b.r).toBeLessThan(W);
+        // Room for the label under the circle.
+        expect(b.cy + b.r + 0.04 * Math.min(W, H)).toBeLessThan(H);
+      }
+    }
+  });
+
+  it('is left out when the beam is wider than the image can show', () => {
+    const fov = ehtFieldOfView(5, 16 / 9);
+    expect(beamMarker(5, 1280, 720, Math.tan((fov * Math.PI) / 360))).toBeNull();
   });
 });

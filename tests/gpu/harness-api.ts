@@ -137,7 +137,8 @@ export interface Harness {
   benchmark(request: HarnessImageRequest, repeats: number): Promise<HarnessBenchmark>;
   /**
    * Renders the image once, then times `repeats` presents of it (the EHT post-process and blit,
-   * or the tone-mapping blit), after one untimed warm-up present. `factor` fixes the EHT reduce.
+   * or the tone-mapping blit), after ten warm-up presents whose times are discarded. `factor`
+   * fixes the EHT reduce.
    */
   benchmarkPresent(
     request: HarnessImageRequest,

@@ -327,17 +327,19 @@ export function outboundImageOffset(uo: number, uR: number, sweep: number, M = 1
 
   const lead =
     Math.log(STRONG_DEFLECTION_C) - criticalOrbitSweep(uo, M) - criticalOrbitSweep(uR, M);
-  let hi = Math.min(lead - sweep + 2, vMax);
-  let lo = Math.min(lead - sweep - 2, hi - 1);
+  const tooClose = () => new RangeError(`image of sweep ${sweep} is closer than ${MIN_OFFSET}`);
+  // Below the floor b = b_c (1 + eps) no longer carries eps, so the search never goes there.
+  if (f(vMin) < 0) throw tooClose();
+  let hi = Math.max(Math.min(lead - sweep + 2, vMax), vMin);
+  let lo = Math.max(Math.min(lead - sweep - 2, hi - 1), vMin);
   while (f(hi) > 0) {
     if (hi >= vMax) throw new RangeError(`sweep ${sweep} is below the outbound branch`);
     hi = Math.min(hi + 4, vMax);
   }
-  while (f(lo) < 0) {
-    if (lo <= vMin) throw new RangeError(`image of sweep ${sweep} is closer than ${MIN_OFFSET}`);
-    lo = Math.max(lo - 4, vMin);
-  }
-  return Math.exp(brent(f, lo, hi, 1e-15));
+  while (f(lo) < 0) lo = Math.max(lo - 4, vMin);
+  const eps = Math.exp(brent(f, lo, hi, 1e-15));
+  if (eps < MIN_OFFSET) throw tooClose();
+  return eps;
 }
 
 /**

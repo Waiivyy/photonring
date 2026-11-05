@@ -447,6 +447,11 @@ dialog :focus-visible {
     bottom: calc(50vh + 0.75rem);
   }
 
+  /* There the long legends keep only their key lines, so they stay clear of the toolbar. */
+  .panel-open .legend li.more {
+    display: none;
+  }
+
   .panel,
   .panel.validation {
     top: auto;

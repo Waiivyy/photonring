@@ -32,7 +32,8 @@ export interface SaveScene {
   readonly eht: {
     readonly distance: number;
     readonly disk: boolean;
-    readonly beam: { readonly cx: number; readonly cy: number; readonly r: number };
+    /** Null when the beam is too wide for the image (close to the hole). */
+    readonly beam: { readonly cx: number; readonly cy: number; readonly r: number } | null;
   } | null;
 }
 
@@ -88,7 +89,7 @@ export function composeImage(scene: SaveScene): Promise<Blob> {
     stroke(ctx, () => ctx.stroke(path), r.id, k, r.order);
   }
 
-  if (scene.eht) drawBeam(ctx, scene.eht.beam, k);
+  if (scene.eht?.beam) drawBeam(ctx, scene.eht.beam, k);
   if (scene.strip) drawStrip(ctx, scene.strip, scene.width, scene.height, k);
 
   const entries = legendEntries(scene.overlays, scene.view, scene.labels);

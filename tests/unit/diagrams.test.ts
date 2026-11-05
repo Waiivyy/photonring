@@ -104,12 +104,18 @@ describe('README diagrams: files', () => {
     expect(get('d4-redshift.svg').svg).not.toContain(FOOTNOTE);
   });
 
-  it.each(files)('%s prints every number it reports', (file) => {
+  it.each(files)('%s prints every number it reports, in its text', (file) => {
     const d = get(file);
     expect(Object.keys(d.numbers).length).toBeGreaterThan(0);
+    // Only the text of <text> and <tspan> elements counts: a short number such as "2" also turns
+    // up in path coordinates, which would let a missing label pass.
+    const text = [...d.svg.matchAll(/<(?:text|tspan)\b[^>]*>([^<]*)/g)].map((m) => m[1]).join(' ');
     for (const [name, n] of Object.entries(d.numbers)) {
       expect(Number.isFinite(n.value), name).toBe(true);
-      expect(d.svg, name).toContain(n.text);
+      const word = new RegExp(
+        `(^|[^0-9.])${n.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^0-9])`,
+      );
+      expect(text, name).toMatch(word);
     }
   });
 

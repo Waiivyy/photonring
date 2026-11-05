@@ -61,7 +61,10 @@ function impactAt(rho: number, s: RenderSettings): number {
 
 describe('EHT-style view on the CPU', () => {
   it('adds nothing from the sky and keeps the disk light as a grey intensity', () => {
-    const s = { ...settings(preset(), 64), disk: null };
+    // Asked for a starry sky, the view still shows the disk's brightness alone.
+    const stars = renderImage({ ...settings(preset(), 64), sky: 'stars' });
+    expect(stars.linear).toEqual(renderImage(settings(preset(), 64)).linear);
+    const s = { ...settings(preset(), 64), sky: 'stars' as const, disk: null };
     const out = renderImage(s);
     expect(out.linear.every((v) => v === 0)).toBe(true);
     expect(encodeImage(out, s).every((v) => v === 0)).toBe(true);

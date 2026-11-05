@@ -139,7 +139,7 @@ describe('framing of the EHT-style view', () => {
         [800, 800],
       ] as const) {
         const fov = ehtFieldOfView(rObs, w / h, 28, M);
-        if (fov === MAX_AUTO_FOV_DEG) continue; // the cap: closer than about 17.2 M (portrait: 31 M)
+        if (fov === MAX_AUTO_FOV_DEG) continue; // the cap: closer than about 17.2 M (portrait: 29 M)
         checked++;
         const s = edgePixelScale(rObs, h, Math.tan((fov * DEG) / 2), M);
         expect(rel(2 * 28 * s, Math.min(w, h))).toBeLessThan(1e-12);

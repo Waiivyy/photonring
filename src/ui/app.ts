@@ -466,6 +466,9 @@ class App {
     this.canvas.height = this.resolution.height;
     this.renderer.resize(this.resolution.width, this.resolution.height);
     this.plan.resize(this.resolution.width, this.resolution.height, performance.now());
+    // The EHT-style view's camera depends on the aspect of the image: give the renderer the
+    // camera of the new size (the first scene is set before the canvas has one).
+    this.applyScene();
   }
 
   private readonly frame = (now: number): void => {
@@ -541,8 +544,9 @@ class App {
       cssWidth: this.canvas.clientWidth,
       cssHeight: this.canvas.clientHeight,
       overlays: this.view.overlays,
-      view: this.applied.view,
-      disk: this.applied.disk,
+      // The view and disk of the presented image, like its camera, so overlays never run ahead.
+      view: this.presented?.view ?? this.applied.view,
+      disk: this.presented?.disk ?? this.applied.disk,
       controlsOpen: this.panels.includes('controls'),
     };
   }

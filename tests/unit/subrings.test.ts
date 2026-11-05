@@ -273,7 +273,10 @@ describe('ringImageOffset outside the outbound branch', () => {
     expect(() => ringImageOffset(3, 6, 4, M)).toThrow(RangeError);
     expect(() => ringImageOffset(30, 6, -1, M)).toThrow(RangeError);
     expect(() => ringImageOffset(30, Number.NaN, 4, M)).toThrow(RangeError);
-    // Order 12 lies about 1e-16 from the edge, below what b = b_c (1 + eps) can carry in f64.
-    expect(() => subringOffset(30, 6, 12, Math.PI / 2, M)).toThrow(RangeError);
+    // Orders 11 and 12 lie about 1e-15 and 4e-17 from the edge, below what b = b_c (1 + eps) can
+    // carry in f64: refused by the solver's own floor, not by a later failure.
+    expect(() => subringOffset(30, 6, 11, Math.PI / 2, M)).toThrow(/closer than/);
+    expect(() => subringOffset(30, 6, 12, Math.PI / 2, M)).toThrow(/closer than/);
+    expect(subringOffset(30, 6, 10, Math.PI / 2, M)).toBeGreaterThan(1e-14);
   });
 });

@@ -49,6 +49,8 @@ export type StripLineKind = 'inner' | 'outer' | 'limit' | 'tick';
 
 export interface StripLine {
   readonly kind: StripLineKind;
+  /** Image order of a disk edge line (inner and outer only). */
+  readonly order?: number;
   /** Points as (x, log10 eps), x from 0 to 1. */
   readonly points: readonly (readonly [number, number])[];
 }
@@ -102,9 +104,12 @@ export function decadeLabel(k: number): string {
 function offset(distance: number, R: number, n: number, phi0: number, M: number): number | null {
   try {
     if (n >= 1) return subringOffset(distance, R, n, phi0, M);
+    // The strip shows only directions towards the hole's side (alpha up to 90 degrees). With the
+    // camera inside the ring the direct image is often an outward ray, which has no place there.
+    const alpha = ringImageAngle(distance, R, phi0, M);
+    if (alpha > Math.PI / 2) return null;
     const k = Math.sqrt(1 - (2 * M) / distance) / distance;
-    const eps =
-      Math.sin(ringImageAngle(distance, R, phi0, M)) / (k * criticalImpactParameter(M)) - 1;
+    const eps = Math.sin(alpha) / (k * criticalImpactParameter(M)) - 1;
     return eps > 0 ? eps : null;
   } catch {
     return null;
@@ -130,7 +135,7 @@ export function* stripDrawingJob(
     for (let n = 0; n <= STRIP_MAX_ORDER; n++) {
       let points: [number, number][] = [];
       const flush = () => {
-        if (points.length > 1) lines.push({ kind, points });
+        if (points.length > 1) lines.push({ kind, order: n, points });
         points = [];
       };
       for (let deg = 0; deg <= 360; deg += STEP_DEG) {

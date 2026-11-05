@@ -10,7 +10,7 @@ import type { Vec3 } from './observer.ts';
 export const STRIP_TOP_LOG10 = 0.5;
 /**
  * Bottom of the strip in log10(eps): orders 0 to 5 are visible, and with them the strip's 32-bit
- * limit, measured near 1e-7 to 2.4e-7 on the GPU (docs/VALIDATION.md).
+ * limit, measured at 1.2e-7 to 2.5e-7 on the GPU (STRIP_LIMIT_MEASURED in src/ui/strip-overlay.ts).
  */
 export const STRIP_BOTTOM_LOG10 = -7.5;
 

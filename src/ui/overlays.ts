@@ -90,6 +90,7 @@ export class OverlayLayer {
   /** The photon subring view's drawing: the group, what it shows, its cache and its job. */
   private readonly strip = svgEl('g', { 'data-overlay': 'strip', fill: 'none' });
   private stripKey = '';
+  private stripShown: StripDrawing | null = null;
   private readonly stripCache = new Map<string, StripDrawing>();
   private stripJob: { key: string; gen: Generator<void, StripDrawing, void> } | null = null;
   private viewBox = '';
@@ -334,9 +335,13 @@ export class OverlayLayer {
 
   /** Draws (or, with null, removes) the strip's lines and labels in the box of the frame. */
   private drawStrip(d: StripDrawing | null, frame: OverlayFrame): void {
-    const sig = d ? `${frame.cssWidth}x${frame.cssHeight}|${d.range.top}|${d.lines.length}` : '';
-    if (sig === this.stripKey && (d === null || this.strip.isConnected)) return;
+    // The drawing itself is part of what is shown: two cameras can give drawings of the same size.
+    const sig = d ? `${frame.cssWidth}x${frame.cssHeight}` : '';
+    if (sig === this.stripKey && d === this.stripShown && (d === null || this.strip.isConnected)) {
+      return;
+    }
     this.stripKey = sig;
+    this.stripShown = d;
     if (!d) {
       this.strip.remove();
       return;
@@ -533,17 +538,32 @@ export class OverlayLayer {
       }
     } else if (frame.view === 'eht') {
       items.unshift(el('li', {}, rampSwatch(), el('span', {}, EHT_RAMP_LABEL)));
-      for (const line of viewLines) items.push(el('li', { class: 'text' }, el('span', {}, line)));
+      for (const line of viewLines) items.push(textItem(line));
     } else if (frame.view === 'subrings') {
+      // The honesty line first: on small screens with a panel open only key lines are shown.
+      const [key, rest] = [viewLines.filter(isKeyLine), viewLines.filter((l) => !isKeyLine(l))];
       items.push(
+        ...key.map(textItem),
         el('li', {}, stripLineSwatch('inner'), el('span', {}, "Disk's inner edge, 6 M")),
         el('li', {}, stripLineSwatch('outer'), el('span', {}, "Disk's outer edge, 20 M")),
         el('li', {}, stripLineSwatch('limit'), el('span', {}, '32-bit limit (Apple M5)')),
+        ...rest.map(textItem),
       );
-      for (const line of viewLines) items.push(el('li', { class: 'text' }, el('span', {}, line)));
     }
     this.legend.replaceChildren(...items);
   }
+}
+
+/**
+ * Label lines that must stay visible whatever the room: what the view is not, and why it is
+ * black. On small screens with a panel open the others are hidden (style.css).
+ */
+function isKeyLine(line: string): boolean {
+  return /not a simulation|not what a camera sees|^Disk off/i.test(line);
+}
+
+function textItem(line: string): HTMLLIElement {
+  return el('li', { class: isKeyLine(line) ? 'text key' : 'text more' }, el('span', {}, line));
 }
 
 /** Ring curves depend on the distance, the elevation and the viewport in tan units. */

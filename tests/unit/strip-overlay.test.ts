@@ -2,10 +2,15 @@
 // measured 32-bit limit and the legend text (src/ui/strip-overlay.ts).
 import { describe, expect, it } from 'vitest';
 import {
+  cameraFrame,
+  criticalImpactParameter,
   DEFAULT_DISK,
   firstPlaneCrossingAngle,
+  ringImageAngle,
+  stripDirection,
   stripRange,
   subringOffset,
+  traceRay,
 } from '../../src/physics/index.ts';
 import {
   STRIP_LIMIT_MEASURED,
@@ -20,24 +25,48 @@ import {
 describe('strip overlay', () => {
   const drawing = stripDrawing(30, 12);
 
-  it('draws the edges the 64-bit library predicts, at every sampled image angle', () => {
-    const el = (12 * Math.PI) / 180;
-    let compared = 0;
-    for (const line of drawing.lines.filter((l) => l.kind === 'inner' || l.kind === 'outer')) {
-      const R = line.kind === 'inner' ? DEFAULT_DISK.rIn : DEFAULT_DISK.rOut;
-      for (const [x, logEps] of line.points.filter((_, i) => i % 15 === 0)) {
-        const theta = 2 * Math.PI * x;
-        const phi0 = firstPlaneCrossingAngle(Math.sin(el), Math.sin(theta) * Math.cos(el))!;
-        // Each point belongs to one order; it must be the offset of some order at that angle.
-        const match = Array.from({ length: STRIP_MAX_ORDER }, (_, k) => k + 1).some((n) => {
-          const eps = subringOffset(30, R, n, phi0);
-          return Math.abs(Math.log10(eps) - logEps) < 1e-12;
+  for (const [distance, elevation] of [
+    [30, 12],
+    [15, 12],
+    [5, 12],
+    [30, -40],
+  ] as const) {
+    it(`draws the edges the 64-bit library predicts at every sampled angle, ${distance} M, elevation ${elevation}`, () => {
+      const d = stripDrawing(distance, elevation);
+      const el = (elevation * Math.PI) / 180;
+      const k = Math.sqrt(1 - 2 / distance) / distance;
+      const f = cameraFrame({ distance, azimuthDeg: 0, elevationDeg: elevation, fovYDeg: 60 });
+      let total = 0;
+      let traced = 0;
+      for (const line of d.lines.filter((l) => l.kind === 'inner' || l.kind === 'outer')) {
+        const R = line.kind === 'inner' ? DEFAULT_DISK.rIn : DEFAULT_DISK.rOut;
+        const n = line.order!;
+        line.points.forEach(([x, logEps], i) => {
+          total++;
+          const theta = 2 * Math.PI * x;
+          const phi0 = firstPlaneCrossingAngle(Math.sin(el), Math.sin(theta) * Math.cos(el))!;
+          const eps =
+            n >= 1
+              ? subringOffset(distance, R, n, phi0)
+              : Math.sin(ringImageAngle(distance, R, phi0)) / (k * criticalImpactParameter(1)) - 1;
+          expect(Math.abs(Math.log10(eps) - logEps)).toBeLessThan(1e-12);
+          // The strip shows inward directions only: the ray through the drawn point must reach R
+          // at crossing n (checked by tracing it, for the orders f64 tracing resolves well).
+          if (n <= 3 && i % 6 === 0) {
+            const ray = traceRay(1, f.position, stripDirection(f, distance, eps, theta), {
+              dphi: 0.002,
+              maxSteps: 100_000,
+            });
+            expect(ray.crossings[n], `order ${n}, theta ${theta}`).toBeDefined();
+            expect(Math.abs(ray.crossings[n]!.radius - R)).toBeLessThan(1e-4 * R);
+            traced++;
+          }
         });
-        if (match) compared++;
       }
-    }
-    expect(compared).toBeGreaterThan(100);
-  });
+      expect(total).toBeGreaterThan(400);
+      expect(traced).toBeGreaterThan(30);
+    });
+  }
 
   it('labels the orders on their bands and the decades on the right', () => {
     const texts = drawing.labels.map((l) => l.text);
