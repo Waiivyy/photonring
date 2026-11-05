@@ -184,6 +184,20 @@ svg.overlay {
   margin: 0.15rem 0;
 }
 
+/* The EHT-style view's label lines wrap; the legend never grows wider than this. */
+.legend {
+  max-width: min(26rem, 100%);
+  box-sizing: border-box;
+}
+
+.legend li.text {
+  display: block;
+}
+
+.swatch.ramp {
+  border: 1px solid var(--muted);
+}
+
 .sr-only {
   position: absolute;
   width: 1px;

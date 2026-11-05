@@ -3,12 +3,13 @@ import { initialOrbit, type OrbitState } from './orbit.ts';
 import { OVERLAY_IDS, type OverlayId } from './overlay-style.ts';
 
 /** The views, in canonical order: the URL parser, the Controls panel and the tests use it. */
-export const VIEW_MODES = ['colour', 'termination'] as const;
+export const VIEW_MODES = ['colour', 'eht', 'termination'] as const;
 export type ViewMode = (typeof VIEW_MODES)[number];
 
 /** Name of each view in the Controls panel and in announcements. */
 export const VIEW_NAMES: Readonly<Record<ViewMode, string>> = {
   colour: 'Colour',
+  eht: 'EHT-style (false colour)',
   termination: 'Termination (debug)',
 };
 

@@ -20,9 +20,10 @@ export interface ValidationPanel {
 export const VALIDATION_SIDE = 1024;
 
 const METHOD =
-  'Measured on an offscreen 1024 x 1024 render of the current view: disk off, uniform white ' +
+  'Measured on an offscreen 1024 x 1024 render of the current camera: disk off, uniform white ' +
   'sky, no tone mapping, one ray per pixel centre. The black pixels are counted and treated as ' +
-  'a disc. Pixel figures refer to that render.';
+  "a disc. Pixel figures refer to that render. The measurement does not use the view's blur " +
+  'or colours.';
 
 export function createValidationPanel(h: { close(): void }): ValidationPanel {
   const closeButton = el(

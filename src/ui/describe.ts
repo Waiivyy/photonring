@@ -26,6 +26,8 @@ function viewPart(d: Described): string {
   switch (d.view) {
     case 'colour':
       return `disk ${d.disk ? 'on' : 'off'}`;
+    case 'eht':
+      return `EHT-style view, false colour, blurred to the EHT resolution${d.disk ? '' : ', disk off'}`;
     case 'termination':
       return 'termination view';
   }

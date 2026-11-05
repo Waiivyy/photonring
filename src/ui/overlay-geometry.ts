@@ -22,6 +22,8 @@ export interface RingCurveRequest {
   readonly tanHalfFovY: number;
   /** Image width over height. */
   readonly aspect: number;
+  /** Camera roll: the image turns anticlockwise by it, so clipping covers any rotation. */
+  readonly rollDeg?: number;
 }
 
 export interface TanCurve {
@@ -36,6 +38,8 @@ export interface ImageView {
   readonly height: number;
   readonly aspect: number;
   readonly tanHalfFovY: number;
+  /** Camera roll: tan-plane points (computed unrolled) turn anticlockwise by it. */
+  readonly rollDeg?: number;
 }
 
 export const BASE_SAMPLES = 256;
@@ -140,8 +144,12 @@ interface Sample {
 export function* ringCurveJob(req: RingCurveRequest): Generator<void, TanCurve, void> {
   const { rObs, elevationDeg, R, order, tanHalfFovY, aspect } = req;
   const tol = chordTolerance(tanHalfFovY);
-  const halfW = MARGIN * aspect * tanHalfFovY;
-  const halfH = MARGIN * tanHalfFovY;
+  // Curves are computed for the unrolled camera; a rolled viewport fits in the circle through
+  // the corners, so clip to the square around that circle.
+  const rolled = (req.rollDeg ?? 0) !== 0;
+  const corner = Math.hypot(aspect, 1) * MARGIN * tanHalfFovY;
+  const halfW = rolled ? corner : MARGIN * aspect * tanHalfFovY;
+  const halfH = rolled ? corner : MARGIN * tanHalfFovY;
   const point = (theta: number) => ringImagePoint(rObs, elevationDeg, R, order, theta);
   /** Whether the segment pq meets the viewport plus its margin (Liang-Barsky clipping). */
   const crosses = (p: TanPoint, q: TanPoint): boolean => {
@@ -290,8 +298,13 @@ export function ringCurve(req: RingCurveRequest): TanCurve {
 }
 
 /** Maps a tan-plane point into an image box: the inverse of pixelDirection, stretched. */
-export function projectTan([sx, sy]: TanPoint, view: ImageView): [number, number] {
+export function projectTan([x, y]: TanPoint, view: ImageView): [number, number] {
   const t = view.tanHalfFovY;
+  const roll = ((view.rollDeg ?? 0) * Math.PI) / 180;
+  const c = Math.cos(roll);
+  const s = Math.sin(roll);
+  const sx = roll === 0 ? x : c * x - s * y;
+  const sy = roll === 0 ? y : s * x + c * y;
   return [(view.width / 2) * (1 + sx / (view.aspect * t)), (view.height / 2) * (1 - sy / t)];
 }
 

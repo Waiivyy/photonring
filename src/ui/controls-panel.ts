@@ -11,6 +11,13 @@ import {
   type OverlayId,
 } from './overlay-style.ts';
 import { TERMINATION_LABELS, colourSwatch, lineSwatch, type TerminationKind } from './swatch.ts';
+import {
+  EHT_PRESET_DESCRIPTION,
+  EHT_PRESET_LABEL,
+  EHT_RAMP_LABEL,
+  ehtLegendLines,
+} from './eht-legend.ts';
+import { rampSwatch } from './swatch.ts';
 import { VIEW_MODES, VIEW_NAMES, type ViewMode } from './view-state.ts';
 
 export type SceneToggle = 'disk' | 'antialias';
@@ -23,7 +30,18 @@ export interface ControlsState {
 }
 
 /** The key that shows each view (colour has none: a view's key returns to it). */
-const VIEW_KEYS: Readonly<Record<ViewMode, string | null>> = { colour: null, termination: 't' };
+const VIEW_KEYS: Readonly<Record<ViewMode, string | null>> = {
+  colour: null,
+  eht: 'b',
+  termination: 't',
+};
+
+/** The EHT-style view's description in the panel: its labels as for a distant camera, disk on. */
+const EHT_DESCRIPTION = [
+  EHT_RAMP_LABEL + '.',
+  ...ehtLegendLines({ distance: 200, disk: true }),
+  'Closer than 100 M, the beam scale is defined for a distant observer only.',
+].join(' ');
 
 export interface ControlsPanel {
   readonly element: HTMLElement;
@@ -54,6 +72,7 @@ export function createControlsPanel(h: {
   action(a: Action): void;
   scene(toggle: SceneToggle, on: boolean): void;
   view(mode: ViewMode): void;
+  preset(): void;
   overlay(id: OverlayId, on: boolean): void;
   close(): void;
 }): ControlsPanel {
@@ -116,8 +135,19 @@ export function createControlsPanel(h: {
   const termItems = (Object.keys(TERMINATION_LABELS) as TerminationKind[]).map((k) =>
     el('li', {}, colourSwatch(k), ` ${TERMINATION_LABELS[k]}`),
   );
+  const preset = el(
+    'button',
+    { type: 'button', class: 'preset', 'aria-describedby': 'desc-eht-preset' },
+    EHT_PRESET_LABEL,
+  );
+  preset.addEventListener('click', () => h.preset());
   const viewDetails: Readonly<Record<ViewMode, Node[]>> = {
     colour: [],
+    eht: [
+      el('p', { class: 'desc', id: 'desc-view-eht' }, rampSwatch(), ' ', EHT_DESCRIPTION),
+      preset,
+      el('p', { class: 'desc', id: 'desc-eht-preset' }, EHT_PRESET_DESCRIPTION),
+    ],
     termination: [
       el('ul', { class: 'term-legend', 'aria-hidden': 'true' }, ...termItems),
       el('p', { class: 'desc', id: 'desc-view-termination' }, TERMINATION_LEGEND),

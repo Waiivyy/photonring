@@ -17,7 +17,14 @@ import {
   type TanCurve,
 } from './overlay-geometry.ts';
 import { HALO, OVERLAY_STYLES, type OverlayId } from './overlay-style.ts';
-import { TERMINATION_LABELS, colourSwatch, lineSwatch, type TerminationKind } from './swatch.ts';
+import { EHT_RAMP_LABEL, beamMarker, ehtLegendLines } from './eht-legend.ts';
+import {
+  TERMINATION_LABELS,
+  colourSwatch,
+  lineSwatch,
+  rampSwatch,
+  type TerminationKind,
+} from './swatch.ts';
 import type { ViewMode } from './view-state.ts';
 
 export interface OverlayFrame {
@@ -29,6 +36,8 @@ export interface OverlayFrame {
   readonly cssHeight: number;
   readonly overlays: readonly OverlayId[];
   readonly view: ViewMode;
+  /** Whether the disk is shown (the EHT-style view says so when it is off). */
+  readonly disk: boolean;
   readonly controlsOpen: boolean;
 }
 
@@ -66,6 +75,9 @@ export class OverlayLayer {
   private presentedKey = '';
   private keySince = 0;
   private legendKey = '';
+  /** The EHT-style view's beam marker, and what it currently shows. */
+  private readonly beam = svgEl('g', { 'data-overlay': 'beam', fill: 'none' });
+  private beamKey = '';
   private viewBox = '';
   private state: RingsState = 'off';
   /** Main-thread ms spent on the rings of the current key, and of the last complete set. */
@@ -122,13 +134,18 @@ export class OverlayLayer {
     }
     this.updateLegend(frame);
     const camera = frame.camera;
+    if (!camera || frame.view !== 'eht') this.drawBeam(null);
     if (!camera) return;
     const view: ImageView = {
       width: frame.cssWidth,
       height: frame.cssHeight,
       aspect: frame.aspect,
       tanHalfFovY: Math.tan((camera.fovYDeg * Math.PI) / 360),
+      ...(camera.rollDeg ? { rollDeg: camera.rollDeg } : {}),
     };
+    if (frame.view === 'eht') {
+      this.drawBeam(beamMarker(camera.distance, view.width, view.height, view.tanHalfFovY));
+    }
     const key = ringKey(frame);
     const now = this.now();
     if (key !== this.presentedKey) {
@@ -208,6 +225,7 @@ export class OverlayLayer {
           order: missing.order,
           tanHalfFovY: view.tanHalfFovY,
           aspect,
+          ...(camera.rollDeg ? { rollDeg: camera.rollDeg } : {}),
         }),
       };
     }
@@ -245,6 +263,47 @@ export class OverlayLayer {
     this.groups.get(id)?.remove();
     this.groups.delete(id);
     this.drawn.delete(id);
+  }
+
+  /** The beam marker of the EHT-style view: a circle of the beam's FWHM, labelled "beam". */
+  private drawBeam(b: { cx: number; cy: number; r: number } | null): void {
+    const sig = b ? `${b.cx} ${b.cy} ${b.r}` : '';
+    if (sig === this.beamKey) return;
+    this.beamKey = sig;
+    if (!b) {
+      this.beam.remove();
+      return;
+    }
+    const circle = (stroke: string, width: number, opacity: number) =>
+      svgEl('circle', {
+        cx: b.cx,
+        cy: b.cy,
+        r: b.r,
+        stroke,
+        'stroke-width': width,
+        'stroke-opacity': opacity,
+      });
+    const label = svgEl(
+      'text',
+      {
+        x: b.cx,
+        y: b.cy + b.r + 14,
+        'text-anchor': 'middle',
+        fill: '#e8e6e3',
+        stroke: '#000',
+        'stroke-width': 3,
+        'stroke-opacity': HALO.alpha,
+        'paint-order': 'stroke',
+        'font-size': 12,
+      },
+      'beam',
+    );
+    this.beam.replaceChildren(
+      circle('#000', 1.5 + HALO.extraWidth, HALO.alpha),
+      circle('#e8e6e3', 1.5, 1),
+      label,
+    );
+    if (!this.beam.isConnected) this.svg.append(this.beam);
   }
 
   private drawEdge(distance: number, view: ImageView): void {
@@ -317,9 +376,11 @@ export class OverlayLayer {
   }
 
   private updateLegend(frame: OverlayFrame): void {
-    const viewKey = frame.view === 'termination';
+    const viewKey = frame.view === 'termination' || frame.view === 'eht';
     const show = (frame.overlays.length > 0 || viewKey) && !frame.controlsOpen;
-    const sig = show ? `${frame.overlays.join(',')}|${frame.view}` : 'hidden';
+    const distance = frame.camera?.distance ?? Infinity;
+    const ehtLines = frame.view === 'eht' ? ehtLegendLines({ distance, disk: frame.disk }) : [];
+    const sig = show ? `${frame.overlays.join(',')}|${frame.view}|${ehtLines.join('|')}` : 'hidden';
     if (sig === this.legendKey) return;
     this.legendKey = sig;
     this.legend.hidden = !show;
@@ -327,10 +388,13 @@ export class OverlayLayer {
     const items: HTMLLIElement[] = frame.overlays.map((id) =>
       el('li', {}, lineSwatch(OVERLAY_STYLES[id]), el('span', {}, OVERLAY_STYLES[id].label)),
     );
-    if (viewKey) {
+    if (frame.view === 'termination') {
       for (const k of Object.keys(TERMINATION_LABELS) as TerminationKind[]) {
         items.push(el('li', {}, colourSwatch(k), el('span', {}, TERMINATION_LABELS[k])));
       }
+    } else if (frame.view === 'eht') {
+      items.unshift(el('li', {}, rampSwatch(), el('span', {}, EHT_RAMP_LABEL)));
+      for (const line of ehtLines) items.push(el('li', { class: 'text' }, el('span', {}, line)));
     }
     this.legend.replaceChildren(...items);
   }
@@ -339,5 +403,5 @@ export class OverlayLayer {
 /** Ring curves depend on the distance, the elevation and the viewport in tan units. */
 function ringKey(frame: OverlayFrame): string {
   const c = frame.camera;
-  return c ? `${c.distance}|${c.elevationDeg}|${c.fovYDeg}|${frame.aspect}` : '';
+  return c ? `${c.distance}|${c.elevationDeg}|${c.fovYDeg}|${frame.aspect}|${c.rollDeg ?? 0}` : '';
 }

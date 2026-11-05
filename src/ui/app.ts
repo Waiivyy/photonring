@@ -11,6 +11,7 @@ import { createAbout, type About } from './about.ts';
 import { createAnnouncer, type Announcer } from './announcer.ts';
 import { createControlsPanel, type ControlsPanel, type SceneToggle } from './controls-panel.ts';
 import { cameraSentence, sceneSummary } from './describe.ts';
+import { EHT_PRESET, EHT_PRESET_LABEL, beamMarker } from './eht-legend.ts';
 import { el } from './dom.ts';
 import { bindCanvasInput } from './input.ts';
 import { KEYMAP, ariaKeyshortcuts, keyAction, type Action } from './keymap.ts';
@@ -53,11 +54,13 @@ import {
 /** What the renderer draws for each view. */
 const RENDER_MODE: Readonly<Record<ViewMode, RenderMode>> = {
   colour: 'colour',
+  eht: 'eht',
   termination: 'termination',
 };
 /** What the camera line of the status adds for each view. */
 const HUD_VIEW: Readonly<Record<ViewMode, string>> = {
   colour: '',
+  eht: ', EHT-style view (false colour)',
   termination: ', termination view',
 };
 
@@ -277,12 +280,13 @@ class App {
         }
       },
       now: () => performance.now(),
-      current: () => viewCamera(this.view.orbit),
+      current: () => this.cameraNow(),
     });
     this.controls = createControlsPanel({
       action: (a) => this.dispatch(a, 'button'),
       scene: (toggle, on) => this.setSceneToggle(toggle, on, false),
       view: (mode) => this.setView(mode, false),
+      preset: () => this.applyEhtPreset(),
       overlay: (id, on) => this.setOverlay(id, on, false),
       close: () => this.closePanel('controls', true),
     });
@@ -366,8 +370,14 @@ class App {
     this.life.frame(this.frame);
   }
 
+  /** The camera the applied view renders with, at the internal image's aspect. */
+  private cameraNow() {
+    const { width, height } = this.resolution;
+    return viewCamera(this.view.orbit, this.applied.view, height > 0 ? width / height : 16 / 9);
+  }
+
   private stats(): AppStats {
-    const camera = viewCamera(this.view.orbit);
+    const camera = this.cameraNow();
     return {
       state: this.state,
       frames: this.frames,
@@ -409,7 +419,7 @@ class App {
   /** The scene the renderer draws: the requested camera and settings, the applied brightness. */
   private sceneNow(): SceneView {
     return {
-      camera: viewCamera(this.view.orbit),
+      camera: this.cameraNow(),
       disk: this.applied.disk,
       view: this.applied.view,
       antialias: this.view.antialias,
@@ -427,7 +437,7 @@ class App {
       M: 1,
       camera: s.camera,
       mode: RENDER_MODE[s.view],
-      sky: 'stars',
+      sky: s.view === 'eht' ? 'black' : 'stars',
       exposure: 1,
       toneMapping: true,
       disk: s.disk ? DEFAULT_DISK : null,
@@ -530,6 +540,7 @@ class App {
       cssHeight: this.canvas.clientHeight,
       overlays: this.view.overlays,
       view: this.applied.view,
+      disk: this.applied.disk,
       controlsOpen: this.panels.includes('controls'),
     };
   }
@@ -609,6 +620,13 @@ class App {
       const name = { disk: 'Disk', antialias: 'Anti-aliasing' }[toggle];
       this.announcer.announce(`${name} ${on ? 'on' : 'off'}`);
     }
+  }
+
+  /** The preset: camera, EHT-style view and disk in one change, so the limiter counts it once. */
+  private applyEhtPreset(): void {
+    const v = this.view;
+    this.commit({ ...v, orbit: { ...v.orbit, ...EHT_PRESET }, view: 'eht', disk: true });
+    this.announcer.announce(`${EHT_PRESET_LABEL}: ${cameraSentence(EHT_PRESET)}`);
   }
 
   private setView(mode: ViewMode, announce: boolean): void {
@@ -829,6 +847,7 @@ class App {
         height: H,
         aspect: W / H,
         tanHalfFovY: Math.tan((shown.camera.fovYDeg * Math.PI) / 360),
+        ...(shown.camera.rollDeg ? { rollDeg: shown.camera.rollDeg } : {}),
       };
       const rgba = await this.renderer.readImageRGBA('full');
       const blob = await composeImage({
@@ -840,6 +859,14 @@ class App {
         rings: this.overlay.paths(view, frame),
         overlays: frame.overlays,
         view: shown.view,
+        eht:
+          shown.view === 'eht'
+            ? {
+                distance: shown.camera.distance,
+                disk: shown.disk,
+                beam: beamMarker(shown.camera.distance, W, H, view.tanHalfFovY),
+              }
+            : null,
       });
       if (this.life.disposed) return;
       const name = screenshotName({ ...shown.camera, view: shown.view });

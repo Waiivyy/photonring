@@ -85,12 +85,13 @@ test('arrow keys in the View radio group switch the view through the brightness 
 }) => {
   await page.getByRole('button', { name: 'Controls', exact: true }).click();
   const colour = page.getByRole('radio', { name: 'Colour', exact: true });
-  const termination = page.getByRole('radio', { name: 'Termination (debug)', exact: true });
+  // The next view in the group's order (colour, EHT-style, termination).
+  const next = page.getByRole('radio', { name: 'EHT-style (false colour)', exact: true });
   await expect(colour).toBeChecked();
   await colour.focus();
   await page.keyboard.press('ArrowDown');
-  await expect(termination).toBeChecked();
-  await expect.poll(async () => (await stats(page)).mode).toBe('termination');
+  await expect(next).toBeChecked();
+  await expect.poll(async () => (await stats(page)).mode).toBe('eht');
   // The arrow keys moved the selection, not the camera.
   expect(await camera(page)).toEqual(DEFAULT);
   await page.keyboard.press('ArrowUp');

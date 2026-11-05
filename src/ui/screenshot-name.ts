@@ -3,7 +3,11 @@ import { ANGLE_DECIMALS, DISTANCE_DECIMALS, formatNumber, quantiseOrbit } from '
 import type { ViewMode } from './view-state.ts';
 
 /** File name suffix of each view. */
-const SUFFIX: Readonly<Record<ViewMode, string>> = { colour: '', termination: '-termination' };
+const SUFFIX: Readonly<Record<ViewMode, string>> = {
+  colour: '',
+  eht: '-eht',
+  termination: '-termination',
+};
 
 export function screenshotName(s: {
   readonly distance: number;

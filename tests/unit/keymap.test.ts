@@ -17,6 +17,7 @@ describe('key map', () => {
     ['-', { type: 'zoom', factor: 1.1 }],
     ['d', { type: 'toggle', target: 'disk' }],
     ['A', { type: 'toggle', target: 'antialias' }],
+    ['b', { type: 'view', mode: 'eht' }],
     ['t', { type: 'view', mode: 'termination' }],
     ['e', { type: 'overlay', id: 'edge' }],
     ['h', { type: 'overlay', id: 'horizon' }],

@@ -75,6 +75,12 @@ export const KEYMAP: readonly KeyBinding[] = [
     repeat: false,
   },
   {
+    keys: ['b'],
+    action: { type: 'view', mode: 'eht' },
+    label: 'EHT-style view (false colour)',
+    repeat: false,
+  },
+  {
     keys: ['t'],
     action: { type: 'view', mode: 'termination' },
     label: 'Termination view',

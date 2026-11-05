@@ -48,11 +48,13 @@ fn debugColour(termination: u32) -> vec3f {
 }
 
 // Colour of one sample: disk light, then the sky behind whatever the disk lets through, as in
-// shade (src/cpu-renderer/render.ts). A black sky adds nothing (the EHT-style view).
+// shade (src/cpu-renderer/render.ts). A black sky adds nothing, and the EHT-style view never
+// adds the sky: it shows the disk's brightness alone, as its CPU twin does.
 fn shadeSample(d: vec3f) -> vec3f {
   let tr = traceGeodesic(params.position, d, true);
   var colour = tr.emission;
-  if (tr.termination == ESCAPED && tr.transmittance > 0.0 && params.sky != SKY_BLACK) {
+  let skyShown = params.sky != SKY_BLACK && params.mode != MODE_EHT;
+  if (tr.termination == ESCAPED && tr.transmittance > 0.0 && skyShown) {
     var sky = vec3f(1.0);
     if (params.sky == SKY_STARS) {
       sky = skyRadiance(tr.dir, params.gObserver);

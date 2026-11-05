@@ -1,7 +1,8 @@
 // Small legend swatches, drawn with the same style table as the overlays.
 import { srgbEncode, TERMINATION_COLOURS, type Vec3 } from '../physics/index.ts';
 import { svgEl } from './dom.ts';
-import { HALO, type OverlayStyle } from './overlay-style.ts';
+import { rampColours } from './eht-legend.ts';
+import { HALO, type OverlayStyle, type TerminationKind } from './overlay-style.ts';
 
 /** A short sample of an overlay line on its halo. */
 export function lineSwatch(style: OverlayStyle): SVGSVGElement {
@@ -37,13 +38,26 @@ export function displayColour(c: Vec3): string {
   return `rgb(${v[0]}, ${v[1]}, ${v[2]})`;
 }
 
-export type TerminationKind = keyof typeof TERMINATION_COLOURS;
+export { TERMINATION_LABELS, type TerminationKind } from './overlay-style.ts';
 
-export const TERMINATION_LABELS: Readonly<Record<TerminationKind, string>> = {
-  escaped: 'Escaped',
-  captured: 'Captured',
-  stepLimit: 'Step limit',
-};
+/** The EHT-style view's colour ramp as thin bars (no gradient, so no element ids to clash). */
+export function rampSwatch(width = 48, height = 10): SVGSVGElement {
+  const n = 24;
+  const colours = rampColours(n);
+  return svgEl(
+    'svg',
+    {
+      class: 'swatch ramp',
+      width,
+      height,
+      viewBox: `0 0 ${n} 1`,
+      preserveAspectRatio: 'none',
+      'aria-hidden': 'true',
+      focusable: 'false',
+    },
+    ...colours.map((fill, i) => svgEl('rect', { x: i, y: 0, width: 1.05, height: 1, fill })),
+  );
+}
 
 /** A filled square in a termination colour. */
 export function colourSwatch(kind: TerminationKind): SVGSVGElement {

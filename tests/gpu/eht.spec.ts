@@ -145,6 +145,16 @@ test.describe('EHT-style view on the GPU', () => {
     expect(worst).toBeLessThan(1e-4);
   });
 
+  test('adds no sky, even when the scene asks for stars, so an empty view is black', async ({
+    page,
+  }) => {
+    await openHarness(page);
+    const cam = CAMERAS.preset!(16 / 9);
+    const out = await renderEht(page, { ...request(cam, 320, 180), sky: 'stars', disk: null });
+    expect(out.linear.every((v) => v === 0)).toBe(true);
+    expect(out.rgb.every((v) => v === 0)).toBe(true);
+  });
+
   test('linear image against the CPU reference', async ({ page }) => {
     test.setTimeout(300_000);
     await openHarness(page);
