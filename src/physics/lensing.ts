@@ -270,3 +270,125 @@ export function ringFoldSweep(rObs: number, R: number, M = 1): number | null {
   const uo = 1 / rObs;
   return u2 > uo ? sweptAngleElliptic(bTurn, uo, u2, M) : null;
 }
+
+/** Constant of the strong deflection limit, C = 216 (7 - 4 sqrt 3) (Bozza 2002, eq. 50). */
+const STRONG_DEFLECTION_C = 216 * (7 - 4 * Math.sqrt(3));
+/** Smallest offset eps = b/b_c - 1 the solver returns: b carries eps only to about 2e-16. */
+const MIN_OFFSET = 1e-14;
+
+/**
+ * Orbital angle swept by the critical photon (b = b_c) from infinity in to u, for 0 <= u < 1/(3M).
+ * At b = b_c the orbit polynomial is 2M (u - 1/(3M))^2 (u + 1/(6M)), and the substitution
+ * u = -1/(6M) + tanh^2(x) / (2M) gives du / sqrt(P) = 2 dx. Derivation: docs/PHYSICS.md, 6b.
+ */
+export function criticalOrbitSweep(u: number, M = 1): number {
+  if (!(u >= 0 && u < 1 / (3 * M) && M > 0)) {
+    throw new RangeError(`need 0 <= u < 1/(3M) and M > 0, got u = ${u}, M = ${M}`);
+  }
+  return 2 * (Math.atanh(Math.sqrt(2 * M * u + 1 / 3)) - Math.atanh(1 / Math.sqrt(3)));
+}
+
+/**
+ * Orbital angle swept by a backward ray of impact parameter b > b_c that runs in from uo to its
+ * turning point u2 and out again to uR (inverse radii; 0 means infinity). A leg is empty when the
+ * ray turns at or before reaching it.
+ */
+export function outboundSweep(b: number, uo: number, uR: number, M = 1): number {
+  if (!(b > criticalImpactParameter(M))) throw new RangeError(`need b > b_c, got ${b}`);
+  const { u2 } = orbitRoots(b, M);
+  const leg = (u: number) => (u2 > u ? sweptAngleElliptic(b, u, u2, M) : 0);
+  return leg(uo) + leg(uR);
+}
+
+/**
+ * Offset eps = b/b_c - 1 of the image on the outbound branch (the ray turns, then meets the ring)
+ * whose sweep from uo to uR equals `sweep`, for inverse radii 0 <= uo, uR < 1/(3M) (0 means
+ * infinity). The sweep falls monotonically from infinity at b_c to its value for the ray that
+ * turns at the larger inverse radius (or to pi when both are 0), so the root is unique. Solved by
+ * Brent's method in ln(eps), which keeps full relative precision in eps; the bracket starts at the
+ * leading-order estimate of docs/PHYSICS.md 6b. Throws if the root is not on this branch or lies
+ * below MIN_OFFSET.
+ */
+export function outboundImageOffset(uo: number, uR: number, sweep: number, M = 1): number {
+  if (![uo, uR, sweep, M].every(Number.isFinite) || !(M > 0)) {
+    throw new RangeError('outbound image inputs must be finite, with M > 0');
+  }
+  if (!(uo >= 0 && uR >= 0 && Math.max(uo, uR) < 1 / (3 * M))) {
+    throw new RangeError(`need 0 <= uo, uR < 1/(3M), got ${uo}, ${uR}`);
+  }
+  if (!(sweep > 0)) throw new RangeError(`sweep must be positive: ${sweep}`);
+  const bc = criticalImpactParameter(M);
+  const uTurn = Math.max(uo, uR);
+  // Largest offset on the branch: the ray that turns exactly at the outer end of the path.
+  const vMax =
+    uTurn > 0 ? Math.log(1 / (uTurn * Math.sqrt(1 - 2 * M * uTurn)) / bc - 1) : Math.log(1e6);
+  const f = (v: number) => outboundSweep(bc * (1 + Math.exp(v)), uo, uR, M) - sweep;
+  const vMin = Math.log(MIN_OFFSET);
+
+  const lead =
+    Math.log(STRONG_DEFLECTION_C) - criticalOrbitSweep(uo, M) - criticalOrbitSweep(uR, M);
+  let hi = Math.min(lead - sweep + 2, vMax);
+  let lo = Math.min(lead - sweep - 2, hi - 1);
+  while (f(hi) > 0) {
+    if (hi >= vMax) throw new RangeError(`sweep ${sweep} is below the outbound branch`);
+    hi = Math.min(hi + 4, vMax);
+  }
+  while (f(lo) < 0) {
+    if (lo <= vMin) throw new RangeError(`image of sweep ${sweep} is closer than ${MIN_OFFSET}`);
+    lo = Math.max(lo - 4, vMin);
+  }
+  return Math.exp(brent(f, lo, hi, 1e-15));
+}
+
+/**
+ * Offset eps = b/b_c - 1 of the image of the ring of radius R (> 3M) in the disk plane that a
+ * backward ray from a static observer at rObs (> 3M) reaches after sweeping `sweep`, for any sweep.
+ * Images on the outbound branch (every image of order n >= 1 of a disk outside the ISCO) come from
+ * outboundImageOffset; shorter sweeps, which only the inbound branch or outward rays reach, are
+ * delegated to ringImageAngle (sweep <= 4 pi). The view angle follows from sin(alpha) = k b with
+ * k = sqrt(1 - 2M/rObs) / rObs.
+ */
+export function ringImageOffset(rObs: number, R: number, sweep: number, M = 1): number {
+  if (![rObs, R, sweep, M].every(Number.isFinite) || !(M > 0)) {
+    throw new RangeError('ring image inputs must be finite, with M > 0');
+  }
+  if (!(rObs > 3 * M)) throw new RangeError(`observer must be outside the photon sphere: ${rObs}`);
+  if (!(R > 3 * M)) throw new RangeError(`ring must be outside the photon sphere: ${R}`);
+  if (!(sweep > 0)) throw new RangeError(`sweep must be positive: ${sweep}`);
+  const uo = 1 / rObs;
+  const uR = 1 / R;
+  const uTurn = Math.max(uo, uR);
+  const bTurn = 1 / (uTurn * Math.sqrt(1 - 2 * M * uTurn));
+  if (sweep > outboundSweep(bTurn, uo, uR, M)) return outboundImageOffset(uo, uR, sweep, M);
+  const k = Math.sqrt(1 - 2 * M * uo) / rObs;
+  return Math.sin(ringImageAngle(rObs, R, sweep, M)) / (k * criticalImpactParameter(M)) - 1;
+}
+
+/**
+ * Offset of the order-n image (n >= 0) of the ring R, for a ray plane whose first disk-plane
+ * crossing is at phi0 in (0, pi] (firstPlaneCrossingAngle): the sweep is phi0 + n pi.
+ */
+export function subringOffset(rObs: number, R: number, n: number, phi0: number, M = 1): number {
+  if (!(Number.isInteger(n) && n >= 0)) throw new RangeError(`order must be an integer >= 0: ${n}`);
+  if (!(phi0 > 0 && phi0 <= Math.PI)) throw new RangeError(`phi0 out of (0, pi]: ${phi0}`);
+  return ringImageOffset(rObs, R, phi0 + n * Math.PI, M);
+}
+
+/**
+ * Leading-order offset eps_n = C exp(-dphi_c(1/rObs) - dphi_c(1/R) - phi0 - n pi), with
+ * C = 216 (7 - 4 sqrt 3): Bozza's strong deflection law applied to each leg, with the critical
+ * orbit's sweep criticalOrbitSweep for the finite ends (docs/PHYSICS.md, 6b).
+ */
+export function subringOffsetLeadingOrder(
+  rObs: number,
+  R: number,
+  n: number,
+  phi0: number,
+  M = 1,
+): number {
+  const sweep = phi0 + n * Math.PI;
+  return (
+    STRONG_DEFLECTION_C *
+    Math.exp(-criticalOrbitSweep(1 / rObs, M) - criticalOrbitSweep(1 / R, M) - sweep)
+  );
+}
