@@ -200,6 +200,20 @@ Every strip pixel traces a ray close to the photon sphere, so the strip costs 1.
 the colour view of the same camera. The page keeps a separate cost estimate per view, so its
 first frames after switching are planned without the colour view's estimate.
 
+## What the page's status line measures (Stage 7)
+
+The status line's "GPU time" is the sum of the timestamp-query times of the batches that made the
+current image (the first pass, then anti-aliasing), each from the start of its first tile to the
+end of its last; the page keeps one batch in flight, so every batch gets the query set and no
+queue wait is counted. It is often much larger than the benchmark above, because the GPU's clock
+depends on how busy it has been. Measured on 2026-11-05 at commit 36a298d in headless Chrome
+156.0.8078.80, viewport 960 x 540 at device pixel ratio 1 (internal 960 x 540), default view,
+with a throwaway script (`artifacts/stage7/scratch/timing.ts`, not in the repository): the first
+pass took 7.86 ms on first load, 3.93 to 4.00 ms when re-rendered every few hundred
+milliseconds, and 8.13 ms again after 5 s idle; the benchmark of the same size, which renders
+back to back, gives 1.51 ms (table above). Both are GPU times; they differ by the GPU's state.
+Screenshots of the page show the status line as it was when they were taken.
+
 ## Download size (Stage 6)
 
 `npm run build`, then `npm run size` (Node 25.6.1; gzip level 9 and brotli quality 11 from
