@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" width="960" height="540" role="img" aria-labelledby="title desc">
+<title id="title">Key radii of a non-rotating black hole, to scale</title>
+<desc id="desc">Top view of the disk plane. The event horizon at 2 M, the photon sphere at 3 M, the innermost stable circular orbit (ISCO) at 6 M where the toy disk begins, the disk's outer edge at 20 M, and the critical impact parameter b_c = 3 sqrt(3) M, about 5.196 M.</desc>
+<rect width="960" height="540" fill="#101217"/>
+<g font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="15">
+<text x="45" y="40" fill="#e8e6e3">The disk, to scale (seen from above)</text>
+<path d="M445 268A200 200 0 1 0 45 268A200 200 0 1 0 445 268ZM305 268A60 60 0 1 0 185 268A60 60 0 1 0 305 268Z" fill="#2a2620" fill-rule="evenodd"/>
+<circle cx="245" cy="268" r="200" fill="none" stroke="#f3d9a4" stroke-width="1.5"/>
+<circle cx="245" cy="268" r="60" fill="none" stroke="#009e73" stroke-width="1.5" stroke-dasharray="10 4"/>
+<circle cx="245" cy="268" r="30" fill="none" stroke="#f0e442" stroke-width="1.5" stroke-dasharray="6 3"/>
+<circle cx="245" cy="268" r="20" fill="#000000" stroke="#cc79a7" stroke-width="1.5" stroke-dasharray="2 3"/>
+<text x="245" y="390" font-size="14" fill="#f3d9a4" text-anchor="middle">toy disk, from the ISCO</text>
+<text x="245" y="409" font-size="14" fill="#f3d9a4" text-anchor="middle">(6 M) out to 20 M</text>
+<rect x="245" y="203" width="65" height="65" fill="none" stroke="#b3b0ab" stroke-width="1"/>
+<line x1="310" y1="203" x2="550" y2="75" stroke="#b3b0ab" stroke-width="1" stroke-dasharray="2 3"/>
+<line x1="310" y1="268" x2="550" y2="465" stroke="#b3b0ab" stroke-width="1" stroke-dasharray="2 3"/>
+<line x1="145" y1="494" x2="195" y2="494" stroke="#e8e6e3" stroke-width="2"/>
+<text x="201" y="499" font-size="13" fill="#b3b0ab">5 M</text>
+<text x="550" y="40" fill="#e8e6e3">The middle, magnified 6 times (one quarter)</text>
+<path d="M910 465L940 465L940 75L550 75L550 105A360 360 0 0 1 910 465Z" fill="#2a2620"/>
+<path d="M550 345A120 120 0 0 1 670 465L550 465Z" fill="#000000" stroke="#cc79a7" stroke-width="1.5" stroke-dasharray="2 3" stroke-linejoin="round"/>
+<path d="M550 285A180 180 0 0 1 730 465" fill="none" stroke="#f0e442" stroke-width="1.5" stroke-dasharray="6 3" stroke-linejoin="round"/>
+<path d="M550 153.2A311.8 311.8 0 0 1 861.8 465" fill="none" stroke="#56b4e9" stroke-width="1.5" stroke-linejoin="round"/>
+<path d="M550 105A360 360 0 0 1 910 465" fill="none" stroke="#009e73" stroke-width="1.5" stroke-dasharray="10 4" stroke-linejoin="round"/>
+<line x1="550" y1="465" x2="940" y2="465" stroke="#b3b0ab" stroke-width="1"/>
+<line x1="550" y1="465" x2="550" y2="75" stroke="#b3b0ab" stroke-width="1"/>
+<line x1="610" y1="465" x2="610" y2="470" stroke="#b3b0ab" stroke-width="1"/>
+<text x="610" y="484" font-size="13" fill="#b3b0ab" text-anchor="middle">1 M</text>
+<line x1="670" y1="465" x2="670" y2="470" stroke="#b3b0ab" stroke-width="1"/>
+<text x="670" y="484" font-size="13" fill="#b3b0ab" text-anchor="middle">2 M</text>
+<line x1="730" y1="465" x2="730" y2="470" stroke="#b3b0ab" stroke-width="1"/>
+<text x="730" y="484" font-size="13" fill="#b3b0ab" text-anchor="middle">3 M</text>
+<line x1="790" y1="465" x2="790" y2="470" stroke="#b3b0ab" stroke-width="1"/>
+<text x="790" y="484" font-size="13" fill="#b3b0ab" text-anchor="middle">4 M</text>
+<line x1="850" y1="465" x2="850" y2="470" stroke="#b3b0ab" stroke-width="1"/>
+<text x="850" y="484" font-size="13" fill="#b3b0ab" text-anchor="middle">5 M</text>
+<line x1="910" y1="465" x2="910" y2="470" stroke="#b3b0ab" stroke-width="1"/>
+<text x="910" y="484" font-size="13" fill="#b3b0ab" text-anchor="middle">6 M</text>
+<text x="544" y="484" font-size="13" fill="#b3b0ab" text-anchor="middle">0</text>
+<text x="557" y="338" font-size="14" fill="#cc79a7">horizon, 2 M</text>
+<text x="557" y="278" font-size="14" fill="#f0e442">photon sphere, 3 M</text>
+<text x="557" y="146.2" font-size="14" fill="#56b4e9">b<tspan dy="4" font-size="11">c</tspan><tspan dy="-4"> ≈ 5.196 M</tspan></text>
+<text x="557" y="98" font-size="14" fill="#009e73">ISCO, 6 M: the disk's inner edge</text>
+<text x="934" y="131" font-size="13" fill="#b3b0ab" text-anchor="end">b<tspan dy="4" font-size="10">c</tspan><tspan dy="-4"> = 3√3 M is not a place:</tspan></text>
+<text x="934" y="148" font-size="13" fill="#b3b0ab" text-anchor="end">rays from far away aimed</text>
+<text x="934" y="165" font-size="13" fill="#b3b0ab" text-anchor="end">closer than b<tspan dy="4" font-size="10">c</tspan><tspan dy="-4"> fall in</tspan></text>
+<rect x="0" y="506" width="960" height="34" fill="#101217"/>
+<line x1="0" y1="506.5" x2="960" y2="506.5" stroke="#2c3038" stroke-width="1"/>
+<text x="16" y="527" font-size="13" fill="#b3b0ab">Drawn in r and phi as flat polar coordinates; lengths and angles on the page are not what a local observer measures.</text>
+<text x="944" y="527" font-size="13" fill="#b3b0ab" text-anchor="end">left 1 M = 10 px, right 1 M = 60 px</text>
+</g>
+</svg>

@@ -1,6 +1,7 @@
 // The README diagrams (tools/diagrams.ts): each is the same every time it is drawn, keeps the rules
 // for SVG files the README shows (size cap, one root element, no active or external content, no
 // em or en dash), and every number it prints is the 64-bit library's value.
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   cameraFrame,
@@ -117,6 +118,15 @@ describe('README diagrams: files', () => {
       );
       expect(text, name).toMatch(word);
     }
+  });
+
+  it.each(files)('the committed docs/images/diagrams/%s equals the regenerated one', (file) => {
+    // The README shows the committed files: they must be what the tool draws today.
+    const committed = readFileSync(
+      new URL(`../../docs/images/diagrams/${file}`, import.meta.url),
+      'utf8',
+    );
+    expect(committed).toBe(get(file).svg);
   });
 
   it('the rule check finds each kind of problem', () => {
