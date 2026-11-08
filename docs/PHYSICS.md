@@ -651,35 +651,129 @@ Cunningham (1975) eq. (2).
   bolometric intensity scales as $g^4$. Luminet (1979, p. 233) states the same inverse fourth
   power of $1 + z$ for the observed bolometric flux. Confirmed.
 
-## 10. Disk (toy model)
+## 10. Disk (thin, Page-Thorne flux)
 
-Shakura and Sunyaev (1973) eq. (2.6) gives the flux per face
-$Q \propto R^{-3}[1 - (R_0/R)^{1/2}]$ with zero torque at the inner edge $R_0$. With
-$Q = \sigma T^4$:
+The disk is infinitely thin and opaque, of gas on circular Keplerian orbits from $r_{in}$ to
+$r_{out}$ (the default disk: the ISCO, $6M$, to $20M$). Each face radiates as a blackbody in the
+gas's own frame, $\sigma T^4 = F$, with $F$ the relativistic thin-disk flux of Page and Thorne
+(1974) for a non-rotating hole (`pageThorneFlux` in `src/physics/disk.ts`). Up to Stage 7 the
+renderers drew the Newtonian profile instead; the comparison is at the end of this section.
+
+**The flux.** Page and Thorne (1974) define $F$ (eq. 10b) as the time-averaged energy flux that
+leaves one face, per unit proper time and proper area, measured by an observer who orbits with
+the gas. With the rest-mass accretion rate $\dot M$ and the specific energy $E$, angular momentum
+$L$ and angular velocity $\Omega$ of circular geodesics,
 
 ```math
-T(r) \propto r^{-3/4}\left(1 - \sqrt{r_{in}/r}\right)^{1/4},
+F(r) = \frac{\dot M}{4\pi}\,e^{-(\nu + \psi + \mu)} f(r),\qquad
+f(r) = \frac{-\Omega_{,r}}{(E - \Omega L)^2}\int_{r_{ms}}^{r} (E - \Omega L)\,L_{,r}\,dr
 ```
 
-as in the brief, with its maximum at $r = (49/36)\thinspace r_{in} \approx 8.17M$ for $r_{in} = 6M$
-(`diskTemperature`, normalised to 1 at the peak); Shakura and Sunyaev (1973, p. 344) give the
-maximum of the flux at $R = 1.36\thinspace R_0$. This is the Newtonian profile, not the relativistic Page
-and Thorne (1974) solution, and the disk has no thickness, no radiative transfer, no
-self-illumination and no magnetic fields. It is a toy for demonstration and must not be presented
-as a model of any real observation.
+(eqs. 11b and 12), with $e^{\nu + \psi + \mu} = r$ in the equatorial plane (eq. 15d) and $r_{ms}$
+the ISCO. The lower limit is the zero-torque condition at the ISCO. For a non-rotating hole the
+roots of $x^3 - 3x + 2a_* = 0$ (eq. 14) are $\sqrt3$, $0$ and $-\sqrt3$, and $x_0 = \sqrt6$ is
+$x = \sqrt{r/M}$ at the ISCO (eqs. 15k to 15m). The term of eq. (15n) with the root 0 tends to 0 as
+$a_* \to 0$, and the logarithms of the other two roots have coefficients $\pm\sqrt3/2$, so
 
-**Display choices.** The peak temperature of the opaque toy disk, 6500 K at
-$r = (49/36)\thinspace r_{in}$ in the gas's own frame, is a display choice, made at the Stage 1
-check-in (`docs/DESIGN.md`, section 10); it was not derived from a black hole mass or accretion
-rate, and that record gives no physical reason for it. With the colour-matching fit of section
-10a, a 6500 K blackbody has chromaticity (0.3134, 0.3239), 0.0052 from the sRGB white point D65
-(0.3127, 0.3290). The disk is not drawn at that temperature: each crossing is drawn as a
-blackbody at $gT$ (section 9), so the approaching side of the disk is drawn whiter and the
-receding side brown. The page's exposure is fixed at 1. Computed by the library (the CPU reference
-renderer's encoding of a colour-view pixel, not a measurement on a GPU), the tone curve of section
-10a draws a 6500 K blackbody at (210, 207, 210) of 255; one at 3000 K has 0.010 of its luminance
-and is drawn at (35, 23, 9), and one at 9000 K has 3.16 times it and is drawn at (248, 250, 253)
-(`tests/unit/colour.test.ts`, `npm run measure`).
+```math
+F(r) = \frac{3M\dot M}{8\pi r^3}\,\frac{1}{1 - 3M/r}\left[1 - \sqrt{\frac{6M}{r}}
+  + \frac{1}{2}\sqrt{\frac{3M}{r}}\,\ln\frac{(\sqrt r + \sqrt{3M})(\sqrt2 - 1)}{(\sqrt r - \sqrt{3M})(\sqrt2 + 1)}\right]
+```
+
+for $r > 6M$, and $F = 0$ at and inside the ISCO. The bracket is $B(x)/x$ with
+
+```math
+B(x) = x - x_0 - \frac{\sqrt3}{2}\ln\frac{x - \sqrt3}{x_0 - \sqrt3} + \frac{\sqrt3}{2}\ln\frac{x + \sqrt3}{x_0 + \sqrt3},
+\qquad F = \frac{3M\dot M\,B(x)}{8\pi r^2 (r - 3M)\,x}.
+```
+
+Mueller and Frauendiener (2012, eq. 11) give the same function in $R = r/r_s$, $r_s = 2M$; the
+tests compare the library with it and with eq. (12) integrated numerically
+(`tests/unit/disk-flux.test.ts`).
+
+**A form without cancellation near the ISCO.** $B$ has a double zero at $x_0$, while each of its
+three terms is of order $x - x_0$, so the sum cancels near the ISCO. With
+$B'(x) = (x^2 - 6)/(x^2 - 3)$, the subtraction formula for artanh and $x x_0 - 6 = x_0 d$,
+
+```math
+B = \frac{x_0\,d^2}{x x_0 - 3} - \sqrt3\left(\mathrm{artanh} z - z\right),\qquad
+d = x - x_0 = \frac{r/M - 6}{x + x_0},\qquad z = \frac{\sqrt3\,d}{x x_0 - 3},
+```
+
+with $0 \le z < 1/\sqrt2$; $\mathrm{artanh} z - z$ is summed as its series below $z = 0.125$.
+The library forms $r/M - 6$ as $(r - 6M)/M$: $r - 6M$ is exact for $r$ within a factor of two
+of $6M$ when $6M$ is exact, and the division adds one relative rounding. So the flux is as
+accurate as $r - 6M$ allows: near the ISCO $F \propto (r - 6M)^2$, and a rounded $r$ or $6M$
+moves it by about $2\epsilon\thinspace r/(r - 6M)$ for a relative rounding $\epsilon$. Measured once
+while the tests were written (2026-11-08), the closed form in $B(x)$ above, its three terms summed
+directly in 64-bit floats, is off by $2.2\times10^{-5}$ relative at $r = 6M(1 + 10^{-6})$, by $5.4\times10^{-3}$ at
+$r = 6M + 10^{-6}M = 6M(1 + 1.7\times10^{-7})$ and has a relative error of 55 at
+$6M(1 + 10^{-9})$; the stable form agrees with eq. (12) to $1.1\times10^{-15}$ at every radius the test checks, from $6M(1 + 10^{-9})$ to $1000\thinspace r_{isco}$ ($M = 1$ and 2
+within $10^{-3}$ of the ISCO, $M = 1$ and 1.7 farther out; `npm run measure`).
+
+**Properties** (computed by the library and checked by `tests/unit/disk-flux.test.ts`):
+
+| Property                                                         | Value                                                                                                                       | How it is checked                                                                                                                                                                                                                                                                                                                                                    |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Zero torque at the ISCO                                          | $F = 0$ at and inside $6M$; a double zero, $F = \dot M (r - 6M)^2/(20736\pi M^4) + O((r - 6M)^3)$                           | $F/(r - 6M)^2$ at $r - 6M = 10^{-7}M$ within $1.03\times10^{-7}$ of the coefficient                                                                                                                                                                                                                                                                                  |
+| Radius of peak flux and peak temperature, in the gas's own frame | $r_{peak} = 9.5509M$ for every $M$; $x_p^2$ with $x_p$ the root of $x(x^2 - 6) = (7x^2 - 15)B(x)$                           | Within $5.6\times10^{-16}$ of a 70-digit value; a golden-section search of $F$ agrees to $5.8\times10^{-9}$                                                                                                                                                                                                                                                          |
+| Peak flux                                                        | $F_{max} = 1.3678\times10^{-5}\thinspace\dot M/M^2$, $F_{max}/F_0 = 9.1672\times10^{-4}$ with $F_0 = 3M\dot M/(8\pi r_s^3)$ | Against a 70-digit value                                                                                                                                                                                                                                                                                                                                             |
+| Published peak                                                   | Mueller and Frauendiener print $F_{max}/F_0 \approx 9.167\times10^{-4}$ at $R_{max} \approx 4.776$                          | Flux within $5\times10^{-8}$ (it agrees to $1.6\times10^{-8}$). The root gives $R = 4.775464$: $5.4\times10^{-4}$ from the printed value, more than its rounding to three decimals allows ($5\times10^{-4}$), so the test allows $10^{-3}$, one unit of the last printed digit (twice the rounding allowance); the root itself is checked against the 70-digit value |
+| Shape                                                            | $F$ rises from the ISCO to $r_{peak}$ and falls beyond it                                                                   | Strictly monotonic on grids from $6M(1 + 10^{-9})$ to $10^6M$                                                                                                                                                                                                                                                                                                        |
+| Newtonian limit                                                  | $F/F_N = 1 + \tfrac{\sqrt3}{2}\ln(3 - 2\sqrt2)\sqrt{M/r} + O(M/r)$, $F_N = \tfrac{3M\dot M}{8\pi r^3}(1 - \sqrt{6M/r})$     | At $10^8M$ and $10^{10}M$; the coefficient of $\sqrt{M/r}$ within $2.3\times10^{-5}$                                                                                                                                                                                                                                                                                 |
+| Mass scaling                                                     | $F(rM, M)\thinspace M^2 = F(r, 1)$                                                                                          | To $1.1\times10^{-15}$                                                                                                                                                                                                                                                                                                                                               |
+
+**Temperature.** photonring needs only the shape: $\hat F = F/F_{max}$, 1 at $r_{peak}$ and 0 at
+and inside the ISCO, and $\hat T = \hat F^{1/4}$ (`diskFluxHat`, `diskTemperatureHat`). The
+emitted temperature is $T(r) = T_{peak}\thinspace\hat T(r)$, with $T_{peak}$ the disk's
+`peakTemperature`. The flux is already in the gas's own frame, so the redshift is applied once,
+by $g$ (section 9); the observed flux $F/(1 + z)^4$ of Mueller and Frauendiener is the same
+physics and is not applied as well. Near the ISCO $\hat T$ rises as $(r - 6M)^{1/2}$, so the inner
+rim of the disk is dark.
+
+**The inner edge.** `assertDiskSettings` makes both renderers reject a disk with $r_{in} < 6M$ or
+$M \le 0$: a disk inside the ISCO would be an opaque ring with no emission that hides the light
+behind it. The inner edge stays a setting, but the zero torque stays at the ISCO: a disk with
+$r_{in} > 6M$ is the same disk cut off at $r_{in}$, bright at its edge, not a disk with zero torque
+at $r_{in}$. The page always uses $r_{in} = 6M$.
+
+**Limits.** No thickness, no radiative transfer, no self-illumination, no returning radiation
+(light from the disk that falls back on it) and no magnetic fields; isotropic blackbody emission
+in the gas's own frame. Zero torque at the ISCO is an assumption of the model; Page and Thorne
+(1974, footnote 2) note that strong magnetic fields could change it. It is a toy for
+demonstration and must not be presented as a model of any real observation.
+
+**Compared with the Newtonian profile of Stages 1 to 7.** Shakura and Sunyaev (1973) eq. (2.6)
+give the Newtonian flux per face $Q \propto R^{-3}[1 - (R_0/R)^{1/2}]$ with zero torque at the
+inner edge $R_0$, so $T \propto r^{-3/4}(1 - \sqrt{r_{in}/r})^{1/4}$, hottest at
+$r = (49/36)\thinspace r_{in} = 8.17M$. It is the large-radius limit of the Page-Thorne flux (the table
+above); the tests keep it only as an inline oracle there. Page-Thorne puts the hottest radius in the gas's
+own frame 17 % farther out, at $9.55M$, makes the inner rim cooler and the outer disk warmer.
+Emitted temperature with 6500 K at the hottest radius, in the gas's own frame (computed by the
+library):
+
+| $r$ ($M$)       | 6.05 | 6.2  | 6.5  | 7    | 8    | 8.17 ($\tfrac{49}{36}r_{in}$) | 9.55 ($r_{peak}$) | 12   | 15   | 20   |
+| --------------- | ---- | ---- | ---- | ---- | ---- | ----------------------------- | ----------------- | ---- | ---- | ---- |
+| Newtonian (K)   | 3359 | 4642 | 5584 | 6194 | 6496 | 6500                          | 6344              | 5828 | 5218 | 4429 |
+| Page-Thorne (K) | 1477 | 2846 | 4191 | 5315 | 6217 | 6288                          | 6500              | 6249 | 5743 | 4983 |
+
+$\hat F$ at the outer edge, $20M$, is 0.2155 with the Newtonian profile and 0.3455 with
+Page-Thorne. For a face-on observer far away, the observed temperature $g\thinspace T$ with
+$g = \sqrt{1 - 3M/r}$ peaks at $10.79M$ (Newtonian: $9.29M$; computed, not measured on an image).
+
+**Display choices.** The peak temperature of the opaque toy disk, 6500 K at its hottest radius,
+$9.55M$, in the gas's own frame, is a display choice, made at the Stage 1 check-in
+(`docs/DESIGN.md`, section 10); it was not derived from a black hole mass or accretion rate, and
+that record gives no physical reason for it. With the colour-matching fit of section 10a, a
+6500 K blackbody has chromaticity (0.3134, 0.3239), 0.0052 from the sRGB white point D65 (0.3127,
+0.3290). The disk is not drawn at that temperature: each crossing is drawn as a blackbody at $gT$
+(section 9), so the approaching side of the disk is drawn whiter and the receding side brown,
+and the inner rim, where $T$ falls to zero at the ISCO, dark. The page's exposure is fixed at 1.
+Computed by the library (the CPU reference renderer's encoding of a colour-view pixel, not a
+measurement on a GPU), the tone curve of section 10a draws a 6500 K blackbody at (210, 207, 210)
+of 255; one at 3000 K has 0.010 of its luminance and is drawn at (35, 23, 9), and one at 9000 K
+has 3.16 times it and is drawn at (248, 250, 253) (`tests/unit/colour.test.ts`,
+`npm run measure`).
 
 **Not a model of M87\* or Sgr A\*.** The EHT explains its image of M87\* with models in which hot
 plasma near the black hole shines by synchrotron emission (EHT 2019, Paper V, abstract), and it
@@ -689,11 +783,12 @@ model of the central object in M87 (Paper V, section 1). For Sgr A\*, the EHT wr
 inefficient/advection dominated accretion flow" rather than as "a radiatively efficient thin
 disk", and that its emission is driven by the synchrotron process (EHT 2022, Paper V, section 1).
 The EHT's M87\* Paper I gives the wider reason: the brightest quasars are thought to accrete at
-very high rates through a geometrically thin, optically thick disk (Shakura and Sunyaev 1973),
+very high rates through a geometrically thin, optically thick disk (Shakura and Sunyaev 1973,
+whose Newtonian disk the Page-Thorne flux extends to general relativity),
 while most nearby active nuclei, the Galactic center and M87 among them, are fed by hot, tenuous
 flows at much lower accretion rates (EHT 2019, Paper I, section 1).
-photonring's disk is a thin, opaque toy that radiates as a blackbody, with the temperature profile
-of Shakura and Sunyaev (1973), and its black hole does not spin (section 10d, item 6).
+photonring's disk is a thin, opaque toy that radiates as a blackbody, with the flux of Page and
+Thorne (1974), and its black hole does not spin (section 10d, item 6).
 
 ## 10a. Colour
 
@@ -711,7 +806,9 @@ of Shakura and Sunyaev (1973), and its black hole does not spin (section 10d, it
   ($12.92c$ below 0.0031308, $1.055c^{1/2.4} - 0.055$ above).
 - **Scale.** `blackbodyColour` is normalised so a 6500 K blackbody has luminance 1, which keeps
   the physical temperature dependence of brightness: steep in the Wien regime, linear in $T$ in
-  the Rayleigh-Jeans regime (measured ratio 2.027 between $10^6$ and $5\times10^5$ K).
+  the Rayleigh-Jeans regime (measured ratio 2.027 between $10^6$ and $5\times10^5$ K). This
+  normalisation and the disk's 6500 K at its hottest radius, in the gas's own frame (section 10),
+  are two separate display choices that happen to use the same temperature.
   Deep-red blackbodies lie outside the sRGB gamut and get a slightly negative blue channel; the
   renderer clamps negative emission to zero.
 - **Accuracy (measured, `npm run measure`).** Chromaticity against the Planckian locus computed
@@ -755,7 +852,7 @@ of the unit sphere. The star's direction is that point normalised.
 
 For each sample direction, `renderImage` (`src/cpu-renderer/render.ts`) traces the ray and then
 composites front to back along the traced path: each crossing with $r_{in} \le r \le r_{out}$
-adds $\tau\thinspace a\thinspace B(g\thinspace T(r))$ and multiplies the transmittance $\tau$ by $1 - a$, where $a$ is
+adds $\tau\thinspace a\thinspace B(g\thinspace T(r))$, $T = T_{peak}\thinspace\hat T$ (section 10), and multiplies the transmittance $\tau$ by $1 - a$, where $a$ is
 the disk opacity, $B$ the normalised blackbody colour and
 $g = g_\infty(r, L_z/E)/\sqrt{1 - 2M/r_o}$; finally an escaped ray adds $\tau$ times the sky
 radiance in its escape direction. Supersampling averages an $n \times n$ grid of samples per
@@ -763,10 +860,23 @@ pixel. Validation renders use one sample at each pixel centre, no disk, a sky of
 no tone mapping, so captured pixels are exactly 0 and escaped pixels exactly 1.
 
 **On the GPU** (`src/shaders/render.wgsl` and `disk.wgsl`) the same compositing runs at each
-crossing. $T$ and $g$ use only square roots and divisions, because WGSL's `pow` inherits the
-loose error bounds of `exp2` and `log2`: $T = k\thinspace s^{3/2}(1-s)^{1/4}$ with $s = \sqrt{r_{in}/r}$,
-and $g = g_{obs}\sqrt{1-3M/r} /\thinspace(1 - \Omega L_z/E)$ with $\Omega = \sqrt{M/r}/r$. Once the
-transmittance is zero (an opaque disk) tracing stops, since nothing behind can be seen.
+crossing. $T$ and $g$ use only square roots, divisions and one table, because WGSL's `pow`
+inherits the loose error bounds of `exp2` and `log2`, and `log` would cancel near the ISCO. With
+$s = \sqrt{6M/r}$, the Page-Thorne profile factors as $\hat T = s^{3/2}(1 - s)^{1/2}C(s)$, where
+$C$ is smooth and bounded on $[0, 1]$: $C(0) = (576\pi F_{max})^{-1/4} = 2.5212$ and
+$C(1) = \sqrt2\thinspace C(0) = 3.5655$ (for $M = 1$; $C$ itself does not depend on $M$). A table of
+1024 values of $C$ at $s = i/1023$, built by the 64-bit library and stored in f32
+(`src/gpu/host/disk-table.ts`, 4 KB, group 0 binding 3), is interpolated linearly in $s$; the
+shader forms $s^{3/2}(1 - s)^{1/2}$ with square roots and writes $1 - s$ as
+$((r - 6M)/r)/(1 + s)$, which does not cancel near the ISCO, because $r - 6M$ is exact there when
+$6M$ is exact in f32, as for the page's $M = 1$; for a mass whose $6M$ is not exact in f32 the error
+grows near the ISCO (emulated: $3.7\times10^{-4}$ at $6.0006M$ for $M = 1.7$). Then
+$T = T_{peak}\thinspace\hat T$ and $g = g_{obs}\sqrt{1-3M/r} /\thinspace(1 - \Omega L_z/E)$ with
+$\Omega = \sqrt{M/r}/r$. The zero torque is at $6M$ whatever the inner edge. Measured on the M5's
+GPU, $\hat T$ from the shader is within $5.3\times10^{-7}$ of the 64-bit library at the f32 radius,
+for 4096 radii from $6M(1 + 10^{-4})$ to $1000M$, and within $2.9\times10^{-7}$ at the first eight f32
+radii above $6M$ (`tests/gpu/disk-profile.spec.ts`). Once the transmittance is zero (an opaque
+disk) tracing stops, since nothing behind can be seen.
 
 **Anti-aliasing** (`src/shaders/refine.wgsl`, `src/gpu/host/antialias.ts`). A second pass gives a
 pixel the CPU renderer's $3 \times 3$ grid of samples (the centre one is the first pass's) when
@@ -801,14 +911,15 @@ the caveats at the end of this section say why, and the page says so wherever th
 back over the disk crossings like the colour view (`compositeDiskBolometric`):
 
 ```math
-I = \sum_k \tau_k\,a\,\left(g\,\hat T(r_k)\right)^4,\qquad \tau_0 = 1,\quad \tau_{k+1} = \tau_k (1 - a),
+I = \sum_k \tau_k\,a\,g_k^4\,\hat F(r_k),\qquad \tau_0 = 1,\quad \tau_{k+1} = \tau_k (1 - a),
 ```
 
-with $g$ the frequency ratio of section 9 (including the static observer's factor), $\hat T$ the
-temperature profile of section 10 normalised to 1 at its peak, and $a$ the disk opacity. Because
-$I_\nu/\nu^3$ is invariant along a ray (section 9, Cunningham 1975, eq. 6), the observed
-frequency-integrated intensity of a blackbody is $g^4$ times the emitted $\sigma T^4/\pi$; in units
-of the peak emission that is $(g\hat T)^4$, so the peak temperature and the exposure drop out.
+with $g_k$ the frequency ratio of section 9 at crossing $k$ (including the static observer's
+factor), $\hat F$ the Page-Thorne flux of section 10 over its peak value, and $a$ the disk
+opacity. Because $I_\nu/\nu^3$ is invariant along a ray (section 9, Cunningham 1975, eq. 6), the
+observed frequency-integrated intensity of a blackbody is $g^4$ times the emitted
+$\sigma T^4/\pi = F/\pi$; in units of the peak emission that is $g^4\hat F = (g\hat T)^4$, so the
+peak temperature and the exposure drop out.
 Escaped and captured rays add nothing: the sky is black. It is not the brightness at one
 frequency, which would weight a power-law spectrum $I_\nu \propto \nu^{-\alpha_\nu}$ by
 $g^{3+\alpha_\nu}$ instead (from the same invariant). On the GPU this is two squarings of
@@ -893,19 +1004,22 @@ brightest regions merge.
 
 **Measured on the CPU twin** at the preset (`tests/unit/eht-render.test.ts`, 432 x 432, one
 sample per pixel): the ring, the peak of the azimuthal mean of the blurred image, lies at
-$b = 11.21M$, so it is 22.4 M across, about twice M87*'s ring of $11\thinspace\theta_g$
+$b = 12.53M$, so it is 25.1 M across, 2.3 times M87*'s ring of $11\thinspace\theta_g$
 ($11^{+0.5}_{-0.3}$, Paper I, Table 1) in units of M; the bright side, the brightness-weighted
-direction around the ring, is at position angle 196.7 degrees, inside M87*'s published 150 to
-200 degrees (Paper I, Table 1).
+direction around the ring, is at position angle 194.9 degrees, inside M87*'s published 150 to
+200 degrees (Paper I, Table 1). At sizes from 192 to 640 px the ring lies at 12.52 to 12.57 M and
+the bright side at 194.83 to 194.88 degrees. With the Newtonian profile of Stages 1 to 7 these were
+$11.21M$ (22.4 M across, about twice M87*'s) and 196.7 degrees: the ring moved out with the
+flux peak.
 
 **What it is not** (also in the page's legend, the About text and the README):
 
 1. Different light: the EHT explains M87*'s image with models in which hot plasma shines by
    synchrotron emission (Paper V, abstract and section 2), and it calls a geometrically thick,
    optically thin accretion flow the conventional model (Paper V, section 1); this disk is a thin,
-   opaque, Newtonian blackbody toy (section 10).
+   opaque blackbody toy with the Page-Thorne flux (section 10).
 2. A different ring: in the EHT's models the ring is "related to the lensed photon ring" (Paper I,
-   section 6); here the bright ring is the disk's direct image near its flux peak, about twice the
+   section 6); here the bright ring is the disk's direct image near its flux peak, 2.3 times the
    size in units of M (above). Nothing emits inside the ISCO, so the dark centre is wider than the
    shadow (compare section 6a, which cites Chael, Johnson and Lupsasca 2021).
 3. A different asymmetry: here the Keplerian disk's Doppler beaming; in the EHT's best-fitting
@@ -921,8 +1035,8 @@ direction around the ring, is at position angle 196.7 degrees, inside M87*'s pub
 
 **Checks** (`tests/unit/eht.test.ts`, `tests/unit/eht-post.test.ts`,
 `tests/unit/eht-render.test.ts`, `tests/gpu/eht.spec.ts`, `tests/e2e/eht.spec.ts`; values in
-`docs/VALIDATION.md`). The bolometric compositing reproduces $(g\hat T)^4$ with the library's
-redshift; the pixel scale equals a central difference of the image radius; the framing fits 28 M
+`docs/VALIDATION.md`). The bolometric compositing reproduces $g^4\hat F = (g\hat T)^4$ with the
+library's redshift; the pixel scale equals a central difference of the image radius; the framing fits 28 M
 into the shorter side; the roll turns the image and puts the disk axis at 108 degrees; the colour
 table reproduces the formula; the discrete chain's variance and the point response match the
 beam; the downsampled blur stays within 1 level of a direct full-resolution Gaussian on a toy
@@ -1041,16 +1155,21 @@ Each entry was confirmed from its text, or, where the entry says so, from publis
   228-235. ADS 1979A&A....75..228L (eqs. 6, 18 and 19; p. 233)
 - NIST CODATA: second radiation constant $c_2$, exact,
   https://physics.nist.gov/cgi-bin/cuu/Value?c22ndrc
+- Mueller, T. and Frauendiener, J. (2012). Interactive visualization of a thin disc around a
+  Schwarzschild black hole. Eur. J. Phys. 33, 955. doi:10.1088/0143-0807/33/4/955,
+  arXiv:1206.4259 (eq. 11 and the peak values printed below it, numbered as in arXiv v1; the
+  journal reference is taken from the arXiv record; their program was not opened)
 - Page, D. N. and Thorne, K. S. (1974). Disk-accretion onto a black hole. I. Time-averaged
-  structure of accretion disk. ApJ 191, 499-506. doi:10.1086/152990 (title page and abstract
-  read; cited only for the existence of the relativistic solution)
+  structure of accretion disk. ApJ 191, 499-506. doi:10.1086/152990 (eqs. 10b, 11b, 12, 13, 14
+  and 15a to 15n, section III.d and footnote 2, read in the NASA ADS scan; the flux of section 10)
 - Perlick, V. and Tsupko, O. Yu. (2022). Calculating black hole shadows: review of analytical
   studies. Phys. Rep. 947, 1-39. doi:10.1016/j.physrep.2021.10.004, arXiv:2105.07101 (eqs. 6 to
   8, numbered as in arXiv v2)
 - Roux, P. (2014). Innocuous double rounding of basic arithmetic operations. Journal of Formalized
   Reasoning 7(1), 131-142. doi:10.6092/issn.1972-5787/4359
 - Shakura, N. I. and Sunyaev, R. A. (1973). Black holes in binary systems. Observational
-  appearance. A&A 24, 337-355. ADS 1973A&A....24..337S, no DOI (eq. 2.6; p. 344)
+  appearance. A&A 24, 337-355. ADS 1973A&A....24..337S, no DOI (eq. 2.6; p. 344; the Newtonian
+  profile of Stages 1 to 7, kept as the large-radius limit in section 10)
 - Software consulted for the afmhot formula only (no code copied): gnuplot 6.1 documentation,
   "rgbformulae", https://gnuplot.sourceforge.net/docs_6.1/loc15420.html; matplotlib
   `lib/matplotlib/_cm.py` (`_g34`, `_g35`, `_g36`, `_afmhot_data`), commit

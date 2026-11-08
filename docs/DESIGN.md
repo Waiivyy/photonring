@@ -1,9 +1,9 @@
 # Design decisions
 
-Status: Stage 8 (first release: link previews and disclosures, section 17). Every number below
-was measured unless it is labelled as an estimate. Machine for all measurements: Apple M5 (10-core
-GPU), 24 GB, macOS 27.0, Node 25.6.1, except the CI runs in sections 5 and 14, which name their
-runner. In section 3, and where section
+Status: Stage 8 (first release: link previews and disclosures; then the Page-Thorne disk; section
+17). Every number below was measured unless it is labelled as an estimate. Machine for all
+measurements: Apple M5 (10-core GPU), 24 GB, macOS 27.0, Node 25.6.1, except the CI runs in
+sections 5 and 14, which name their runner. In section 3, and where section
 6 says "emulated", the f32 results come from an emulation (`Math.fround` after every operation);
 sections 6 and 11 have the measurements on the GPU.
 
@@ -245,7 +245,8 @@ operations, about $3\times10^9$ per frame at 1920x1080 before supersampling. Nei
 should take similar step counts except near the photon ring, but SIMD groups run as long as their
 slowest ray (up to 155 to 251 steps against a mean of 33), so real cost depends on divergence and
 memory traffic. Stage 2 measures it with timestamp queries. Measured in Stage 3: 5.31 ms of GPU
-time for the 1920 x 1080 first pass with the disk (`docs/PERFORMANCE.md`).
+time for the 1920 x 1080 first pass with the disk (`docs/PERFORMANCE.md`; commit 8783558, with the
+Newtonian disk of Stages 1 to 7, not re-run after the Page-Thorne disk of Stage 8).
 
 ## 4. Browser support and fallback
 
@@ -400,16 +401,16 @@ Stage 6, and "Measured" is the worst value they found: Node-side test values fro
 runs). The frame-rate row is not a test: it is the Stage 3 benchmark. Details are in
 `docs/VALIDATION.md` and `docs/PERFORMANCE.md`.
 
-| Quantity                                                                                             | Brief's guess                   | Proposed                                   | Tolerance in the tests                                                                                                                                                                                                                    | Measured                                                                                                                                                                                                                                                                                           |
-| ---------------------------------------------------------------------------------------------------- | ------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Deflection, f64 library, $b$ = 1.02 to 100 $b_c$                                                     | $< 10^{-6}$ relative            | Keep $< 10^{-6}$                           | $10^{-6}$ relative for each integrator at its fine step ($d\phi = 0.005$ for Binet), $b$ = 1.01 to 1000 $b_c$ (`integrators.test.ts`)                                                                                                     | Binet RK4 $1.8\times10^{-8}$ (Cartesian RK4 $1.4\times10^{-10}$, leapfrog $7.3\times10^{-7}$); Binet at the CPU renderer's $d\phi = 0.0125$: $8.0\times10^{-8}$ over 1.02 to 100 $b_c$ (Stage 0 spike, section 3)                                                                                  |
-| Deflection, f32 path, same range                                                                     | $< 10^{-3}$ relative            | $< 10^{-4}$ relative                       | f32 emulation at the renderer steps: $10^{-3}$ relative, $b$ = 1.01 to 1000 $b_c$ (`integrators.test.ts`); GPU: $10^{-4}$ relative, $b$ = 1.02 to 100 $b_c$ (`parity.spec.ts`)                                                            | Emulated Binet $3.7\times10^{-4}$ over 1.01 to 1000 $b_c$ (section 3's table has $3.7\times10^{-4}$ at 1000 $b_c$, where $\alpha$ is small, and $2.8\times10^{-6}$ over 1.02 to 100 $b_c$); Cartesian RK4 $2.9\times10^{-4}$, leapfrog $7.8\times10^{-4}$; GPU $2.8\times10^{-5}$                  |
-| Escape direction, f32, all directions outside $\lvert b/b_c - 1\rvert < 10^{-3}$, $r_o$ = 5 to 200 M | (new)                           | $\le 0.25$ px at 1080 rows, 60 degree FOV  | GPU: 0.25 px ($2.4\times10^{-4}$ rad) against the f64 library, 6912 pixel-centre rays at 5, 30 and 200 M (`parity.spec.ts`)                                                                                                               | GPU 0.058 px ($5.6\times10^{-5}$ rad) over the 6196 that escape outside the band                                                                                                                                                                                                                   |
-| Capture or escape classification outside that band                                                   | (new)                           | Zero errors; f32 $b_c$ within $10^{-6}$    | Zero errors (f64 outside $\lvert b/b_c - 1\rvert < 10^{-6}$, f32 emulation outside $10^{-3}$, at 5, 30 and 200 M; GPU over the 6912 rays); $b_c$ by bisection within $10^{-6}$ (f64) and $10^{-4}$ (f32 emulation), all three integrators | 0 errors; $b_c$: Binet $4.1\times10^{-12}$ (f64) and $2.4\times10^{-7}$ (emulated f32), worst in emulated f32 leapfrog $6.1\times10^{-6}$. The f32 bisection test has used $10^{-4}$ since it was written (2de4b1f), not the proposed $10^{-6}$                                                    |
-| Step-limit hits                                                                                      | "investigate"                   | Zero, with a cap of 1000 steps             | Zero in the integrator, CPU render, GPU parity, robustness and validation tests                                                                                                                                                           | 0 everywhere, including 3296 GPU results at the hole, on the polar axis and at both distance limits (section 15)                                                                                                                                                                                   |
-| Shadow radius                                                                                        | 1 px or 0.5 %, whichever larger | Keep until Stage 1 measures the CPU render | 1 px or 0.5 %, whichever is larger, on the CPU render and on the GPU validation render                                                                                                                                                    | CPU at most 0.11 px; GPU 0.006 to 0.027 px at 5 to 200 M                                                                                                                                                                                                                                           |
-| Frame rate                                                                                           | 30 fps at 1920x1080 with disk   | Keep as target; measure in Stage 2 and 3   | None: benchmarked (`npm run bench:gpu`), not asserted                                                                                                                                                                                     | GPU time 5.31 ms for the 1920 x 1080 first pass with the disk and 12.78 ms for the anti-aliased image (headless Chrome 156.0.8078.48, timestamp queries; `npm run bench:gpu` on 2026-10-27, on the code of commit 8783558 as inferred in `docs/PERFORMANCE.md`); presented frame rate not measured |
-| Camera distance                                                                                      | 5 to 200 M, default 30 M        | See open question 2                        | Links clamp the distance to 5 to 200 M (`url-state.test.ts`); the shadow, parity and robustness tests run at both ends                                                                                                                    | The shadow, parity and robustness checks pass at both ends                                                                                                                                                                                                                                         |
+| Quantity                                                                                             | Brief's guess                   | Proposed                                   | Tolerance in the tests                                                                                                                                                                                                                    | Measured                                                                                                                                                                                                                                                                                                                                                                     |
+| ---------------------------------------------------------------------------------------------------- | ------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Deflection, f64 library, $b$ = 1.02 to 100 $b_c$                                                     | $< 10^{-6}$ relative            | Keep $< 10^{-6}$                           | $10^{-6}$ relative for each integrator at its fine step ($d\phi = 0.005$ for Binet), $b$ = 1.01 to 1000 $b_c$ (`integrators.test.ts`)                                                                                                     | Binet RK4 $1.8\times10^{-8}$ (Cartesian RK4 $1.4\times10^{-10}$, leapfrog $7.3\times10^{-7}$); Binet at the CPU renderer's $d\phi = 0.0125$: $8.0\times10^{-8}$ over 1.02 to 100 $b_c$ (Stage 0 spike, section 3)                                                                                                                                                            |
+| Deflection, f32 path, same range                                                                     | $< 10^{-3}$ relative            | $< 10^{-4}$ relative                       | f32 emulation at the renderer steps: $10^{-3}$ relative, $b$ = 1.01 to 1000 $b_c$ (`integrators.test.ts`); GPU: $10^{-4}$ relative, $b$ = 1.02 to 100 $b_c$ (`parity.spec.ts`)                                                            | Emulated Binet $3.7\times10^{-4}$ over 1.01 to 1000 $b_c$ (section 3's table has $3.7\times10^{-4}$ at 1000 $b_c$, where $\alpha$ is small, and $2.8\times10^{-6}$ over 1.02 to 100 $b_c$); Cartesian RK4 $2.9\times10^{-4}$, leapfrog $7.8\times10^{-4}$; GPU $2.8\times10^{-5}$                                                                                            |
+| Escape direction, f32, all directions outside $\lvert b/b_c - 1\rvert < 10^{-3}$, $r_o$ = 5 to 200 M | (new)                           | $\le 0.25$ px at 1080 rows, 60 degree FOV  | GPU: 0.25 px ($2.4\times10^{-4}$ rad) against the f64 library, 6912 pixel-centre rays at 5, 30 and 200 M (`parity.spec.ts`)                                                                                                               | GPU 0.058 px ($5.6\times10^{-5}$ rad) over the 6196 that escape outside the band                                                                                                                                                                                                                                                                                             |
+| Capture or escape classification outside that band                                                   | (new)                           | Zero errors; f32 $b_c$ within $10^{-6}$    | Zero errors (f64 outside $\lvert b/b_c - 1\rvert < 10^{-6}$, f32 emulation outside $10^{-3}$, at 5, 30 and 200 M; GPU over the 6912 rays); $b_c$ by bisection within $10^{-6}$ (f64) and $10^{-4}$ (f32 emulation), all three integrators | 0 errors; $b_c$: Binet $4.1\times10^{-12}$ (f64) and $2.4\times10^{-7}$ (emulated f32), worst in emulated f32 leapfrog $6.1\times10^{-6}$. The f32 bisection test has used $10^{-4}$ since it was written (2de4b1f), not the proposed $10^{-6}$                                                                                                                              |
+| Step-limit hits                                                                                      | "investigate"                   | Zero, with a cap of 1000 steps             | Zero in the integrator, CPU render, GPU parity, robustness and validation tests                                                                                                                                                           | 0 everywhere, including 3296 GPU results at the hole, on the polar axis and at both distance limits (section 15)                                                                                                                                                                                                                                                             |
+| Shadow radius                                                                                        | 1 px or 0.5 %, whichever larger | Keep until Stage 1 measures the CPU render | 1 px or 0.5 %, whichever is larger, on the CPU render and on the GPU validation render                                                                                                                                                    | CPU at most 0.11 px; GPU 0.006 to 0.027 px at 5 to 200 M                                                                                                                                                                                                                                                                                                                     |
+| Frame rate                                                                                           | 30 fps at 1920x1080 with disk   | Keep as target; measure in Stage 2 and 3   | None: benchmarked (`npm run bench:gpu`), not asserted                                                                                                                                                                                     | GPU time 5.31 ms for the 1920 x 1080 first pass with the disk and 12.78 ms for the anti-aliased image (headless Chrome 156.0.8078.48, timestamp queries; `npm run bench:gpu` on 2026-10-27, on the code of commit 8783558 as inferred in `docs/PERFORMANCE.md`, with the Newtonian disk; not re-run with the Page-Thorne disk of Stage 8); presented frame rate not measured |
+| Camera distance                                                                                      | 5 to 200 M, default 30 M        | See open question 2                        | Links clamp the distance to 5 to 200 M (`url-state.test.ts`); the shadow, parity and robustness tests run at both ends                                                                                                                    | The shadow, parity and robustness checks pass at both ends                                                                                                                                                                                                                                                                                                                   |
 
 ## 7. Formulas from the brief: verified or corrected
 
@@ -427,7 +428,7 @@ Derivations and references are in `docs/PHYSICS.md`.
 | $\Omega = \sqrt{M/r^3}$, $u^t = (1-3M/r)^{-1/2}$                                     | Verified                                                                                                                                                                                                                                                                                             |
 | $g = 1/(u^t(1 - \Omega L/E))$, observer at infinity                                  | Verified (Luminet 1979, Cunningham 1975). **Correction for this renderer:** the camera is a static observer at $r_o$, so $g_{obs} = g/\sqrt{1-2M/r_o}$ (1.035 at 30M, 1.29 at 5M)                                                                                                                    |
 | Face-on $g = \sqrt{1-3M/r}$; static emitter $\sqrt{1-2M/r}$; intensity $\propto g^4$ | Verified                                                                                                                                                                                                                                                                                             |
-| $T \propto r^{-3/4}(1-\sqrt{r_{in}/r})^{1/4}$                                        | Verified as the Newtonian Shakura-Sunyaev profile (not Page-Thorne); peak at $(49/36)r_{in}$                                                                                                                                                                                                         |
+| $T \propto r^{-3/4}(1-\sqrt{r_{in}/r})^{1/4}$                                        | Verified as the Newtonian Shakura-Sunyaev profile (not Page-Thorne); peak at $(49/36)r_{in}$. Replaced in Stage 8 by the Page-Thorne flux, hottest at $9.55M$ in the gas's own frame (`docs/PHYSICS.md`, section 10; section 17)                                                                     |
 | $T_{obs} = g\thinspace T_{emit}$                                                     | Verified ($I_\nu/\nu^3$ invariance)                                                                                                                                                                                                                                                                  |
 
 Also found: the starless write-up prints $u'' + u = \tfrac32 u^3$ and a force along
@@ -489,11 +490,13 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
   most 0.00023 at 6500 K (0.00011 at 10000 K and 20000 K), 0.0012 at 3000 K and 0.0046 at
   1500 K, and from CIE illuminant A (2856 K) by 0.0013 (`npm run measure`; tolerance 0.002, and
   0.005 at 1500 K).
-- **Disk defaults:** inner edge at the ISCO, outer edge at $20M$, 6500 K at the hottest radius,
-  exposure 1, and opaque (opacity 1), which the user confirmed at the Stage 1 visual check-in
-  after comparing it with a 0.6-opacity render. The 6500 K is a display choice; this record gives
-  no physical reason for it, and since Stage 8 the README, About and `docs/PHYSICS.md` say so
-  (section 17).
+- **Disk defaults:** inner edge at the ISCO, outer edge at $20M$, 6500 K at the hottest radius
+  in the gas's own frame, exposure 1, and opaque (opacity 1), which the user confirmed at the
+  Stage 1 visual check-in after comparing it with a 0.6-opacity render. The 6500 K is a display
+  choice; this record gives no physical reason for it, and since Stage 8 the README, About and
+  `docs/PHYSICS.md` say so (section 17). The hottest radius was $(49/36)\thinspace r_{in} = 8.17M$ with
+  the Newtonian profile of Stages 1 to 7; with the Page-Thorne flux of Stage 8 it is $9.55M$, and
+  6500 K stays the temperature there (section 17).
 - **CPU reference settings:** $d\phi = 0.0125$ (f64 deflection error $8\times10^{-8}$, section 3),
   step cap 4000. Rendering 320x180 with 3x3 samples (518,400 rays) takes 1.0 to 3.5 s per image
   on the Apple M5 in Node 25.6.1.
@@ -531,7 +534,10 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
 - **Limits:** the internal resolution is CSS size x device pixel ratio, reduced to fit
   `maxTextureDimension2D` and a 3840 x 2160 pixel budget, keeping the aspect ratio. Everything else
   fits the default limits by a wide margin (frame uniforms 160 bytes, colour table 32 KB, at most
-  32 x 32 workgroups per tile), so the device is requested with default limits. `?maxdim=N` lowers
+  32 x 32 workgroups per tile), so the device is requested with default limits. Later stages
+  added fields: the frame uniforms were 176 bytes at a526c7d (computed from the field list in
+  Stage 8), and the rename of Stage 8 kept that size; Stage 8 adds a 4 KB disk table, a third read-only storage buffer in group 0 (five per
+  compute stage in the parity pipelines, within the default limit of 8). `?maxdim=N` lowers
   the texture limit for testing; it can only reduce the size.
 - **Tiling and time budget:** 256 x 256 tiles, centre first, each submitted separately with its own
   parameters. Each animation frame dispatches only as many tiles as its 12 ms budget allows, from
@@ -1087,8 +1093,9 @@ fidelity first" on 2026-11-08.
     says that the page is not a simulation of any real observation, so a preview that cuts the
     text short still shows that part (where previews cut was not checked).
   - The image's alt text describes the social preview as it looks: the disk nearly white on the
-    left and darker brown on the right, its far side arched over the shadow, the thin bright arc,
-    the smeared stars.
+    left, greyish brown on the right and dark along its inner edge (rewritten for the Page-Thorne
+    render below; it said darker brown on the right before), its far side arched over the shadow,
+    the thin bright arc, the smeared stars.
   - The X tags are written out in full: X's documentation answered HTTP 402, so its fallback to
     the Open Graph tags could not be confirmed. Its 420-character limit for the alt text comes only
     from a search snippet.
@@ -1141,6 +1148,45 @@ fidelity first" on 2026-11-08.
   the two sides of the disk look less different than the factor of 71 was left out: it was not
   measured, and a first estimate in the critique did not support it. The page for browsers without
   WebGPU, the EHT-style view's legend and the Controls panel are unchanged.
+- **The Page-Thorne disk (item 3 of the stage).** Designed with an independent critique
+  (`artifacts/stage8/design/disk-fidelity.md` and `disk-fidelity-critique.md`, gitignored); the
+  owner's decisions of 2026-11-08 are applied:
+  - The disk's flux is the relativistic thin-disk flux of Page and Thorne (1974) for a
+    non-rotating hole, with zero torque at the ISCO, in the 64-bit library, the CPU renderer, the
+    GPU shader and the EHT-style view (`docs/PHYSICS.md`, section 10). The Newtonian profile is
+    gone from the library and the renderers, with no page option; `tests/unit/disk-flux.test.ts`
+    keeps a small inline Newtonian flux function as the large-radius oracle.
+  - 6500 K stays the temperature at the hottest radius in the gas's own frame, now $9.55M$ (it was
+    $8.17M$), and stays a display choice. Every text that names it says "in the gas's own frame".
+  - The library uses a form of the flux without cancellation near the ISCO, checked against
+    eq. (12) of the paper integrated numerically and against a second closed form (Mueller and
+    Frauendiener 2012). In 64-bit floats the closed form in $B(x)$, its three terms summed directly, is off by $2.2\times10^{-5}$ at
+    $r = 6M(1 + 10^{-6})$.
+  - The inner edge stays a setting, from $6M$ out; the zero torque stays at $6M$, so a larger
+    inner edge cuts the disk off. `assertDiskSettings` makes both renderers reject an inner edge
+    inside the ISCO and $M \le 0$. The table, the GPU profile and the GPU light tests also run
+    with a disk cut at 7 M, so a shader that took the zero torque from the inner edge fails (it
+    did, when tried).
+  - GPU: `temperatureHat` in `src/shaders/disk.wgsl` multiplies $s^{3/2}(1 - s)^{1/2}$,
+    $s = \sqrt{6M/r}$, by the smooth factor $C(s)$ from a 1024-entry table built in f64
+    (`src/gpu/host/disk-table.ts`, 4 KB, group 0 binding 3), with square roots, divisions and
+    linear interpolation, and $1 - s$ written as $((r - 6M)/r)/(1 + s)$; no `log`, `atanh` or
+    `pow`. The frame field `diskTemperatureScale` became `diskPeakTemperature` (the peak
+    temperature itself, 1 in the EHT-style view). Measured on the M5 in Chrome 157.0.8103.38,
+    $\hat T$ from the shader is within $5.3\times10^{-7}$ of the library at the f32 radius
+    ($M = 1$); the test's tolerance, guessed at $10^{-5}$, was settled at $2\times10^{-6}$.
+  - The EHT-style ring moved with the flux peak: 12.53 M (25.1 M across, 2.3 times M87*'s
+    $11\thinspace\theta_g$), from 11.21 M; the bright side is at 194.9 degrees (196.7). The test's
+    ring bracket moved to 12 to 13 M (`docs/VALIDATION.md`, Tolerance changes), and the legend now
+    says the real ring is "less than half this size" in units of M (11/25.1 = 0.44; it said
+    "about half", 0.49 before).
+  - Accepted at the owner's visual check-in on 2026-11-09, each byte for byte the candidate the
+    owner looked at: the goldens `diskFaceOn` and `diskInclined` (`flatSpace` and `noDisk` are
+    byte-identical), the README images, the hero and social preview, and the gallery of the page
+    for browsers without WebGPU. The before-and-after renders are in
+    `artifacts/stage8/page-thorne/` (gitignored). The GPU
+    benchmarks were not re-run: their disk times are of the Newtonian profile, at the commits
+    `docs/PERFORMANCE.md` names.
 - **The survey refreshed** (section 1): re-checked through the GitHub API and the READMEs on
   2026-11-08, with seven more projects, a column for whether each checks its GPU output in CI, and
   the October list of differences re-checked one by one.

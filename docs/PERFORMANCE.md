@@ -12,15 +12,16 @@ what else the GPU is doing.
 ## GPU renderer (Stage 3)
 
 `npm run bench:gpu`: Google Chrome 156.0.8078.48, headless, driven by Playwright; WebGPU adapter
-"apple / metal-3" (not the fallback adapter). Settings: star field on, default disk (opaque,
-$6M$ to $20M$), $d\phi = 0.05$, step cap 1000, 256 x 256 tiles submitted back to back, tone
+"apple / metal-3" (not the fallback adapter). Settings: star field on, the default disk of the time, the Newtonian profile of
+Stages 1 to 7 (opaque, $6M$ to $20M$), $d\phi = 0.05$, step cap 1000, 256 x 256 tiles submitted back to back, tone
 mapping on. Each cell is the median of nine runs after a warm-up run. All times are GPU
 milliseconds from timestamp queries.
 
 Measured on 2026-10-27 on the code of commit 8783558 (inferred: `artifacts/stage3/benchmark.json`
-was written 16 s before that commit). The image path changed afterwards only in two refactors
-(6def8d9, the termination colours from one constant; bde3726, tile submission) and was not
-re-measured. The harness renders offscreen at the stated sizes.
+was written 16 s before that commit). The image path changed afterwards in two refactors
+(6def8d9, the termination colours from one constant; bde3726, tile submission) and in Stage 8 in
+the disk's emission (d25071e: the Page-Thorne flux, read from a table at each disk crossing); none
+of these was re-measured, so the disk times here are of the Newtonian profile. The harness renders offscreen at the stated sizes.
 
 Stages of one image (section 12 of `docs/DESIGN.md`): the **first pass** traces one sample per
 pixel; **anti-aliasing** adds a 3 x 3 grid of samples where the image needs it; a **preview** is
@@ -182,7 +183,8 @@ so the budget is unchanged. At 4K each present adds about 1.8 ms to its frame.
 
 `npm run bench:gpu` (`tests/bench/subrings.spec.ts`): Google Chrome 156.0.8078.80, headless;
 adapter "apple / metal-3"; measured on 2026-11-05 on the code of commit d68c8e6
-(`artifacts/stage7/benchmark-subrings.json`). Default disk, no anti-aliasing (the strip view has
+(`artifacts/stage7/benchmark-subrings.json`). Default disk of the time (the Newtonian profile; the
+Page-Thorne disk of d25071e was not benchmarked), no anti-aliasing (the strip view has
 none), black sky for the strip and the star field for the colour view, $d\phi = 0.05$, step cap 1000. GPU milliseconds from timestamp queries, median of nine runs after a warm-up run.
 
 | View   | Camera                 | Resolution  | First pass ms | Preview 1/2 ms | Preview 1/4 ms |
@@ -232,8 +234,26 @@ preview tags to `index.html` and the display-choice text to the JS. The Stage 6 
 | Everything in `dist/`  | 805,032 | 706,844 | 700,738 |
 
 With WebGPU the page loads `index.html`, the JS and the CSS (and possibly the favicon): 147,978
-bytes, 50,319 with gzip. The gallery images load only on the page for browsers without WebGPU, and
-the social preview is never loaded by the page (link previews fetch it). What GitHub Pages actually
+bytes, 50,319 with gzip.
+
+Measured again the same way on 2026-11-09, on the build of commit d25071e (the Page-Thorne disk).
+It adds the flux functions and the disk table's builder to the JS; the table itself is built at
+start-up, not downloaded. `index.html` grew by the longer alt text of the social preview, and the
+re-rendered gallery images and social preview changed size.
+
+| Files                  | Raw     | gzip    | brotli  |
+| ---------------------- | ------- | ------- | ------- |
+| JS (one file)          | 142,352 | 48,461  | 42,782  |
+| CSS (one file)         | 6,087   | 1,966   | 1,690   |
+| `index.html`           | 3,142   | 933     | 679     |
+| `favicon.svg`          | 233     | 168     | 143     |
+| Gallery PNGs (4 files) | 411,054 | 410,631 | 410,515 |
+| `social-preview.png`   | 247,530 | 247,463 | 247,535 |
+| Everything in `dist/`  | 810,398 | 709,622 | 703,344 |
+
+With WebGPU: 151,581 bytes, 51,360 with gzip. The gallery images load only on the page for
+browsers without WebGPU, and the social preview is never loaded by the page (link previews fetch
+it). What GitHub Pages actually
 sends compressed was not measured. There is no size budget.
 
 ## CI run times (Stage 5)
@@ -278,12 +298,12 @@ without the disk. The 640 x 360 gallery images (2.07 million rays each) take 9 t
 `npm run render:hero` (`tools/render-hero.ts`, views in `tools/hero-views.ts`, commit afd9fd5),
 measured on 2026-10-28: Node 25.6.1, one thread, f64, $d\phi = 0.0125$, at most 4000 steps per
 ray, 3 x 3 samples per pixel, the page's scene (star sky, the default disk, exposure 1, tone
-mapping) and its automatic field of view. `docs/images/hero.png` is the first row, the page's
-opening view (`#v=1&r=30&az=0&el=12&disk=1&aa=1&view=colour&ov=none&val=0`). All eight rows come
+mapping) and its automatic field of view. `docs/images/hero.png` was the first row until Stage 8 (below), the
+page's opening view (`#v=1&r=30&az=0&el=12&disk=1&aa=1&view=colour&ov=none&val=0`). All eight rows come
 from one run of `npm run render:hero -- --candidates`, which writes them to the gitignored
 `artifacts/stage6/`. The owner kept the default view: `public/social-preview.png` is the fifth
 row's view, rendered again on 2026-11-04 by `npm run render:hero -- --social` (41.6 s, the same
-248,032 bytes).
+248,032 bytes; replaced in Stage 8, below).
 
 | Candidate            | Distance, elevation, field of view | Size       | Time   | PNG bytes |
 | -------------------- | ---------------------------------- | ---------- | ------ | --------- |
@@ -300,3 +320,9 @@ A 1600 x 900 image traces 12,960,000 samples and a 1280 x 640 one 7,372,800; in 
 sample was finite and none reached the step limit. The eight images and a contact sheet took
 6 min 58 s in all. A separate `npm run render:hero` wrote `docs/images/hero.png` in 75.8 s, with
 the same bytes as `01-hero-default` (identical SHA-256).
+
+Stage 8 rendered both again with the Page-Thorne disk on 2026-11-09, at commit d25071e's code with
+the same views and settings (Node 25.6.1, one thread, Apple M5): `npm run render:hero` wrote
+`docs/images/hero.png`, 377,806 bytes, in 74.2 s, and `npm run render:hero -- --social` wrote
+`public/social-preview.png`, 247,530 bytes, in 41.5 s; every sample was finite and none reached
+the step limit. Both are byte for byte the candidates the owner approved at the visual check-in.

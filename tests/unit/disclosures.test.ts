@@ -135,4 +135,17 @@ describe('the disk follows the Page-Thorne flux in every text (Stage 8)', () => 
     expect(DISK_LIMIT).toContain('toy');
     expect(DISK_LIMIT).not.toContain('simple temperature profile');
   });
+
+  it.each(Object.entries(DOCS))('%s names Page and Thorne for the disk', (_name, text) => {
+    expect(text).toContain('Page and Thorne');
+  });
+
+  it.each(Object.entries(DOCS))(
+    '%s gives the Newtonian peak and Shakura and Sunyaev only as the Newtonian profile',
+    (_name, text) => {
+      for (const p of paragraphs(text)) {
+        if (p.includes('49/36') || p.includes('Shakura')) expect(p).toMatch(/Newtonian/);
+      }
+    },
+  );
 });
