@@ -378,8 +378,9 @@ export function subringOffset(rObs: number, R: number, n: number, phi0: number, 
 
 /**
  * Leading-order offset eps_n = C exp(-dphi_c(1/rObs) - dphi_c(1/R) - phi0 - n pi), with
- * C = 216 (7 - 4 sqrt 3): Bozza's strong deflection law applied to each leg, with the critical
- * orbit's sweep criticalOrbitSweep for the finite ends (docs/PHYSICS.md, 6b).
+ * C = 216 (7 - 4 sqrt 3): the strong deflection law for a source and an observer at finite
+ * distances of Bozza and Scarpetta (2007, eq. 68), written with the critical orbit's sweep
+ * criticalOrbitSweep (docs/PHYSICS.md, 6b, which credits the later papers that use it).
  */
 export function subringOffsetLeadingOrder(
   rObs: number,

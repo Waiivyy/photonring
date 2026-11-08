@@ -46,9 +46,12 @@ jobs:
             playwright-report/
           retention-days: 7
           if-no-files-found: ignore
+      # Kept 90 days (the action's default is 1), so the deployed files can be compared with a
+      # later local build; 90 is the repository's maximum.
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: dist
+          retention-days: 90
 
   deploy:
     name: Deploy

@@ -1,6 +1,8 @@
 // The About dialog (Stage 4): the honesty note, what the image shows and its limits, what the
 // lines mean, the controls, a privacy statement and the documentation links; keyboard and focus
-// behaviour of a modal dialog.
+// behaviour of a modal dialog. Since Stage 8 it also names the display choices a visitor cannot
+// see, and says that the toy disk is not a model of M87* or Sgr A*.
+import { DEFAULT_DISK } from '../../src/physics/index.ts';
 import { KEYMAP } from '../../src/ui/keymap.ts';
 import { expect, openApp, test, view, waitForFullImage } from './fixtures.ts';
 
@@ -29,6 +31,18 @@ test(
     await expect(dialog).toContainText(
       /apparent outline of both the event horizon and the photon sphere/,
     );
+    // The disk's peak temperature, from the setting, and the next sentence calls it a display
+    // choice (the paragraph's last sentence also says it of the stars).
+    const choice = dialog.locator('p', { hasText: 'display choice' });
+    await expect(choice).toHaveCount(1);
+    await expect(choice).toContainText(
+      `${DEFAULT_DISK.peakTemperature} K in the gas's own frame. This is a display choice`,
+    );
+    await expect(choice).toContainText('not derived from a black hole mass or accretion rate');
+    const m87 = dialog.locator('li', { hasText: 'Not a model of M87* or Sgr A*' });
+    await expect(m87).toHaveCount(1);
+    await expect(m87).toContainText('synchrotron');
+    await expect(dialog.locator('li', { hasText: 'toy disk' })).toContainText('opaque');
   },
 );
 

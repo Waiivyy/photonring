@@ -114,7 +114,8 @@ branch.
   Third-party actions are pinned to commit SHAs.
 - **Deploy workflow** for GitHub Pages (`.github/workflows/pages.yml`), started by hand only: it is
   set up to run the checks, build the page, run the offline test on that build and then publish
-  that same build. It has not run yet.
+  that same build, which it keeps for 90 days so it can be compared with a later build. It has not
+  run yet.
 - **README image** (`npm run render:hero`): the CPU reference renderer draws the page's opening
   view at 1600 x 900 with 3 x 3 samples per pixel into `docs/images/hero.png`, and writes nothing
   if a sample is not finite or the file is over its size budget. `npm run render:hero -- --candidates` renders four candidate views and a contact sheet into
@@ -144,6 +145,20 @@ branch.
   (`npm run render:readme`, `npm run shots:readme`, `npm run diagrams`), a step that copies only
   approved images into `docs/images/`, and a test of their sizes.
 - **Text check for en-dashes**: `npm run lint` now also rejects U+2013.
+- **Link previews**: Open Graph and X card tags in `index.html` point the preview of a shared link
+  at the social preview image, with an alt text and a description that starts "A toy model, not a
+  simulation of any real observation". The build checks that the preview URLs are absolute and
+  present once each, and allows them nowhere else (`tests/unit/site-meta.test.ts`,
+  `tools/dist-rules.ts`).
+- **Display choices disclosed**: the README's Limits, the About dialog and
+  [docs/PHYSICS.md](docs/PHYSICS.md), section 10, say that the disk's 6500 K peak temperature, in
+  the gas's own frame, is a display choice that was not derived from a black hole mass or accretion
+  rate; that the exposure is fixed (the README and docs/PHYSICS.md give its value, 1) and a fixed
+  tone curve turns the brightest parts white; how the colours are made; that the stars are invented and the disk is opaque; and that the page is
+  not a model of M87\* or Sgr A\*, whose images the Event Horizon Telescope explains with models in
+  which hot gas shines by synchrotron emission. The values the texts quote are recorded by
+  `tests/unit/colour.test.ts`; `tests/unit/disclosures.test.ts` and the About page test check that
+  the texts follow the page's settings.
 - **Documentation**: [README.md](README.md) (what the page shows, how to run it, the controls,
   measured validation and performance numbers, browser support, limits, privacy, an FAQ and
   references), [docs/PHYSICS.md](docs/PHYSICS.md) (derivations and references),
@@ -154,6 +169,18 @@ branch.
 
 ### Fixed
 
+- **Credit for the photon subring law** ([docs/PHYSICS.md](docs/PHYSICS.md), section 6b, and the
+  README's "How it works"): the docs said that the leading-order law for the subring offsets of a
+  camera and a disk ring at finite distances was derived for this project. It is published: the
+  strong deflection law of Bozza and Scarpetta (2007), which Aldi and Bozza (2017),
+  Bisnovatyi-Kogan and Tsupko (2022), Tsupko (2022) and Aratore, Tsupko and Perlick (2024) applied
+  to the images of a disk. The docs now credit them, with what was read of each, and show that
+  photonring's form is the same expression.
+- **Survey of other renderers** ([docs/DESIGN.md](docs/DESIGN.md), section 1, and the README's
+  FAQ): the October 2026 survey was out of date. Re-checked on 2026-11-08, it lists seven more
+  projects and whether each checks its GPU output in CI (one, tgergo1/blackhole, checks its WebGL2
+  shader against a 64-bit reference there), drops the narrow Schwarzschild scope as a difference,
+  and says where photonring's GPU tests run in CI.
 - **Browser list on the page for browsers without WebGPU** (`src/ui/unsupported.ts`): the page
   showed the list from the October 2026 survey, which named Edge on ChromeOS (Edge has no ChromeOS
   version), gave no versions for Linux and did not limit NVIDIA GPUs to Wayland there, had no

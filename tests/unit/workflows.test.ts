@@ -106,6 +106,15 @@ describe('workflows', () => {
     expect(t.get('permissions')?.inline).toBe('{}');
   });
 
+  it('pages.yml keeps the uploaded site for 90 days, so the deployed files can be compared', () => {
+    // upload-pages-artifact v5.0.0 declares retention-days with a default of 1 day.
+    const upload = steps(jobs('pages.yml').get('build')!).filter((s) =>
+      s.some((l) => /uses:\s*actions\/upload-pages-artifact@/.test(l)),
+    );
+    expect(upload).toHaveLength(1);
+    expect(upload[0]!.some((l) => /^\s*retention-days:\s*90\s*$/.test(l))).toBe(true);
+  });
+
   it('pages.yml grants the Pages and OIDC token only to the deploy job, on main', () => {
     for (const [id, job] of jobs('pages.yml')) {
       const keys = blocks(job.lines, 4);

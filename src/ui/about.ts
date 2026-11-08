@@ -1,20 +1,20 @@
-// The About dialog: the honesty note first, what the image shows and its limits, what the lines
-// mean, the controls (from the key map), a privacy statement and the documentation links. A
-// native modal dialog built with textContent only; it states no numbers, which live in the docs
-// and in the Validation panel.
+// The About dialog: the honesty note first, what the image shows, its colours and limits, what
+// the lines mean, the controls (from the key map), a privacy statement and the documentation
+// links. A native modal dialog built with textContent only. It states no measured values, which
+// live in the docs and the Validation panel; it names the display settings a visitor cannot see,
+// taken from the settings themselves (docs/DESIGN.md, section 17). The notes are in
+// src/ui/about-text.ts.
+import {
+  COLOURS_NOTE,
+  DISK_LIMIT,
+  HONESTY_NOTE,
+  NOT_M87_NOTE,
+  PRIVACY_NOTE,
+} from './about-text.ts';
 import { el } from './dom.ts';
 import { KEYMAP, keyName } from './keymap.ts';
 import { LINKS } from './links.ts';
 import { OVERLAY_IDS, OVERLAY_NOTE, OVERLAY_STYLES, TERMINATION_LEGEND } from './overlay-style.ts';
-
-export const HONESTY_NOTE =
-  'This is a toy model for learning and demonstration, not a scientific simulation of any real observation.';
-
-export const PRIVACY_NOTE =
-  'photonring runs entirely in your browser. It has no analytics, telemetry or cookies, stores ' +
-  'nothing on your device and loads nothing from other sites. The view settings are kept in the ' +
-  'part of the address after #, which browsers do not send to servers. Saved images are made on ' +
-  'your device. The documentation links below open GitHub.';
 
 export interface About {
   readonly dialog: HTMLDialogElement;
@@ -64,18 +64,15 @@ export function createAbout(): About {
           'formulas.',
       ),
     ),
+    section('Colours and brightness', el('p', {}, COLOURS_NOTE)),
     section(
       'Limits',
       el(
         'ul',
         {},
         el('li', {}, 'Non-rotating black hole only.'),
-        el(
-          'li',
-          {},
-          'An infinitely thin toy disk with a simple temperature profile, no radiative transfer ' +
-            'and no thickness; it stops at the ISCO.',
-        ),
+        el('li', {}, DISK_LIMIT),
+        el('li', {}, NOT_M87_NOTE),
         el(
           'li',
           {},

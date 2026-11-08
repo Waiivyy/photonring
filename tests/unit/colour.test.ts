@@ -1,14 +1,19 @@
-// Blackbody colour, sRGB conversion and tone mapping.
+// Blackbody colour, sRGB conversion and tone mapping; and (Stage 8) the values the README, the
+// About dialog and docs/PHYSICS.md section 10 quote to disclose the page's display choices.
 import { describe, expect, it } from 'vitest';
+import { encodeImage } from '../../src/cpu-renderer/render.ts';
+import { GOLDEN_SCENES } from '../../src/cpu-renderer/scenes.ts';
 import {
   blackbodyColour,
   blackbodyXYZ,
   cieColourMatching,
+  DEFAULT_DISK,
   luminance,
   srgbEncode,
   toneMap,
   xyzToLinearSrgb,
 } from '../../src/physics/index.ts';
+import { PAGE_SCENE } from '../../src/ui/page-scene.ts';
 import { measured } from '../helpers/measured.ts';
 
 const chromaticity = (xyz: readonly [number, number, number]) => {
@@ -134,5 +139,66 @@ describe('tone mapping', () => {
       last = y;
     }
     expect(toneMap(100, 1.5)).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('display choices as the docs quote them (docs/PHYSICS.md, section 10)', () => {
+  // The sRGB white point, D65, as in the CSS Color 4 sample code (conversions.js).
+  const D65 = [0.3127, 0.329] as const;
+
+  it("the disk's peak temperature as a blackbody lies close to the sRGB white point", () => {
+    const T = DEFAULT_DISK.peakTemperature;
+    const [x, y] = chromaticity(blackbodyXYZ(T));
+    measured(`colour: chromaticity x of a ${T} K blackbody (fit)`, x);
+    measured(`colour: chromaticity y of a ${T} K blackbody (fit)`, y);
+    const d = measured(
+      `colour: distance in (x, y) of a ${T} K blackbody from D65`,
+      Math.hypot(x - D65[0], y - D65[1]),
+    );
+    // Quoted as (0.3134, 0.3239), 0.0052 from D65.
+    expect(x.toFixed(4)).toBe('0.3134');
+    expect(y.toFixed(4)).toBe('0.3239');
+    expect(d.toFixed(4)).toBe('0.0052');
+    expect(d).toBeLessThan(0.006);
+  });
+
+  // Drawn as the CPU reference renderer encodes a colour-view pixel: the page's exposure and tone
+  // curve, the sRGB transfer function, 0 to 255. Computed by the library, not measured on a GPU.
+  const drawn = (temperatures: readonly number[]): number[][] => {
+    const linear = Float64Array.from(temperatures.flatMap((T) => blackbodyColour(T)));
+    const settings = {
+      ...GOLDEN_SCENES.diskInclined,
+      width: temperatures.length,
+      height: 1,
+      exposure: PAGE_SCENE.exposure,
+      toneMapping: PAGE_SCENE.toneMapping,
+    };
+    const stats = { escaped: 0, captured: 0, stepLimit: 0, nonFinite: 0 };
+    const bytes = encodeImage({ width: temperatures.length, height: 1, linear, stats }, settings);
+    return temperatures.map((_, i) => [...bytes.subarray(3 * i, 3 * i + 3)]);
+  };
+
+  it("the library encodes 6500, 3000 and 9000 K at the page's settings as these values of 255", () => {
+    expect(PAGE_SCENE.exposure).toBe(1);
+    expect(PAGE_SCENE.toneMapping).toBe(true);
+    const temperatures = [6500, 3000, 9000];
+    const rgb = drawn(temperatures);
+    temperatures.forEach((T, i) =>
+      rgb[i]!.forEach((v, c) => measured(`colour: ${T} K drawn, ${'RGB'[c]} of 255`, v)),
+    );
+    expect(rgb).toEqual([
+      [210, 207, 210],
+      [35, 23, 9],
+      [248, 250, 253],
+    ]);
+  });
+
+  it('luminance relative to a 6500 K blackbody: 0.010 at 3000 K, 3.16 at 9000 K', () => {
+    const relative = (T: number) =>
+      luminance(blackbodyColour(T)) / luminance(blackbodyColour(6500));
+    const cool = measured('colour: luminance of 3000 K relative to 6500 K', relative(3000));
+    const hot = measured('colour: luminance of 9000 K relative to 6500 K', relative(9000));
+    expect(cool.toFixed(3)).toBe('0.010');
+    expect(hot.toFixed(2)).toBe('3.16');
   });
 });
