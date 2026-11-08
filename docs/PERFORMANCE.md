@@ -217,23 +217,22 @@ Screenshots of the page show the status line as it was when they were taken.
 ## Download size (Stage 8)
 
 `npm run build`, then `npm run size` (Node 25.6.1; gzip level 9 and brotli quality 11 from
-`node:zlib`), on 2026-11-08. Bytes of the build of pull request 8a: branch `stage-8` with its
-changes not yet committed, on top of commit 8f00217. It adds the link preview tags to `index.html`
-and the display-choice text to the JS. The Stage 6 table (commit b310128: JS 102,412 bytes,
+`node:zlib`), on 2026-11-08, on the build of commit 4f29a52 (pull request 8a). It adds the link
+preview tags to `index.html` and the display-choice text to the JS. The Stage 6 table (commit b310128: JS 102,412 bytes,
 `index.html` 887) was not measured again after Stage 7, which added code to the JS.
 
 | Files                  | Raw     | gzip    | brotli  |
 | ---------------------- | ------- | ------- | ------- |
-| JS (one file)          | 138,779 | 47,380  | 41,942  |
+| JS (one file)          | 138,805 | 47,437  | 41,865  |
 | CSS (one file)         | 6,087   | 1,966   | 1,690   |
-| `index.html`           | 3,086   | 915     | 668     |
+| `index.html`           | 3,086   | 916     | 668     |
 | `favicon.svg`          | 233     | 168     | 143     |
 | Gallery PNGs (4 files) | 408,789 | 408,411 | 408,335 |
 | `social-preview.png`   | 248,032 | 247,946 | 248,037 |
-| Everything in `dist/`  | 805,006 | 706,786 | 700,815 |
+| Everything in `dist/`  | 805,032 | 706,844 | 700,738 |
 
-With WebGPU the page loads `index.html`, the JS and the CSS (and possibly the favicon): 147,952
-bytes, 50,261 with gzip. The gallery images load only on the page for browsers without WebGPU, and
+With WebGPU the page loads `index.html`, the JS and the CSS (and possibly the favicon): 147,978
+bytes, 50,319 with gzip. The gallery images load only on the page for browsers without WebGPU, and
 the social preview is never loaded by the page (link previews fetch it). What GitHub Pages actually
 sends compressed was not measured. There is no size budget.
 
