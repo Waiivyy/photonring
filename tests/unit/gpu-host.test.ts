@@ -11,7 +11,23 @@ import {
 import { halfToFloat } from '../../src/gpu/host/half.ts';
 import { wgslHeader } from '../../src/gpu/host/wgsl.ts';
 import { BLACKBODY_LUT, buildBlackbodyLut, lutColour } from '../../src/gpu/host/lut.ts';
-import { blackbodyColour, luminance } from '../../src/physics/index.ts';
+import {
+  DISK_TABLE,
+  DISK_TABLE_SIZE,
+  buildDiskTable,
+  tableTemperatureHat,
+} from '../../src/gpu/host/disk-table.ts';
+import {
+  DEFAULT_DISK,
+  blackbodyColour,
+  diskTemperatureFactor,
+  diskTemperatureHat,
+  luminance,
+  pageThorneFlux,
+  pageThornePeakRadius,
+} from '../../src/physics/index.ts';
+import { relErr } from '../helpers/numeric.ts';
+import { measured } from '../helpers/measured.ts';
 
 describe('internal resolution', () => {
   const limits = { maxTextureDimension2D: 8192, maxPixels: 3840 * 2160 };
@@ -231,5 +247,135 @@ describe('generated WGSL constants', () => {
     expect(header).toContain('const DEBUG_ESCAPED: vec3f = vec3f(0.15, 0.3, 0.8);');
     expect(header).toContain('const DEBUG_CAPTURED: vec3f = vec3f(0.0, 0.0, 0.0);');
     expect(header).toContain('const DEBUG_STEP_LIMIT: vec3f = vec3f(1.0, 0.0, 1.0);');
+  });
+});
+
+describe('Page-Thorne disk table for the GPU', () => {
+  const f = Math.fround;
+
+  /** Radii from 6M (1 + 1e-4) to 1e4 M, geometric, and the peak radius. */
+  function radii(M: number): number[] {
+    const out = [pageThornePeakRadius(M)];
+    for (let r = 6 * M * (1 + 1e-4); r < 1e4 * M; r *= 1.0003) out.push(r);
+    return out;
+  }
+
+  /**
+   * The lookup the shader is to make (temperatureHat in the Stage 8 design for
+   * src/shaders/disk.wgsl), operation for operation in f32: Math.fround after every operation.
+   * WGSL allows division 2.5 ULP and sqrt more than the correct rounding Math.fround gives, so
+   * this error is a floor for the GPU, not its value. With naive = true, 1 - s is formed
+   * directly, which cancels near the ISCO.
+   */
+  function wgslTemperatureHat(table: Float32Array, r: number, M: number, naive = false): number {
+    const n = table.length;
+    const rf = f(r);
+    const isco = f(6 * f(M));
+    if (!(rf > isco)) return 0;
+    const s = f(Math.sqrt(f(isco / rf)));
+    const oneMinusS = naive ? f(1 - s) : f(f(f(rf - isco) / rf) / f(1 + s));
+    const x = f(s * (n - 1));
+    const i = Math.min(Math.floor(x), n - 2);
+    const t0 = table[i]!;
+    const t1 = table[i + 1]!;
+    const c = f(t0 + f(f(x - i) * f(t1 - t0)));
+    return f(f(f(s * f(Math.sqrt(s))) * f(Math.sqrt(oneMinusS))) * c);
+  }
+
+  it('holds C(i / 1023) rounded to f32 at 1024 nodes, with the limits at both ends', () => {
+    expect(DISK_TABLE_SIZE).toBe(1024);
+    const table = buildDiskTable();
+    expect(table).toBeInstanceOf(Float32Array);
+    expect(table.length).toBe(1024);
+    const wrong: number[] = [];
+    for (let i = 0; i < 1024; i++) {
+      if (table[i] !== f(diskTemperatureFactor(i / 1023))) wrong.push(i);
+    }
+    expect(wrong).toEqual([]);
+    const fMax = pageThorneFlux(pageThornePeakRadius(1), 1);
+    expect(relErr(table[0]!, (576 * Math.PI * fMax) ** -0.25)).toBeLessThan(2 ** -24);
+    expect(relErr(table[1023]!, (144 * Math.PI * fMax) ** -0.25)).toBeLessThan(2 ** -24);
+    expect(DISK_TABLE).toEqual(table);
+  });
+
+  it('builds tables of other sizes on their own nodes and rejects fewer than two entries', () => {
+    const nodes = [0, 0.25, 0.5, 0.75, 1].map((s) => f(diskTemperatureFactor(s)));
+    expect(Array.from(buildDiskTable(5))).toEqual(nodes);
+    expect(() => buildDiskTable(1)).toThrow(RangeError);
+    expect(() => buildDiskTable(2.5)).toThrow(RangeError);
+  });
+
+  it.each([1, 1.7])('M = %d: the CPU twin matches T-hat within 1e-6 out to 1e4 M', (M) => {
+    let worst = 0;
+    for (const r of radii(M)) {
+      worst = Math.max(
+        worst,
+        relErr(tableTemperatureHat(DISK_TABLE, r, M), diskTemperatureHat(r, M)),
+      );
+    }
+    expect(measured('disk table: CPU twin against T-hat, relative', worst)).toBeLessThan(1e-6);
+  });
+
+  it('the CPU twin is zero at and inside the ISCO', () => {
+    for (const M of [1, 1.7]) {
+      for (const r of [6 * M, 5.9 * M, 3 * M, 0])
+        expect(tableTemperatureHat(DISK_TABLE, r, M)).toBe(0);
+    }
+  });
+
+  it('a disk cut at 7M keeps its zero torque at 6M', () => {
+    // The table and the shader take the zero torque from 6M, never from the disk's inner edge.
+    // A profile with zero torque at rIn would be 0 at r = rIn. The GPU profile test runs with
+    // this disk too, so that a shader using the inner edge for the zero torque fails.
+    const disk = { ...DEFAULT_DISK, rIn: 7 };
+    const atEdge = diskTemperatureHat(disk.rIn, 1);
+    expect(atEdge).toBeGreaterThan(0.8);
+    expect(relErr(tableTemperatureHat(DISK_TABLE, disk.rIn, 1), atEdge)).toBeLessThan(1e-6);
+    expect(
+      relErr(wgslTemperatureHat(DISK_TABLE, disk.rIn, 1), diskTemperatureHat(f(disk.rIn), 1)),
+    ).toBeLessThan(2e-6);
+  });
+
+  it.each([1, 2])(
+    'M = %d: the WGSL steps in f32 stay within 2e-6 of T-hat at the f32 radius',
+    (M) => {
+      // M = 1 is the page's mass. 6M must be exact in f32 for r - 6M to be exact near the ISCO;
+      // for M = 1.7 it is not, and the error grows to 3.7e-4 at 6.0006 M (measured 2026-11-08).
+      // The reference is T-hat at the f32 radius the GPU receives.
+      let worst = 0;
+      let worstNaive = 0;
+      for (const r of radii(M)) {
+        const expected = diskTemperatureHat(f(r), M);
+        worst = Math.max(worst, relErr(wgslTemperatureHat(DISK_TABLE, r, M), expected));
+        worstNaive = Math.max(
+          worstNaive,
+          relErr(wgslTemperatureHat(DISK_TABLE, r, M, true), expected),
+        );
+      }
+      expect(measured('disk table: WGSL steps in f32 against T-hat, relative', worst)).toBeLessThan(
+        2e-6,
+      );
+      // The bound catches the naive 1 - s.
+      expect(measured('disk table: naive 1 - s in f32, relative', worstNaive)).toBeGreaterThan(
+        2e-6,
+      );
+    },
+  );
+
+  it.each([1, 2])('M = %d: the first f32 radii above 6M give finite, non-negative values', (M) => {
+    const isco = 6 * M;
+    const ulp = 2 ** (Math.floor(Math.log2(isco)) - 23);
+    for (let k = 1; k <= 8; k++) {
+      const r = isco + k * ulp;
+      expect(f(r)).toBe(r);
+      const gpu = wgslTemperatureHat(DISK_TABLE, r, M);
+      const twin = tableTemperatureHat(DISK_TABLE, r, M);
+      expect(Number.isFinite(gpu) && gpu >= 0).toBe(true);
+      expect(Number.isFinite(twin) && twin >= 0).toBe(true);
+      const err = relErr(gpu, diskTemperatureHat(r, M));
+      expect(
+        measured('disk table: WGSL steps at the first f32 radii above 6M, relative', err),
+      ).toBeLessThan(2e-6);
+    }
   });
 });
