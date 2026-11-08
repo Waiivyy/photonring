@@ -1,11 +1,13 @@
 // Structural rules for the production build (Stage 5), run on dist/ at the end of every
 // npm run build by tools/check-dist.ts: every asset hashed and referenced, nothing GitHub Pages
 // would drop, no inline code in index.html, the CSP meta right after <meta charset> with exactly
-// the policy in tools/csp.ts, and no absolute URL or data: URI outside an exact allowlist. Each
-// rule and why: docs/DESIGN.md, section 14.
+// the policy in tools/csp.ts, no absolute URL or data: URI outside an exact allowlist, and the
+// link preview tags with their absolute URLs. Each rule and why: docs/DESIGN.md, sections 14
+// and 17.
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, posix, relative, sep } from 'node:path';
 import { CSP_POLICY } from './csp.ts';
+import { SITE_URL, SOCIAL_IMAGE_URL } from './site.ts';
 
 /**
  * Files copied unhashed from public/: the favicon, and the social preview image (rendered by
@@ -14,13 +16,27 @@ import { CSP_POLICY } from './csp.ts';
  */
 export const PUBLIC_FILES: readonly string[] = ['favicon.svg', 'social-preview.png'];
 
-/** The only absolute URLs the built files may contain: the SVG namespace and the repository
- * links in src/ui/links.ts. They are text, never fetched. */
+/** Absolute URLs allowed in any built file: the SVG namespace and the repository links in
+ * src/ui/links.ts. They are text, never fetched. The link preview URLs in SITE_URLS below are
+ * allowed in index.html only. */
 export const ALLOWED_URLS: ReadonlySet<string> = new Set([
   'http://www.w3.org/2000/svg',
   'https://github.com/Waiivyy/photonring',
   'https://github.com/Waiivyy/photonring/blob/main/',
 ]);
+
+/**
+ * The link preview URLs (tools/site.ts). A link preview needs them absolute, so they are allowed
+ * in index.html, and only there: in a JS, CSS or SVG file they are still an absolute URL.
+ */
+export const SITE_URLS: ReadonlySet<string> = new Set([SITE_URL, SOCIAL_IMAGE_URL]);
+
+/** The link preview tags index.html must have exactly once each, with exactly these values. */
+const PREVIEW_TAGS: readonly (readonly [attr: 'property' | 'name', key: string, url: string])[] = [
+  ['property', 'og:url', SITE_URL],
+  ['property', 'og:image', SOCIAL_IMAGE_URL],
+  ['name', 'twitter:image', SOCIAL_IMAGE_URL],
+];
 
 const HASHED = /^[A-Za-z0-9_.-]+-[A-Za-z0-9_-]{8}\.(js|css|png|svg|woff2)$/;
 const TEXT = /\.(html|js|css|svg)$/;
@@ -196,13 +212,14 @@ export function checkDist(distDir: string, { publicDir }: { publicDir: string })
     );
   }
 
-  // 5. URLs in built text files.
+  // 5. URLs in built text files; the link preview URLs only in index.html.
   for (const f of files.filter(
     (x) => TEXT.test(x) && !x.split('/').some((p) => p.startsWith('.')),
   )) {
     const text = sourceText.get(f) ?? read(f);
     for (const m of text.matchAll(ABSOLUTE_URL)) {
-      if (!ALLOWED_URLS.has(m[0])) problems.push(`${f}: absolute URL ${m[0]}`);
+      const allowed = ALLOWED_URLS.has(m[0]) || (f === 'index.html' && SITE_URLS.has(m[0]));
+      if (!allowed) problems.push(`${f}: absolute URL ${m[0]}`);
     }
     for (const m of text.matchAll(DATA_URI)) problems.push(`${f}: data: URI ${m[0]}`);
     if (!f.endsWith('.css')) continue;
@@ -214,6 +231,20 @@ export function checkDist(distDir: string, { publicDir }: { publicDir: string })
       if (/^[a-z][a-z0-9+.-]*:|^\/\//i.test(u) || u.startsWith('/') || !has.has(path)) {
         problems.push(`${f}: url(${u}) is not a file in dist/`);
       }
+    }
+  }
+
+  // 6. The link preview tags: each once, with its absolute URL, so a later change cannot drop
+  // them or let the build turn them relative (Vite rewrites a root-relative og:image).
+  for (const [attr, key, url] of PREVIEW_TAGS) {
+    const found = all.filter((t) => t.name === 'meta' && t.attrs.get(attr) === key);
+    if (found.length !== 1) {
+      problems.push(
+        `index.html: ${found.length} <meta ${attr}="${key}"> element(s) (expected exactly 1)`,
+      );
+    } else {
+      const value = decodeEntities(found[0]!.attrs.get('content') ?? '');
+      if (value !== url) problems.push(`index.html: ${key} must be ${url}, not ${value}`);
     }
   }
   return problems;

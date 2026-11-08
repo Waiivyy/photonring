@@ -9,6 +9,7 @@ import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 import { CSP_POLICY } from '../../tools/csp.ts';
+import { SOCIAL_IMAGE_URL } from '../../tools/site.ts';
 
 const DIST = new URL('../../dist/', import.meta.url);
 /** Files in dist/, relative and with forward slashes; read in beforeAll (dist/ is built by the
@@ -115,6 +116,11 @@ test('WebGPU path: load, change the view, open every panel and save the image', 
   expect(
     await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content'),
   ).toBe(CSP_POLICY);
+  // The link preview image is named by absolute URL (the build must not make it relative), and
+  // the page never requests it: the request sets below have no social-preview.png.
+  expect(await page.locator('meta[property="og:image"]').getAttribute('content')).toBe(
+    SOCIAL_IMAGE_URL,
+  );
   await page.getByRole('img', { name: /black hole/i }).focus();
   await page.keyboard.press('ArrowLeft');
   await page.getByRole('button', { name: 'Controls', exact: true }).click();

@@ -1,16 +1,37 @@
 // Structural rules for the production build (Stage 5): hashed assets, no inline code, the CSP
-// meta first in head, and no absolute URL or data: URI outside an exact allowlist. Checked on a
-// synthetic dist/ that is clean, then broken one rule at a time.
+// meta first in head, no absolute URL or data: URI outside an exact allowlist, and (Stage 8) the
+// link preview tags with their absolute URLs. Checked on a synthetic dist/ that is clean, then
+// broken one rule at a time.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { injectCsp } from '../../tools/csp.ts';
 import { checkDist } from '../../tools/dist-rules.ts';
+import { SITE_URL, SOCIAL_IMAGE_URL } from '../../tools/site.ts';
 
 const JS = 'assets/index-AbCd1234.js';
 const CSS = 'assets/index-EfGh5_78.css';
 const PNG = 'assets/disk-face-on-Ij9_kL0m.png';
+
+// The link preview tags of the real index.html (tests/unit/site-meta.test.ts checks their texts).
+const PREVIEW_METAS = [
+  '<meta property="og:type" content="website" />',
+  '<meta property="og:site_name" content="photonring" />',
+  '<meta property="og:title" content="photonring" />',
+  '<meta property="og:description" content="A description." />',
+  `<meta property="og:url" content="${SITE_URL}" />`,
+  `<meta property="og:image" content="${SOCIAL_IMAGE_URL}" />`,
+  '<meta property="og:image:type" content="image/png" />',
+  '<meta property="og:image:width" content="1280" />',
+  '<meta property="og:image:height" content="640" />',
+  '<meta property="og:image:alt" content="An image." />',
+  '<meta name="twitter:card" content="summary_large_image" />',
+  '<meta name="twitter:title" content="photonring" />',
+  '<meta name="twitter:description" content="A description." />',
+  `<meta name="twitter:image" content="${SOCIAL_IMAGE_URL}" />`,
+  '<meta name="twitter:image:alt" content="An image." />',
+];
 
 // The shape of the real built index.html.
 const INDEX = injectCsp(`<!doctype html>
@@ -23,6 +44,7 @@ const INDEX = injectCsp(`<!doctype html>
       name="description"
       content="A description."
     />
+    ${PREVIEW_METAS.join('\n    ')}
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <script type="module" crossorigin src="./${JS}"></script>
     <link rel="stylesheet" crossorigin href="./${CSS}">
@@ -262,7 +284,10 @@ describe('dist rules', () => {
     [
       'a CSP meta after the scripts',
       withIndex((h) => h.replace(cspMeta(h), '').replace('</head>', `${cspMeta(h)}</head>`)),
-      'index.html: CSP meta is preceded by <meta>, <title>, <meta>, <link>, <script>, <link>',
+      'index.html: CSP meta is preceded by ' +
+        ['<meta>', '<title>', '<meta>', ...PREVIEW_METAS.map(() => '<meta>')]
+          .concat(['<link>', '<script>', '<link>'])
+          .join(', '),
     ],
     [
       'a CSP meta in the body',
@@ -288,6 +313,51 @@ describe('dist rules', () => {
       'a charset meta outside the first 1024 bytes',
       withIndex((h) => h.replace('<html lang="en">', `<html lang="en"><!--${'x'.repeat(1100)}-->`)),
       /^index\.html: <meta charset> does not end within the first 1024 bytes \(ends at \d+\)$/,
+    ],
+    // Link preview tags: absolute URLs, but only these two and only in index.html.
+    [
+      'og:image made relative, as Vite does with a root-relative one',
+      withIndex((h) =>
+        h.replace(
+          `property="og:image" content="${SOCIAL_IMAGE_URL}"`,
+          'property="og:image" content="./social-preview.png"',
+        ),
+      ),
+      `index.html: og:image must be ${SOCIAL_IMAGE_URL}, not ./social-preview.png`,
+    ],
+    [
+      'og:image missing',
+      withIndex((h) => h.replace(/\s*<meta property="og:image" [^>]*>/, '')),
+      'index.html: 0 <meta property="og:image"> element(s) (expected exactly 1)',
+    ],
+    [
+      'og:image twice',
+      withIndex((h) =>
+        h.replace('</head>', `<meta property="og:image" content="${SOCIAL_IMAGE_URL}" /></head>`),
+      ),
+      'index.html: 2 <meta property="og:image"> element(s) (expected exactly 1)',
+    ],
+    [
+      'twitter:image missing',
+      withIndex((h) => h.replace(/\s*<meta name="twitter:image" [^>]*>/, '')),
+      'index.html: 0 <meta name="twitter:image"> element(s) (expected exactly 1)',
+    ],
+    [
+      'og:url on another host',
+      withIndex((h) =>
+        h.replace(`content="${SITE_URL}"`, 'content="https://example.com/photonring/"'),
+      ),
+      `index.html: og:url must be ${SITE_URL}, not https://example.com/photonring/`,
+    ],
+    [
+      'the site URL in the code, where it is never allowed',
+      withJs(`\`${SITE_URL}\``),
+      `${JS}: absolute URL ${SITE_URL}`,
+    ],
+    [
+      'the image URL in the CSS',
+      withCss(`body{}/* ${SOCIAL_IMAGE_URL} */`),
+      `${CSS}: absolute URL ${SOCIAL_IMAGE_URL}`,
     ],
     // URLs in built code.
     [
