@@ -2,6 +2,7 @@
 // and the hash the script prints opens exactly that camera on the page.
 import { describe, expect, it } from 'vitest';
 import { viewCamera, ORBIT_LIMITS } from '../../src/ui/orbit.ts';
+import { PAGE_SCENE } from '../../src/ui/page-scene.ts';
 import { parseHash } from '../../src/ui/url-state.ts';
 import { HERO, heroSettings, SOCIAL, viewHash, viewOrbit, VIEWS } from '../../tools/hero-views.ts';
 
@@ -28,10 +29,10 @@ describe('hero views', () => {
       'stars',
       'colour',
       true,
-      1,
+      PAGE_SCENE.exposure,
       1,
     ]);
-    expect(s.disk).not.toBeNull();
+    expect(s.disk).toBe(PAGE_SCENE.disk);
     expect([SOCIAL.width, SOCIAL.height]).toEqual([1280, 640]);
   });
 });

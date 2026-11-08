@@ -6,7 +6,7 @@ import { initWebGpu } from '../gpu/device.ts';
 import { ProgressiveRenderer, type FrameAction } from '../gpu/host/progressive.ts';
 import { chooseInternalResolution, type Resolution } from '../gpu/host/resolution.ts';
 import { GpuRenderer, TILE_SIZE, type RenderMode } from '../gpu/renderer.ts';
-import { DEFAULT_DISK, shadowAngularRadius, type CameraParams } from '../physics/index.ts';
+import { shadowAngularRadius, type CameraParams } from '../physics/index.ts';
 import { createAbout, type About } from './about.ts';
 import { createAnnouncer, type Announcer } from './announcer.ts';
 import { createControlsPanel, type ControlsPanel, type SceneToggle } from './controls-panel.ts';
@@ -20,6 +20,7 @@ import { orbitBy, resetOrbit, viewCamera, zoomBy, type OrbitState } from './orbi
 import { edgeEllipse } from './overlay-geometry.ts';
 import { OVERLAY_STYLES, type OverlayId } from './overlay-style.ts';
 import { OverlayLayer } from './overlays.ts';
+import { PAGE_SCENE } from './page-scene.ts';
 import { closePanel, openPanel, topPanel } from './panel-stack.ts';
 import { formatNumber } from './quantise.ts';
 import {
@@ -440,9 +441,9 @@ class App {
       camera: s.camera,
       mode: RENDER_MODE[s.view],
       sky: s.view === 'eht' || s.view === 'subrings' ? 'black' : 'stars',
-      exposure: 1,
-      toneMapping: true,
-      disk: s.disk ? DEFAULT_DISK : null,
+      exposure: PAGE_SCENE.exposure,
+      toneMapping: PAGE_SCENE.toneMapping,
+      disk: s.disk ? PAGE_SCENE.disk : null,
       antialias: s.antialias,
     });
     this.plan.sceneChanged(performance.now(), this.renderer.antialiasing, RENDER_MODE[s.view]);
