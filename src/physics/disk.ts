@@ -1,24 +1,33 @@
-// Toy thin-disk model. The renderers draw the Newtonian profile below (diskTemperature), with no
-// relativistic corrections to the flux. The relativistic Page-Thorne flux (Page and Thorne 1974)
-// for a Schwarzschild hole follows it; no renderer uses it yet.
+// Thin disk with the relativistic Page-Thorne flux (Page and Thorne 1974) for a Schwarzschild hole,
+// drawn as a blackbody in the gas's own frame; no thickness, no radiative transfer and no
+// returning radiation. Derivations: docs/PHYSICS.md, section 10.
 import { blackbodyColour } from './colour.ts';
 import { iscoRadius } from './constants.ts';
 import type { Vec3 } from './observer.ts';
 import { circularOrbitEmitter, redshiftFactor } from './redshift.ts';
 
 export interface DiskSettings {
-  /** Inner edge; must lie outside the photon sphere (3M), normally the ISCO (6M). */
+  /**
+   * Inner edge, at or outside the ISCO (6M). The flux has its zero torque at the ISCO whatever
+   * this edge is: an inner edge outside 6M cuts the disk off there and does not move the zero
+   * torque.
+   */
   readonly rIn: number;
   readonly rOut: number;
   /** Fraction of light absorbed and replaced by emission at each crossing, 0 to 1. */
   readonly opacity: number;
-  /** Emitted temperature at the hottest radius, (49/36) r_in, in kelvin. */
+  /**
+   * Emitted temperature in kelvin at the radius of peak flux (9.5509 M, the same multiple of M for
+   * every mass), in the gas's own frame. A display choice: it is not derived from a black hole
+   * mass or accretion rate, which photonring does not model.
+   */
   readonly peakTemperature: number;
 }
 
 /**
  * Default toy disk for M = 1: inner edge at the ISCO, outer edge at 20M, opaque, 6500 K at its
- * hottest radius (chosen at the Stage 1 check-in, docs/DESIGN.md section 10).
+ * hottest radius in the gas's own frame (a display choice made at the Stage 1 check-in,
+ * docs/DESIGN.md section 10).
  */
 export const DEFAULT_DISK: DiskSettings = {
   rIn: iscoRadius(1),
@@ -26,28 +35,6 @@ export const DEFAULT_DISK: DiskSettings = {
   opacity: 1,
   peakTemperature: 6500,
 };
-
-/** Radius of peak temperature for the profile below, r = (49/36) r_in. */
-const PEAK_RATIO = 49 / 36;
-const PEAK_SHAPE = PEAK_RATIO ** -0.75 * (1 - Math.sqrt(1 / PEAK_RATIO)) ** 0.25;
-
-/**
- * Temperature profile T(r) proportional to r^(-3/4) (1 - sqrt(r_in / r))^(1/4) (Newtonian thin
- * disk with zero torque at r_in), normalised to 1 at its peak. Zero at and inside r_in.
- */
-export function diskTemperature(r: number, rIn: number): number {
-  if (!(r > rIn)) return 0;
-  const x = r / rIn;
-  return (x ** -0.75 * (1 - Math.sqrt(1 / x)) ** 0.25) / PEAK_SHAPE;
-}
-
-/**
- * Factor k with T(r) = k x^(-3/4) (1 - x^(-1/2))^(1/4), x = r / r_in, for a disk whose hottest
- * radius has temperature peakTemperature (the form the shader evaluates).
- */
-export function diskTemperatureScale(peakTemperature: number): number {
-  return peakTemperature / PEAK_SHAPE;
-}
 
 // Page-Thorne flux (Page and Thorne 1974, ApJ 191, 499) for a Schwarzschild hole, a* = 0.
 // Geometric units G = c = 1. x = sqrt(r / M); x0 = sqrt6 is x at the ISCO.
@@ -203,9 +190,11 @@ export interface DiskLight {
 
 /**
  * Front-to-back compositing along a traced path: each crossing inside [rIn, rOut] adds
- * opacity x blackbody(g T) and dims what lies behind by (1 - opacity). g is the frequency ratio
+ * opacity x blackbody(g T_peak T-hat(r)) and dims what lies behind by (1 - opacity), with T-hat
+ * the Page-Thorne temperature over its peak value (diskTemperatureHat). g is the frequency ratio
  * for a circular Keplerian emitter and a photon with the path's L_z / E, times the static
- * observer's factor gObserver. Negative (out of gamut) emission is clamped to zero.
+ * observer's factor gObserver; the flux is in the gas's own frame, so g is applied once. Negative
+ * (out of gamut) emission is clamped to zero.
  */
 export function compositeDisk(
   disk: DiskSettings,
@@ -222,7 +211,7 @@ export function compositeDisk(
   for (const radius of crossingRadii) {
     if (radius < rIn || radius > rOut) continue;
     const shift = redshiftFactor(circularOrbitEmitter(radius, M), lzOverE) * gObserver;
-    const e = blackbodyColour(shift * peakTemperature * diskTemperature(radius, rIn));
+    const e = blackbodyColour(shift * peakTemperature * diskTemperatureHat(radius, M));
     const k = transmittance * opacity;
     r += k * Math.max(0, e[0]);
     g += k * Math.max(0, e[1]);
@@ -235,7 +224,7 @@ export function compositeDisk(
 
 /** What the disk contributes along one path in the EHT-style view: a scalar, not a colour. */
 export interface DiskBrightness {
-  /** (g T-hat)^4 composited front to back, T-hat the temperature over its peak value. */
+  /** g^4 F-hat composited front to back, F-hat the flux over its peak value. */
   readonly intensity: number;
   readonly transmittance: number;
 }
@@ -243,9 +232,9 @@ export interface DiskBrightness {
 /**
  * Brightness summed over all frequencies, composited front to back like compositeDisk. For a
  * blackbody, I_nu / nu^3 is invariant along a ray (docs/PHYSICS.md, section 9), so the observed
- * frequency-integrated intensity is g^4 times the emitted sigma T^4 / pi; in units of the peak
- * emission this is (g T-hat)^4 with T-hat = diskTemperature (docs/PHYSICS.md, section 10d). The
- * peak temperature cancels.
+ * frequency-integrated intensity is g^4 times the emitted sigma T^4 / pi = F / pi; in units of
+ * the peak emission this is g^4 F-hat, F-hat = diskFluxHat = T-hat^4 (docs/PHYSICS.md, section
+ * 10d). The peak temperature cancels.
  */
 export function compositeDiskBolometric(
   disk: DiskSettings,
@@ -260,8 +249,8 @@ export function compositeDiskBolometric(
   for (const radius of crossingRadii) {
     if (radius < rIn || radius > rOut) continue;
     const shift = redshiftFactor(circularOrbitEmitter(radius, M), lzOverE) * gObserver;
-    const q = (shift * diskTemperature(radius, rIn)) ** 2;
-    intensity += transmittance * opacity * q * q;
+    const g2 = shift * shift;
+    intensity += transmittance * opacity * g2 * g2 * diskFluxHat(radius, M);
     transmittance *= 1 - opacity;
     if (transmittance === 0) break;
   }

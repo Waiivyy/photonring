@@ -1,8 +1,9 @@
 // Page-Thorne disk temperature table for the shaders. T-hat = (F / F_peak)^(1/4) factors as
 // s^(3/2) (1 - s)^(1/2) C(s), s = sqrt(6M / r): the shader forms the first two factors from square
 // roots and divisions, and C, smooth and bounded on [0, 1], comes from this table, built by the
-// f64 physics library and interpolated linearly in s. No renderer binds it yet.
-// tableTemperatureHat is the CPU twin of the lookup the shader is to make, step for step.
+// f64 physics library and interpolated linearly in s. The renderer binds it at group 0, binding 3
+// (src/shaders/render.wgsl), and temperatureHat in src/shaders/disk.wgsl reads it;
+// tableTemperatureHat is the CPU twin of that lookup, step for step.
 import { diskTemperatureFactor } from '../../physics/index.ts';
 
 export const DISK_TABLE_SIZE = 1024;

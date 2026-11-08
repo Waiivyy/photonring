@@ -15,8 +15,8 @@ export const PRIVACY_NOTE =
 
 /** Limits: the disk. */
 export const DISK_LIMIT =
-  'An infinitely thin, opaque toy disk with a simple temperature profile, no radiative ' +
-  'transfer and no thickness; it stops at the ISCO.';
+  'An infinitely thin, opaque toy disk whose brightness follows the relativistic thin-disk flux ' +
+  'of Page and Thorne (1974), with no radiative transfer and no thickness; it stops at the ISCO.';
 
 /** Limits: the two black holes the Event Horizon Telescope has imaged. */
 export const NOT_M87_NOTE =

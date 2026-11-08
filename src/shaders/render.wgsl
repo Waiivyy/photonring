@@ -1,11 +1,15 @@
-// Bindings and compute entry points. Group 0: parameters and colour table. Group 1: the output
-// image (renderTile). Group 2: buffers of the parity entry points used by the GPU tests.
+// Bindings and compute entry points. Group 0: parameters, colour table, strip tables and disk
+// table. Group 1: the output image (renderTile). Group 2: buffers of the parity entry points used
+// by the GPU tests.
 
 @group(0) @binding(0) var<uniform> params: Params;
 @group(0) @binding(1) var<storage, read> lut: array<vec4f>;
 // Photon subring strip: (cos, sin) of the image angle of each column of the full-size strip, then
 // of the view angle alpha of each row, computed in f64 on the host (src/physics/strip.ts).
 @group(0) @binding(2) var<storage, read> stripTable: array<vec2f>;
+// The smooth factor C(s) of the Page-Thorne temperature profile at s = i / (DISK_TABLE_SIZE - 1),
+// built in f64 on the host (src/gpu/host/disk-table.ts); read by temperatureHat (disk.wgsl).
+@group(0) @binding(3) var<storage, read> diskTable: array<f32>;
 
 @group(1) @binding(0) var outImage: texture_storage_2d<rgba16float, write>;
 
@@ -130,4 +134,14 @@ fn skySamples(@builtin(global_invocation_id) gid: vec3u) {
   }
   let v = skyIn[i];
   skyOut[i] = vec4f(skyRadiance(v.xyz, v.w), 0.0);
+}
+
+// GPU test entry point: T-hat at the radius in x of each input, in x of each output.
+@compute @workgroup_size(64)
+fn diskProfileSamples(@builtin(global_invocation_id) gid: vec3u) {
+  let i = gid.x;
+  if (i >= arrayLength(&skyIn)) {
+    return;
+  }
+  skyOut[i] = vec4f(temperatureHat(skyIn[i].x), 0.0, 0.0, 0.0);
 }

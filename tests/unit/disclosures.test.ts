@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_DISK } from '../../src/physics/index.ts';
-import { COLOURS_NOTE, NOT_M87_NOTE } from '../../src/ui/about-text.ts';
+import { COLOURS_NOTE, DISK_LIMIT, NOT_M87_NOTE } from '../../src/ui/about-text.ts';
 import { PAGE_SCENE } from '../../src/ui/page-scene.ts';
 
 const ROOT = new URL('../../', import.meta.url);
@@ -125,5 +125,14 @@ describe('the About dialog names the display choices a visitor cannot see', () =
     ]) {
       expect(NOT_M87_NOTE).toContain(phrase);
     }
+  });
+});
+
+describe('the disk follows the Page-Thorne flux in every text (Stage 8)', () => {
+  it('the About limits name Page and Thorne and keep the disk an opaque toy', () => {
+    expect(DISK_LIMIT).toContain('Page and Thorne');
+    expect(DISK_LIMIT).toContain('opaque');
+    expect(DISK_LIMIT).toContain('toy');
+    expect(DISK_LIMIT).not.toContain('simple temperature profile');
   });
 });

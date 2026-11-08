@@ -105,7 +105,10 @@ describe('EHT-style view on the CPU', () => {
       expect(out.stats.stepLimit).toBe(0);
     });
 
-    it('has its ring, the peak of the azimuthal mean, between 10.5 and 12 M', () => {
+    it('has its ring, the peak of the azimuthal mean, between 12 and 13 M', () => {
+      // 12.53 M with the Page-Thorne disk, 12.52 to 12.57 M at sizes from 192 to 640 px. The
+      // bracket was 10.5 to 12 M for the Newtonian profile of Stages 1 to 7 (11.21 M): it moved
+      // with the model, not to a looser bound (docs/VALIDATION.md, Tolerance changes).
       const bin = 0.05;
       const sums = new Float64Array(600);
       const counts = new Float64Array(600);
@@ -130,15 +133,16 @@ describe('EHT-style view on the CPU', () => {
       const peak = (best + 0.5 + (0.5 * (y0 - y2)) / (y0 - 2 * y1 + y2)) * bin;
       expect(
         measured('EHT CPU: ring radius (peak of the azimuthal mean), M', peak),
-      ).toBeGreaterThan(10.5);
-      expect(peak).toBeLessThan(12);
+      ).toBeGreaterThan(12);
+      expect(peak).toBeLessThan(13);
     });
 
     it('turned north up, its bright side lies where M87*s does (position angle 150 to 200 degrees)', () => {
       // The published angle comes from fitted crescent models: the orientation of the brightness
       // asymmetry (EHT Paper I, Table 1). Its analogue here is the brightness-weighted direction
-      // around the ring (6 to 18 M), which is 196.7 degrees at every size from 192 to 640 px; the
-      // single brightest pixel of the broad crescent wanders from 199.5 to 201.0 degrees.
+      // around the ring (6 to 18 M), which is 194.83 to 194.88 degrees at sizes from 192 to
+      // 640 px; the single brightest pixel of the broad crescent wanders from 198.4 to 199.2
+      // degrees.
       let sx = 0;
       let sy = 0;
       for (let j = 0; j < s.height; j++) {

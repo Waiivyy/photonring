@@ -106,6 +106,13 @@ export interface Harness {
     disk?: DiskSettings | null,
     mode?: RenderMode,
   ): Promise<HarnessRayResult[]>;
+  /**
+   * T-hat(r), the disk's temperature in the gas's own frame over its peak value, from the shipped
+   * WGSL (temperatureHat), for mass 1 and the given disk. Radii are rounded to f32 on the way in.
+   */
+  diskProfile(radii: readonly number[], disk: DiskSettings): Promise<number[]>;
+  /** Hands the renderer a scene with this mass and disk: null if it accepts it, else the error. */
+  sceneError(M: number, disk: DiskSettings | null): Promise<string | null>;
   /** Sky radiance for unit directions as seen with frequency shift g. */
   skyRadiance(
     directions: readonly (readonly [number, number, number])[],

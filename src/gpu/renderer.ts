@@ -1,8 +1,8 @@
 // WebGPU renderer: compute pipelines for the image and for the parity tests, the tone-mapping
 // blit, tiled dispatch, and GPU timing. Physics lives in the WGSL; this file only moves data.
 import {
+  assertDiskSettings,
   cameraFrame,
-  diskTemperatureScale,
   staticObserverFactor,
   stripColumnAngle,
   stripRange,
@@ -12,6 +12,7 @@ import {
   type DiskSettings,
 } from '../physics/index.ts';
 import { AA_THRESHOLD, criticalBand } from './host/antialias.ts';
+import { DISK_TABLE } from './host/disk-table.ts';
 import { colourMapTable, ehtPlan, NORMALISE_FLOOR, TABLE_SIZE } from './host/eht-post.ts';
 import { halfToFloat } from './host/half.ts';
 import { layoutStruct, packStruct } from './host/layout.ts';
@@ -44,7 +45,7 @@ export interface SceneParams {
   readonly sky: Sky;
   readonly exposure: number;
   readonly toneMapping: boolean;
-  /** Thin disk, or null for none. Inner edge outside the photon sphere (3M). */
+  /** Thin disk, or null for none. Checked by assertDiskSettings: M > 0 and 6M <= rIn < rOut. */
   readonly disk: DiskSettings | null;
   /** Adaptive 3 x 3 supersampling after the one-sample pass (colour and EHT modes). */
   readonly antialias: boolean;
@@ -89,7 +90,7 @@ type Layouts = Record<
   'common' | 'image' | 'refine' | 'empty' | 'rays' | 'sky' | 'blit',
   GPUBindGroupLayout
 >;
-type Pipelines = Record<'render' | 'refine' | 'rays' | 'sky', GPUComputePipeline>;
+type Pipelines = Record<'render' | 'refine' | 'rays' | 'sky' | 'diskProfile', GPUComputePipeline>;
 type EhtPipelines = Record<
   'reduceX' | 'reduceY' | 'blurH' | 'blurV' | 'max' | 'normalise',
   GPUComputePipeline
@@ -104,6 +105,8 @@ export class GpuRenderer {
   private readonly blitUniform: GPUBuffer;
   private common: GPUBindGroup;
   private readonly lut: GPUBuffer;
+  /** The Page-Thorne disk profile's smooth factor C(s) (src/gpu/host/disk-table.ts), 4 KB. */
+  private readonly diskTable: GPUBuffer;
   /** The photon subring strip's tables (a small placeholder in the other modes), and their key. */
   private stripBuffer: GPUBuffer;
   private stripKey = '';
@@ -202,6 +205,12 @@ export class GpuRenderer {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     });
     device.queue.writeBuffer(this.lut, 0, BLACKBODY_LUT.data);
+    this.diskTable = device.createBuffer({
+      label: 'disk profile table',
+      size: DISK_TABLE.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    device.queue.writeBuffer(this.diskTable, 0, DISK_TABLE);
     this.stripBuffer = device.createBuffer({
       label: 'strip tables (placeholder)',
       size: 16,
@@ -247,6 +256,7 @@ export class GpuRenderer {
           { binding: 0, visibility: C, buffer: { type: 'uniform' } },
           { binding: 1, visibility: C, buffer: { type: 'read-only-storage' } },
           { binding: 2, visibility: C, buffer: { type: 'read-only-storage' } },
+          { binding: 3, visibility: C, buffer: { type: 'read-only-storage' } },
         ],
       }),
       image: device.createBindGroupLayout({
@@ -308,6 +318,10 @@ export class GpuRenderer {
         LOG_CROSSINGS: 1,
       }),
       sky: await pipeline([layouts.common, layouts.empty, layouts.sky], 'skySamples'),
+      diskProfile: await pipeline(
+        [layouts.common, layouts.empty, layouts.sky],
+        'diskProfileSamples',
+      ),
     };
     const eht = (entryPoint: string) =>
       device.createComputePipelineAsync({
@@ -404,10 +418,7 @@ export class GpuRenderer {
   }
 
   setScene(scene: SceneParams): void {
-    const d = scene.disk;
-    if (d && !(d.rIn > 3 * scene.M && d.rOut > d.rIn && d.opacity >= 0 && d.opacity <= 1)) {
-      throw new RangeError('disk needs 3M < rIn < rOut and opacity in [0, 1]');
-    }
+    if (scene.disk) assertDiskSettings(scene.disk, scene.M);
     this.scene = scene;
   }
 
@@ -418,6 +429,7 @@ export class GpuRenderer {
         { binding: 0, resource: { buffer: this.uniform } },
         { binding: 1, resource: { buffer: this.lut } },
         { binding: 2, resource: { buffer: this.stripBuffer } },
+        { binding: 3, resource: { buffer: this.diskTable } },
       ],
     });
   }
@@ -498,9 +510,7 @@ export class GpuRenderer {
       diskOuter: scene.disk?.rOut ?? 0,
       diskOpacity: scene.disk?.opacity ?? 0,
       // The EHT-style view works with T-hat, the temperature over its peak value.
-      diskTemperatureScale: scene.disk
-        ? diskTemperatureScale(scene.mode === 'eht' ? 1 : scene.disk.peakTemperature)
-        : 0,
+      diskPeakTemperature: scene.disk ? (scene.mode === 'eht' ? 1 : scene.disk.peakTemperature) : 0,
       bandCosMin: band.cosMin,
       bandCosMax: band.cosMax,
       aaThreshold: scene.aaThreshold ?? AA_THRESHOLD,
@@ -1221,6 +1231,26 @@ export class GpuRenderer {
     });
   }
 
+  /**
+   * T-hat(r), the disk's temperature in the gas's own frame over its peak value, from the shipped
+   * WGSL (temperatureHat) for the current scene's mass, at radii rounded to f32 (GPU tests).
+   */
+  async sampleDiskProfile(radii: readonly number[]): Promise<number[]> {
+    const input = new Float32Array(radii.length * 4);
+    radii.forEach((r, i) => input.set([r, 0, 0, 0], i * 4));
+    const out = new Float32Array(
+      await this.runParity(
+        this.pipelines.diskProfile,
+        this.layouts.sky,
+        [2, 3],
+        input,
+        radii.length,
+        radii.length * 16,
+      ),
+    );
+    return radii.map((_, i) => out[i * 4] as number);
+  }
+
   /** Sky radiance for unit directions and frequency shift g (parity tests). */
   async skyRadiance(
     directions: readonly (readonly [number, number, number])[],
@@ -1254,6 +1284,7 @@ export class GpuRenderer {
     this.blitUniform.destroy();
     this.stripBuffer.destroy();
     this.lut.destroy();
+    this.diskTable.destroy();
     this.ehtUniform.destroy();
     this.ehtTable.destroy();
     this.ehtPeak.destroy();

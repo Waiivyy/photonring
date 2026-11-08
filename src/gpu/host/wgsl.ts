@@ -1,6 +1,7 @@
 // Generated WGSL: uniform structs and constants taken from the TypeScript sources of truth
-// (physics library, star layers, colour table), so CPU and GPU cannot disagree on them.
+// (physics library, star layers, colour and disk tables), so CPU and GPU cannot disagree on them.
 import { luminance, STAR_LAYERS, TERMINATION_COLOURS } from '../../physics/index.ts';
+import { DISK_TABLE_SIZE } from './disk-table.ts';
 import { TABLE_SIZE } from './eht-post.ts';
 import { wgslStruct, type StructField } from './layout.ts';
 
@@ -42,7 +43,9 @@ export const FRAME_FIELDS: readonly StructField[] = [
   ['diskInner', 'f32'],
   ['diskOuter', 'f32'],
   ['diskOpacity', 'f32'],
-  ['diskTemperatureScale', 'f32'],
+  // Emitted temperature at the radius of peak flux, in the gas's own frame (DiskSettings); 1 in
+  // the EHT-style view, which works with T-hat.
+  ['diskPeakTemperature', 'f32'],
   ['bandCosMin', 'f32'],
   ['bandCosMax', 'f32'],
   ['aaThreshold', 'f32'],
@@ -112,6 +115,7 @@ export function wgslHeader(lut: LutParams): string {
     ...RENDER_MODES.map((m, i) => `const MODE_${m.toUpperCase()}: u32 = ${i}u;`),
     ...SKIES.map((m, i) => `const SKY_${m.toUpperCase()}: u32 = ${i}u;`),
     `const EHT_TABLE_SIZE: u32 = ${TABLE_SIZE}u;`,
+    `const DISK_TABLE_SIZE: u32 = ${DISK_TABLE_SIZE}u;`,
     `const RADIAL_SIN: f32 = ${f32(GPU_RADIAL_SIN)};`,
     `const STAR_LAYER_COUNT: u32 = ${STAR_LAYERS.length}u;`,
     `var<private> STAR_LAYERS: array<vec4f, ${STAR_LAYERS.length}> = array<vec4f, ${STAR_LAYERS.length}>(${layers.join(', ')});`,

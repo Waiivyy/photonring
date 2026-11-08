@@ -9,7 +9,7 @@ import {
   type StructField,
 } from '../../src/gpu/host/layout.ts';
 import { halfToFloat } from '../../src/gpu/host/half.ts';
-import { wgslHeader } from '../../src/gpu/host/wgsl.ts';
+import { FRAME_FIELDS, wgslHeader } from '../../src/gpu/host/wgsl.ts';
 import { BLACKBODY_LUT, buildBlackbodyLut, lutColour } from '../../src/gpu/host/lut.ts';
 import {
   DISK_TABLE,
@@ -247,6 +247,20 @@ describe('generated WGSL constants', () => {
     expect(header).toContain('const DEBUG_ESCAPED: vec3f = vec3f(0.15, 0.3, 0.8);');
     expect(header).toContain('const DEBUG_CAPTURED: vec3f = vec3f(0.0, 0.0, 0.0);');
     expect(header).toContain('const DEBUG_STEP_LIMIT: vec3f = vec3f(1.0, 0.0, 1.0);');
+  });
+
+  it('the disk table size comes from src/gpu/host/disk-table.ts', () => {
+    const header = wgslHeader({ size: 2, tMin: 1000, tMax: 100000 });
+    expect(header).toContain(`const DISK_TABLE_SIZE: u32 = ${DISK_TABLE_SIZE}u;`);
+  });
+
+  it('the frame passes the peak temperature itself, in the slot of the old scale factor', () => {
+    const names = FRAME_FIELDS.map(([name]) => name);
+    expect(names).toContain('diskPeakTemperature');
+    expect(names).not.toContain('diskTemperatureScale');
+    expect(names.indexOf('diskPeakTemperature')).toBe(names.indexOf('diskOpacity') + 1);
+    // The rename keeps the size: 176 bytes, as at a526c7d before it.
+    expect(layoutStruct(FRAME_FIELDS).size).toBe(176);
   });
 });
 

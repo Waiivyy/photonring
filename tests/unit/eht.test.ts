@@ -8,7 +8,8 @@ import {
   compositeDiskBolometric,
   criticalImpactParameter,
   DEFAULT_DISK,
-  diskTemperature,
+  diskFluxHat,
+  diskTemperatureHat,
   edgePixelScale,
   EHT_BEAM_UAS,
   EHT_THETA_G_UAS,
@@ -36,20 +37,25 @@ const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const rel = (a: number, b: number) => Math.abs(a / b - 1);
 
 describe('bolometric disk brightness', () => {
-  const g = (r: number, lz: number, gObs: number) =>
-    redshiftFactor(circularOrbitEmitter(r, M), lz) * gObs;
+  // The Page-Thorne flux over its peak value, F-hat (src/physics/disk.ts): one crossing gives
+  // g^4 F-hat(r), which is (g T-hat)^4 with T-hat = F-hat^(1/4).
+  const g = (r: number, lz: number, gObs: number, mass = M) =>
+    redshiftFactor(circularOrbitEmitter(r, mass), lz) * gObs;
 
-  it('one crossing gives (g T-hat)^4 with the library redshift', () => {
+  it('one crossing gives g^4 F-hat(r) with the library redshift, which is (g T-hat)^4', () => {
     for (const [r, lz] of [
+      [6.05, 0],
       [8, 0],
       [8, 4.5],
+      [9.55, 1],
       [12, -4.5],
       [19.5, 2],
     ] as const) {
       const gObs = staticObserverFactor(30, M);
       const { intensity, transmittance } = compositeDiskBolometric(DEFAULT_DISK, [r], lz, M, gObs);
-      const expected = (g(r, lz, gObs) * diskTemperature(r, DEFAULT_DISK.rIn)) ** 4;
+      const expected = g(r, lz, gObs) ** 4 * diskFluxHat(r, M);
       expect(rel(intensity, expected)).toBeLessThan(1e-12);
+      expect(rel(intensity, (g(r, lz, gObs) * diskTemperatureHat(r, M)) ** 4)).toBeLessThan(1e-13);
       expect(transmittance).toBe(0);
     }
   });
@@ -58,7 +64,7 @@ describe('bolometric disk brightness', () => {
     const gObs = staticObserverFactor(200, M);
     const r = 9;
     const { intensity } = compositeDiskBolometric(DEFAULT_DISK, [r], 0, M, gObs);
-    const expected = (Math.sqrt(1 - 3 / r) * gObs * diskTemperature(r, DEFAULT_DISK.rIn)) ** 4;
+    const expected = (Math.sqrt(1 - 3 / r) * gObs) ** 4 * diskFluxHat(r, M);
     expect(rel(intensity, expected)).toBeLessThan(1e-12);
   });
 
@@ -83,11 +89,33 @@ describe('bolometric disk brightness', () => {
     const disk = { ...DEFAULT_DISK, opacity: 0.6 };
     const radii = [9, 15, 7];
     const lz = 2;
-    const j = radii.map((r) => (g(r, lz, 1) * diskTemperature(r, disk.rIn)) ** 4);
+    const j = radii.map((r) => g(r, lz, 1) ** 4 * diskFluxHat(r, M));
     const expected = 0.6 * j[0]! + 0.4 * 0.6 * j[1]! + 0.4 * 0.4 * 0.6 * j[2]!;
     const out = compositeDiskBolometric(disk, radii, lz, M, 1);
     expect(rel(out.intensity, expected)).toBeLessThan(1e-12);
     expect(out.transmittance).toBeCloseTo(0.4 ** 3, 15);
+  });
+
+  it('a disk at M = 2 (rIn = 12M) gives at r = 2x the brightness of M = 1 at x', () => {
+    const big = { ...DEFAULT_DISK, rIn: 12, rOut: 40 };
+    for (const [x, lz] of [
+      [6.3, 1],
+      [9.55, -2],
+      [15, 3],
+    ] as const) {
+      const one = compositeDiskBolometric(DEFAULT_DISK, [x], lz, M, 1.03).intensity;
+      const two = compositeDiskBolometric(big, [2 * x], 2 * lz, 2, 1.03).intensity;
+      expect(rel(two, one)).toBeLessThan(1e-12);
+      expect(rel(two, g(2 * x, 2 * lz, 1.03, 2) ** 4 * diskFluxHat(2 * x, 2))).toBeLessThan(1e-12);
+    }
+  });
+
+  it('a disk cut at 7M keeps its zero torque at 6M: bright at its inner edge', () => {
+    const cut = { ...DEFAULT_DISK, rIn: 7 };
+    const { intensity } = compositeDiskBolometric(cut, [7], 0, M, 1);
+    expect(rel(intensity, g(7, 0, 1) ** 4 * diskFluxHat(7, M))).toBeLessThan(1e-12);
+    expect(diskFluxHat(7, M)).toBeGreaterThan(0.4);
+    expect(compositeDiskBolometric(cut, [6.5], 0, M, 1).intensity).toBe(0);
   });
 });
 

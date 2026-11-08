@@ -14,6 +14,8 @@ import {
   pageThornePeakRadius,
   type DiskSettings,
 } from '../../src/physics/index.ts';
+import { renderImage } from '../../src/cpu-renderer/render.ts';
+import { GOLDEN_SCENES } from '../../src/cpu-renderer/scenes.ts';
 import { adaptiveSimpson, goldenSectionMax, relErr } from '../helpers/numeric.ts';
 import { measured } from '../helpers/measured.ts';
 
@@ -339,5 +341,20 @@ describe('disk settings check (assertDiskSettings)', () => {
   ];
   it.each(rejected)('rejects %s', (_, patch, M) => {
     expect(() => assertDiskSettings({ ...DEFAULT_DISK, ...patch }, M)).toThrow(RangeError);
+  });
+
+  // The CPU renderer checks its disk with assertDiskSettings (the GPU renderer too:
+  // tests/gpu/disk-profile.spec.ts). The render is one pixel, so an accepted disk costs one ray.
+  const cpu = (disk: DiskSettings, M: number) =>
+    renderImage({ ...GOLDEN_SCENES.diskInclined, width: 1, height: 1, samplesPerAxis: 1, disk, M });
+
+  it.each(rejected)('the CPU renderer rejects %s', (_, patch, M) => {
+    expect(() => cpu({ ...DEFAULT_DISK, ...patch }, M)).toThrow(RangeError);
+  });
+
+  it('the CPU renderer accepts the default disk, a disk at the ISCO of M = 2 and a disk cut at 7M', () => {
+    expect(() => cpu(DEFAULT_DISK, 1)).not.toThrow();
+    expect(() => cpu({ ...DEFAULT_DISK, rIn: 12, rOut: 40 }, 2)).not.toThrow();
+    expect(() => cpu({ ...DEFAULT_DISK, rIn: 7 }, 1)).not.toThrow();
   });
 });

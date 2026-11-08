@@ -141,7 +141,9 @@ test.describe('EHT-style view on the GPU', () => {
     }
     console.log(`brightness per crossing: ${compared} rays, largest ${worst.toExponential(2)}`);
     expect(compared).toBeGreaterThan(1000);
-    // f32 rounding of g and T-hat, raised to the fourth power: measured 1.7e-5 on the Apple M5.
+    // f32 rounding of g and T-hat, raised to the fourth power: measured 2.7e-6 on the Apple M5
+    // (macOS 27, Chrome 157.0.8103.38, 2026-11-08) with the Page-Thorne disk; 3.7e-5 with the
+    // Newtonian profile.
     expect(worst).toBeLessThan(1e-4);
   });
 

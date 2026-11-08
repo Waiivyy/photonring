@@ -10,8 +10,7 @@ import {
   criticalImpactParameter,
   deflectionAngleElliptic,
   deflectionAngleQuadrature,
-  diskTemperature,
-  diskTemperatureScale,
+  diskTemperatureHat,
   horizonRadius,
   impactParameterFromLocalAngle,
   iscoRadius,
@@ -347,41 +346,34 @@ describe('5. redshift factor g = nu_obs / nu_emit', () => {
   });
 });
 
-describe('disk temperature profile (toy model)', () => {
-  it('vanishes at the inner edge and peaks at r = (49/36) r_in', () => {
-    const rIn = 6;
-    expect(diskTemperature(rIn, rIn)).toBe(0);
-    const peak = goldenSectionMax((r) => diskTemperature(r, rIn), rIn, 5 * rIn);
-    expect(relErr(peak, (49 / 36) * rIn)).toBeLessThan(1e-6);
-    expect(diskTemperature(peak, rIn)).toBeCloseTo(1, 12);
-  });
+describe('disk compositing along a path', () => {
+  // The disk follows the Page-Thorne flux (src/physics/disk.ts, tested in disk-flux.test.ts): a
+  // blackbody at g T_peak T-hat(r) in the colour view, with T-hat the temperature in the gas's own
+  // frame over its peak value and g applied once.
+  const disk = { rIn: 6, rOut: 20, opacity: 1, peakTemperature: 6500 };
+  const emitted = (r: number, lz: number, gObs: number, M = 1, peak = 6500) =>
+    blackbodyColour(
+      redshiftFactor(circularOrbitEmitter(r, M), lz) * gObs * peak * diskTemperatureHat(r, M),
+    ).map((c) => Math.max(0, c));
 
-  it('falls off as r^(-3/4) far from the inner edge', () => {
-    const ratio = diskTemperature(1e8, 6) / diskTemperature(1e7, 6);
-    expect(relErr(ratio, 10 ** -0.75)).toBeLessThan(1e-3);
-  });
-
-  it('is zero inside the inner edge', () => {
-    expect(diskTemperature(5, 6)).toBe(0);
-  });
-
-  it('has the closed form the shader evaluates', () => {
-    const k = diskTemperatureScale(6500);
-    for (const r of [6.001, 7, 8.1667, 12, 20, 400]) {
-      const x = r / 6;
-      const shaderForm = k * x ** -0.75 * (1 - 1 / Math.sqrt(x)) ** 0.25;
-      // 1 - x^(-1/2) cancels near r_in (8e-5 at r = 6.001), which amplifies rounding.
-      expect(relErr(shaderForm, 6500 * diskTemperature(r, 6))).toBeLessThan(1e-11);
+  it('one opaque crossing is a blackbody at g T_peak T-hat(r), with g from redshiftFactor', () => {
+    for (const [r, lz, gObs] of [
+      [6.2, 0, 1],
+      [7, 4, 1.05],
+      [9.55, -3, 1.1],
+      [12, 2.5, 1],
+      [19.5, -1, 1.02],
+    ] as const) {
+      const out = compositeDisk(disk, [r], lz, 1, gObs);
+      expect(out.transmittance).toBe(0);
+      expect(out.emission).toEqual(emitted(r, lz, gObs));
     }
   });
-});
 
-describe('disk compositing along a path', () => {
-  const disk = { rIn: 6, rOut: 20, opacity: 1, peakTemperature: 6500 };
-  const emitted = (r: number, lz: number, gObs: number) =>
-    blackbodyColour(
-      redshiftFactor(circularOrbitEmitter(r, 1), lz) * gObs * 6500 * diskTemperature(r, 6),
-    ).map((c) => Math.max(0, c));
+  it('takes the peak temperature from the settings', () => {
+    const hot = { ...disk, peakTemperature: 9000 };
+    expect(compositeDisk(hot, [10], 1, 1, 1).emission).toEqual(emitted(10, 1, 1, 1, 9000));
+  });
 
   it('an opaque disk shows only the first crossing inside [rIn, rOut]', () => {
     const out = compositeDisk(disk, [30, 4, 10, 12], 2, 1, 1.1);
@@ -403,5 +395,29 @@ describe('disk compositing along a path', () => {
   it('misses leave the light behind untouched', () => {
     expect(compositeDisk(disk, [], 0, 1, 1)).toEqual({ emission: [0, 0, 0], transmittance: 1 });
     expect(compositeDisk(disk, [5.9, 20.1], 0, 1, 1).transmittance).toBe(1);
+  });
+
+  it('a disk at M = 2 (rIn = 12M) gives at r = 2x the light of M = 1 at x', () => {
+    const big = { ...disk, rIn: 12, rOut: 40 };
+    for (const [x, lz] of [
+      [6.3, 1],
+      [9.55, -2],
+      [15, 3],
+    ] as const) {
+      const one = compositeDisk(disk, [x], lz, 1, 1.03).emission;
+      const two = compositeDisk(big, [2 * x], 2 * lz, 2, 1.03).emission;
+      two.forEach((c, i) => expect(relErr(c, one[i]!)).toBeLessThan(1e-12));
+      expect(two).toEqual(emitted(2 * x, 2 * lz, 1.03, 2));
+    }
+  });
+
+  it('a disk cut at 7M keeps its zero torque at 6M: bright at its inner edge', () => {
+    // A profile with zero torque at the inner edge would be black at r = rIn.
+    const cut = { ...disk, rIn: 7 };
+    const out = compositeDisk(cut, [7], 0, 1, 1);
+    expect(out.emission).toEqual(emitted(7, 0, 1));
+    expect(diskTemperatureHat(7, 1)).toBeGreaterThan(0.8);
+    // Crossings inside the cut are not part of the disk.
+    expect(compositeDisk(cut, [6.5], 0, 1, 1)).toEqual({ emission: [0, 0, 0], transmittance: 1 });
   });
 });

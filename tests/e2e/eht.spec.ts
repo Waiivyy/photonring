@@ -163,7 +163,7 @@ test('in portrait the ring is framed for the narrow side, as the overlays assume
   const rgba = Buffer.from(img.rgba, 'base64');
   const w = img.width;
   const h = img.height;
-  // The brightest pixel lies on the ring, about 11 M from the centre; 28 M fits half the width.
+  // The brightest pixel lies on the ring, about 12 M from the centre; 28 M fits half the width.
   let best = 0;
   for (let p = 1; p < w * h; p++) {
     const v = (q: number) => rgba[4 * q]! + rgba[4 * q + 1]! + rgba[4 * q + 2]!;
