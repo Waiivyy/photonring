@@ -3,7 +3,7 @@
 Every formula the code relies on is derived here, checked against a primary source, and covered by
 a test in `tests/`. The references at the end were read in full or at the cited pages (journal
 scans, arXiv full text, publisher, DLMF, NIST, CIE and W3C pages), except Darwin (1959), Figueroa
-(1995), Lindquist (1966) and Bozza and Scarpetta (2007), whose entries say so, and IEC 61966-2-1,
+(1995) and Lindquist (1966), whose entries say so, and IEC 61966-2-1,
 named only as the basis of the CSS Color 4 sample code. Papers read on arXiv are cited with the equation numbers of the arXiv
 version their entry names; the journal versions were not compared.
 
@@ -280,8 +280,8 @@ closer to the shadow edge by a factor that tends to $e^{\pi} \approx 23.14$ in S
 spacetime. This is a published prediction (Gralla, Holz and Wald 2019, eqs. 2 and 13 to 15;
 Johnson et al. 2020, eqs. 7, 12 and 14, who attribute $\gamma = \pi$ to Luminet 1979; Gralla and
 Lupsasca 2020, section IV.1, $\gamma \to \pi$ as the spin goes to zero). photonring reproduces it
-with its own code: an independent check, not a new result. Strong-deflection formulas for
-sources at finite distance are not new either (Bozza and Scarpetta 2007, abstract read).
+with its own code: an independent check, not a new result. The leading-order law for where these
+images lie, for a camera and a disk ring at finite distances, is published too (below).
 
 **Image order, three spellings.** photonring's order $n$ is the image at the $(n+1)$-th crossing
 of the disk plane (section 6a).
@@ -324,18 +324,44 @@ Values: $\Delta\phi_c(1/30) = 0.174038$, $\Delta\phi_c(1/20) = 0.262589$,
 $\Delta\phi_c(1/6) = 0.975474$ (`criticalOrbitSweep`). It diverges at the photon sphere, where the
 critical orbit circles forever.
 
-**Leading order.** For a ray from infinity to infinity, Bozza's law (section 8) gives
-$\Phi_{\infty\infty} = \pi + \alpha = -\ln\varepsilon + \ln C + O(\varepsilon\ln\varepsilon)$ with
-$\varepsilon = b/b_c - 1$ and $C = 216(7 - 4\sqrt3) = 15.5081$. Each leg carries half of it, and
-the part of a leg between infinity and a finite radius tends to the critical orbit's sweep with an
-$O(\varepsilon)$ error, because the integrand is smooth there. Subtracting those parts,
+**Leading order: a published law.** For a ray from infinity to infinity, Bozza's law (section 8)
+gives $\Phi_{\infty\infty} = \pi + \alpha = -\ln\varepsilon + \ln C + O(\varepsilon\ln\varepsilon)$
+with $\varepsilon = b/b_c - 1$ and $C = 216(7 - 4\sqrt3) = 15.5081$. Bozza and Scarpetta (2007)
+extended the strong deflection limit to a source and an observer at any distance. For the
+Schwarzschild metric their eqs. (65) to (68) give, in the notation here (they write $D_{OL}$ and
+$D_{LS}$ for $r_o$ and $R$), the total sweep
+
+```math
+\Phi = -\ln\frac{\varepsilon}{\eta_o\,\eta_R} + 5\ln 6 - 2\ln\left(3 + \sqrt{3 + 18Mu_o}\right) - 2\ln\left(3 + \sqrt{3 + 18Mu_R}\right),\qquad \eta = 1 - 3Mu .
+```
+
+Per leg, with $s = \sqrt{1/3 + 2Mu}$: $\sqrt{3 + 18Mu} = 3s$ and $1 - 3Mu = \tfrac32(1 - s^2)$, so
+$\eta\thinspace 6^{5/2}/(3 + 3s)^2 = 6^{3/2}(1 - s)/(1 + s)$. The formula for $\Delta\phi_c$ above
+gives $e^{-\Delta\phi_c(u)} = (2 + \sqrt3)(1 - s)/(1 + s)$, and $\sqrt C\thinspace(2 + \sqrt3) = 6^{3/2}$
+because $7 - 4\sqrt3 = (2 - \sqrt3)^2$. With the sweep $\Phi = \phi_0 + n\pi$ to the image of order
+$n$, their law is therefore
 
 ```math
 \varepsilon_n(R) \approx C\,e^{-\Delta\phi_c(u_o) - \Delta\phi_c(u_R)}\,e^{-\phi_0}\,e^{-n\pi}
 ```
 
-(`subringOffsetLeadingOrder`; derived for this project and checked numerically below). This
-formula carries the main consequences: successive offsets of one edge, and so the widths of the
+(`subringOffsetLeadingOrder`, checked numerically below). The form with $\Delta\phi_c$ shows where
+the constants come from: each leg carries half of Bozza's $\ln C$, minus the critical orbit's sweep
+between infinity and the leg's finite end, where the leg's own sweep differs from it only by
+$O(\varepsilon)$ because the integrand is smooth there. Later papers applied the same law to the
+images of a disk. Aldi and Bozza (2017, section 3, eqs. 3.22 to 3.28) treated an inclined disk
+seen from far away; the factor of the ring radius in their eq. (3.23), in units $2M = 1$, is
+$C\thinspace e^{-\Delta\phi_c(u_R)}$. Bisnovatyi-Kogan and Tsupko (2022, eqs. 8 to 16) gave the
+radii of the rings of a disk seen face-on from far away, citing Bozza and Scarpetta and two
+later papers of Bozza's for the law.
+Tsupko (2022, eq. 18) gave the shape of a ring's images for any inclination and, in his
+Appendix A, derived the same curve from Aldi and Bozza's results. Aratore, Tsupko and Perlick
+(2024, eq. 10, which they credit to Bozza and Scarpetta) wrote the law for any asymptotically
+flat, static, spherically symmetric metric with a photon sphere, with the observer's distance
+kept, before taking it to infinity. In those papers
+the view enters through the sweep each image needs; here, through $\phi_0$ (section 6a).
+
+This formula carries the main consequences: successive offsets of one edge, and so the widths of the
 bands, shrink by $e^{\pi}$ per half-turn; on a $\log_{10}\varepsilon$ axis the bands repeat every
 $\pi/\ln 10 = 1.364$ decades; and the view enters only through $\phi_0$, which is $\pi/2$ along the
 horizontal image axis at every elevation. ($C\thinspace b_c = 1944M/(12 + 7\sqrt3) = 80.58M$ is Gralla, Holz
@@ -642,6 +668,33 @@ and Thorne (1974) solution, and the disk has no thickness, no radiative transfer
 self-illumination and no magnetic fields. It is a toy for demonstration and must not be presented
 as a model of any real observation.
 
+**Display choices.** The peak temperature of the opaque toy disk, 6500 K at
+$r = (49/36)\thinspace r_{in}$ in the gas's own frame, is a display choice, made at the Stage 1
+check-in (`docs/DESIGN.md`, section 10); it was not derived from a black hole mass or accretion
+rate, and that record gives no physical reason for it. With the colour-matching fit of section
+10a, a 6500 K blackbody has chromaticity (0.3134, 0.3239), 0.0052 from the sRGB white point D65
+(0.3127, 0.3290). The disk is not drawn at that temperature: each crossing is drawn as a
+blackbody at $gT$ (section 9), so the approaching side of the disk is drawn whiter and the
+receding side brown. The page's exposure is fixed at 1. Computed by the library (the CPU reference
+renderer's encoding of a colour-view pixel, not a measurement on a GPU), the tone curve of section
+10a draws a 6500 K blackbody at (210, 207, 210) of 255; one at 3000 K has 0.010 of its luminance
+and is drawn at (35, 23, 9), and one at 9000 K has 3.16 times it and is drawn at (248, 250, 253)
+(`tests/unit/colour.test.ts`, `npm run measure`).
+
+**Not a model of M87\* or Sgr A\*.** The EHT explains its image of M87\* with models in which hot
+plasma near the black hole shines by synchrotron emission (EHT 2019, Paper V, abstract), and it
+expects the 1.3 mm emission to come from the synchrotron process (Paper V, section 2). It calls a
+black hole surrounded by a geometrically thick, optically thin accretion flow the conventional
+model of the central object in M87 (Paper V, section 1). For Sgr A\*, the EHT writes that its low luminosity suggests that matter falls in as "a radiatively
+inefficient/advection dominated accretion flow" rather than as "a radiatively efficient thin
+disk", and that its emission is driven by the synchrotron process (EHT 2022, Paper V, section 1).
+The EHT's M87\* Paper I gives the wider reason: the brightest quasars are thought to accrete at
+very high rates through a geometrically thin, optically thick disk (Shakura and Sunyaev 1973),
+while most nearby active nuclei, the Galactic center and M87 among them, are fed by hot, tenuous
+flows at much lower accretion rates (EHT 2019, Paper I, section 1).
+photonring's disk is a thin, opaque toy that radiates as a blackbody, with the temperature profile
+of Shakura and Sunyaev (1973), and its black hole does not spin (section 10d, item 6).
+
 ## 10a. Colour
 
 - **Spectrum.** Planck's law $B_\lambda \propto \lambda^{-5}/(e^{c_2/\lambda T} - 1)$ with
@@ -672,7 +725,8 @@ as a model of any real observation.
   standard illuminant A dataset (CIE 2018) and the 1931 functions (a one-off check for the Stage 6
   reference audit, script not kept).
 - **Tone mapping.** $1 - e^{-kx}$ per channel, $k$ the exposure: linear near 0, saturating
-  smoothly below 1. Validation and debug renders skip it and clamp to $[0, 1]$ instead.
+  smoothly below 1. The page uses $k = 1$ (`PAGE_SCENE` in `src/ui/page-scene.ts`; section 10).
+  Validation and debug renders skip it and clamp to $[0, 1]$ instead.
 
 ## 10b. Star field (procedural)
 
@@ -846,9 +900,10 @@ direction around the ring, is at position angle 196.7 degrees, inside M87*'s pub
 
 **What it is not** (also in the page's legend, the About text and the README):
 
-1. Different light: M87*'s 1.3 mm light is synchrotron emission from a hot, geometrically thick,
-   optically thin flow (Paper I, section 1; Paper V, section 1); this disk is a thin, opaque,
-   Newtonian blackbody toy (section 10).
+1. Different light: the EHT explains M87*'s image with models in which hot plasma shines by
+   synchrotron emission (Paper V, abstract and section 2), and it calls a geometrically thick,
+   optically thin accretion flow the conventional model (Paper V, section 1); this disk is a thin,
+   opaque, Newtonian blackbody toy (section 10).
 2. A different ring: in the EHT's models the ring is "related to the lensed photon ring" (Paper I,
    section 6); here the bright ring is the disk's direct image near its flux peak, about twice the
    size in units of M (above). Nothing emits inside the ISCO, so the dark centre is wider than the
@@ -858,7 +913,9 @@ direction around the ring, is at position angle 196.7 degrees, inside M87*'s pub
 4. All frequencies, not 230 GHz.
 5. A perfect image, blurred: no interferometric reconstruction, no artefacts, no scattering, no
    variability, no turbulence.
-6. Schwarzschild only, and a camera at 200 M, not at M87*'s distance.
+6. Schwarzschild only (the EHT found the models of non-spinning black holes in its library
+   inconsistent with the observations of M87*, because they do not produce sufficiently powerful
+   jets: Paper V, abstract), and a camera at 200 M, not at M87*'s distance.
 7. False colour on a relative scale: the colours encode brightness only, linear from black to the
    image's brightest point; the map is not the EHT's own.
 
@@ -904,15 +961,28 @@ the post-process passes, the final image and the preview agree with the CPU refe
 
 Each entry was confirmed from its text, or, where the entry says so, from publisher metadata only.
 
+- Aldi, G. F. and Bozza, V. (2017). Relativistic iron lines in accretion disks: the contribution
+  of higher order images in the strong deflection limit. J. Cosmol. Astropart. Phys.
+  2017(02), 033. doi:10.1088/1475-7516/2017/02/033, arXiv:1607.05365 (abstract; section 3, eqs.
+  3.22 to 3.28, read in the ar5iv HTML rendering, which shows no version number; the journal
+  reference is taken from the DOI)
+- Aratore, F., Tsupko, O. Yu. and Perlick, V. (2024). Constraining spherically symmetric metrics by
+  the gap between photon rings. Phys. Rev. D 109, 124057. doi:10.1103/PhysRevD.109.124057,
+  arXiv:2402.14733 (abstract and eqs. 4 to 13 with the text around eq. 10, numbered as in arXiv
+  v2; the journal reference is taken from the DOI)
 - Bardeen, J. M., Press, W. H. and Teukolsky, S. A. (1972). Rotating black holes: locally
   nonrotating frames, energy extraction, and scalar synchrotron radiation. ApJ 178, 347-369.
   doi:10.1086/151796 (eqs. 2.13, 2.16, 2.18 and 2.21)
+- Bisnovatyi-Kogan, G. S. and Tsupko, O. Yu. (2022). Analytical study of higher-order ring images
+  of the accretion disk around a black hole. Phys. Rev. D 105, 064040. doi:10.1103/PhysRevD.105.064040,
+  arXiv:2201.01716 (abstract, and eqs. 8 to 16 with the text that credits eq. 8, numbered as in
+  arXiv v1)
 - Bozza, V. (2002). Gravitational lensing in the strong field limit. Phys. Rev. D 66, 103001.
   doi:10.1103/PhysRevD.66.103001, arXiv:gr-qc/0208075 (eqs. 25, 29 and 47 to 50, numbered as in
   arXiv v3)
 - Bozza, V. and Scarpetta, G. (2007). Strong deflection limit of black hole gravitational lensing
   with arbitrary source distances. Phys. Rev. D 76, 083008. doi:10.1103/PhysRevD.76.083008,
-  arXiv:0705.0246 (abstract only)
+  arXiv:0705.0246 (abstract and section II, eqs. 1 to 71, numbered as in arXiv v2)
 - Cardoso, V., Miranda, A. S., Berti, E., Witek, H. and Zanchin, V. T. (2009). Geodesic
   stability, Lyapunov exponents, and quasinormal modes. Phys. Rev. D 79, 064016.
   doi:10.1103/PhysRevD.79.064016, arXiv:0812.1806 (eqs. 49 and 50, numbered as in arXiv v3)
@@ -942,7 +1012,11 @@ Each entry was confirmed from its text, or, where the entry says so, from publis
   arXiv:1906.11238 (sections 1, 3, 5, 6 and 7, Table 1, Figure 3)
 - Event Horizon Telescope Collaboration (2019). First M87 Event Horizon Telescope Results. V.
   Physical Origin of the Asymmetric Ring. ApJL 875, L5. doi:10.3847/2041-8213/ab0f43,
-  arXiv:1906.11242 (sections 1 and 2; Figures 1, 2, 4 and 5)
+  arXiv:1906.11242 (abstract, sections 1 and 2; Figures 1, 2, 4 and 5)
+- Event Horizon Telescope Collaboration (2022). First Sagittarius A* Event Horizon Telescope
+  Results. V. Testing Astrophysical Models of the Galactic Center Black Hole. ApJL 930, L16.
+  doi:10.3847/2041-8213/ac6672, arXiv:2311.09478 (section 1, read in the ar5iv HTML rendering;
+  posted on arXiv in 2023)
 - Gralla, S. E., Holz, D. E. and Wald, R. M. (2019). Black hole shadows, photon rings, and lensing
   rings. Phys. Rev. D 100, 024018. doi:10.1103/PhysRevD.100.024018, arXiv:1906.00873 (sections I
   to III, eqs. 2 and 13 to 15, read in the HTML rendering of arXiv v2)
@@ -983,6 +1057,10 @@ Each entry was confirmed from its text, or, where the entry says so, from publis
   95a3d2929ba2a1c2c2f3afbf343d38e04066de7d
 - Synge, J. L. (1966). The escape of photons from gravitationally intense stars. MNRAS 131,
   463-466. doi:10.1093/mnras/131.3.463 (eqs. 8 to 11 and 14)
+- Tsupko, O. Yu. (2022). Shape of higher-order images of equatorial emission rings around a
+  Schwarzschild black hole: analytical description with polar curves. Phys. Rev. D 106, 064033.
+  doi:10.1103/PhysRevD.106.064033, arXiv:2208.02084 (abstract, introduction, eqs. 16 to 18 and
+  Appendix A, eqs. 44 to 54, numbered as in arXiv v2)
 - W3C CSS Color Module Level 4, Candidate Recommendation Draft, 27 October 2026, section 19
   "Sample code for Color Conversions", https://www.w3.org/TR/2026/CRD-css-color-4-20261027/, and
   its sample code file https://drafts.csswg.org/css-color-4/conversions.js (`XYZ_to_lin_sRGB`,

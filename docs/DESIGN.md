@@ -1,58 +1,84 @@
 # Design decisions
 
-Status: Stage 6 (README and docs). Every number below was measured unless it is labelled as an
-estimate. Machine for all measurements: Apple M5 (10-core GPU), 24 GB, macOS 27.0, Node 25.6.1,
-except the CI runs in sections 5 and 14, which name their runner. In section 3, and where section
+Status: Stage 8 (first release: link previews and disclosures, section 17). Every number below
+was measured unless it is labelled as an estimate. Machine for all measurements: Apple M5 (10-core
+GPU), 24 GB, macOS 27.0, Node 25.6.1, except the CI runs in sections 5 and 14, which name their
+runner. In section 3, and where section
 6 says "emulated", the f32 results come from an emulation (`Math.fround` after every operation);
 sections 6 and 11 have the measurements on the GPU.
 
-| Decision             | Choice                                                                                                                                                            | Section |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| Language and tooling | TypeScript 6.0 (strict), Vite, Vitest, Playwright, ESLint, Prettier                                                                                               | 2       |
-| GPU API              | Raw WebGPU with WGSL compute shaders, no rendering framework                                                                                                      | 2       |
-| Integrator           | Planar Binet equation $u'' = 3Mu^2 - u$, classical RK4, fixed step $d\phi = 0.05$ (f32)                                                                           | 3       |
-| Final direction      | Rotation recurrence instead of WGSL `sin`/`cos`                                                                                                                   | 3       |
-| Fallback             | No WebGL2 renderer in the MVP; explanation page plus pre-rendered gallery                                                                                         | 4       |
-| Star field           | Three cubic lattices in direction space hashed with pcg3d; profiles truncated at half a cell, so lookups are seamless                                             | 10      |
-| Colour               | Planck spectrum against an analytic CIE 1931 fit (no CIE table in the repository; four sample values quoted in tests, with attribution), CSS Color 4 sRGB matrix  | 10      |
-| CPU reference        | f64, $d\phi = 0.0125$, own PNG codec on `node:zlib`, goldens at 160x90 with a documented tolerance                                                                | 10      |
-| CI                   | Ubuntu: checks, build and the built page in Google Chrome with SwiftShader WebGPU; macOS arm64: GPU parity and the full page suite on the runner's GPU            | 5, 14   |
-| Build                | Vite, every file but `index.html` and `favicon.svg` content-hashed, type check and structural checks of `dist/` in every build                                    | 14      |
-| CSP                  | Meta tag in the built page only: `default-src 'none'`, `'self'` for scripts, styles and images, Trusted Types required                                            | 14      |
-| Hosting              | GitHub Pages through a workflow started by hand, actions pinned to commit SHAs                                                                                    | 14      |
-| Measured values      | Recorded by the physics, camera, overlay and contrast unit tests (not every check) and printed by `npm run measure`                                               | 15      |
-| README image         | CPU reference render at 1600 x 900 (`npm run render:hero`); social preview `public/social-preview.png` at 1280 x 640, same view; Open Graph tags after the deploy | 15      |
+| Decision             | Choice                                                                                                                                                                   | Section |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- |
+| Language and tooling | TypeScript 6.0 (strict), Vite, Vitest, Playwright, ESLint, Prettier                                                                                                      | 2       |
+| GPU API              | Raw WebGPU with WGSL compute shaders, no rendering framework                                                                                                             | 2       |
+| Integrator           | Planar Binet equation $u'' = 3Mu^2 - u$, classical RK4, fixed step $d\phi = 0.05$ (f32)                                                                                  | 3       |
+| Final direction      | Rotation recurrence instead of WGSL `sin`/`cos`                                                                                                                          | 3       |
+| Fallback             | No WebGL2 renderer in the MVP; explanation page plus pre-rendered gallery                                                                                                | 4       |
+| Star field           | Three cubic lattices in direction space hashed with pcg3d; profiles truncated at half a cell, so lookups are seamless                                                    | 10      |
+| Colour               | Planck spectrum against an analytic CIE 1931 fit (no CIE table in the repository; four sample values quoted in tests, with attribution), CSS Color 4 sRGB matrix         | 10      |
+| CPU reference        | f64, $d\phi = 0.0125$, own PNG codec on `node:zlib`, goldens at 160x90 with a documented tolerance                                                                       | 10      |
+| CI                   | Ubuntu: checks, build and the built page in Google Chrome with SwiftShader WebGPU; macOS arm64: GPU parity and the full page suite on the runner's GPU                   | 5, 14   |
+| Build                | Vite, every file but `index.html` and `favicon.svg` content-hashed, type check and structural checks of `dist/` in every build                                           | 14      |
+| CSP                  | Meta tag in the built page only: `default-src 'none'`, `'self'` for scripts, styles and images, Trusted Types required                                                   | 14      |
+| Hosting              | GitHub Pages through a workflow started by hand, actions pinned to commit SHAs                                                                                           | 14      |
+| Measured values      | Recorded by the physics, camera, overlay and contrast unit tests (not every check) and printed by `npm run measure`                                                      | 15      |
+| README image         | CPU reference render at 1600 x 900 (`npm run render:hero`); social preview `public/social-preview.png` at 1280 x 640, same view; Open Graph and X card tags (section 17) | 15, 17  |
 
 ## 1. Positioning: what already exists
 
 A survey in October 2026 found that validated, real-time, in-browser black hole renderers already
-exist, so this project cannot claim to be the first. The claims below are each project's own
-README or paper; none of their tests were run here.
+exist, so this project cannot claim to be the first. It was re-checked on 2026-11-08: for each
+project the creation and last push dates and the licence GitHub detects (GitHub API,
+`repos/{owner}/{repo}`, and the licence file where the API says NOASSERTION or none), its workflow
+files (`repos/{owner}/{repo}/actions/workflows`, and the files themselves where CI might run
+browser tests), and its README. The claims are each project's own, from its README, paper or
+documentation; none of their tests were run here. GitHub's repository search timed out, so new projects were found by web
+search, and the list may be incomplete. "Last push" is GitHub's push date, which can be later than
+the last commit on the default branch (LensForge's last commit on `main` is dated 2026-07-19).
 
-| Project                                                                                                                                           | Renders                             | Technology                                                 | What it validates (as published)                                                                                                         |
-| ------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| [Dashrath175/LensForge](https://github.com/Dashrath175/LensForge) (2026, MIT)                                                                     | Kerr, Novikov-Thorne disk, redshift | WebGPU compute, Dormand-Prince 4(5), TypeScript f64 oracle | GPU against f64: escape direction within 0.99 arcmin, disk $\Delta g/g \le 1.03\times10^{-4}$; shadow within 0.5 px of Bardeen's contour |
-| [kyleyhw/black_hole](https://github.com/kyleyhw/black_hole) (2026, no licence)                                                                    | Kerr, disk                          | WebGL2 fragment shader, RK4; Python f64 mirror             | Shadow measured on the browser image at $r_o = 18M$ within 0.006 % of the finite-distance formula; $b_c$ to $5\times10^{-7}$             |
-| [YIHnb/schwarzschild-ray-tracer](https://github.com/YIHnb/schwarzschild-ray-tracer) (2026, MIT)                                                   | Schwarzschild, disk                 | WebGL2, RK4 on $u(\phi)$; Python reference                 | Deflection against quadrature (about $10^{-8}$) and finite-distance shadow, for the Python reference only                                |
-| [ebruneton/black_hole_shader](https://github.com/ebruneton/black_hole_shader) (2020, BSD-3), [arXiv:2010.08735](https://arxiv.org/abs/2010.08735) | Schwarzschild, disk, Doppler        | WebGL2 with precomputed tables                             | C++ tests of the GLSL against numerical integration, "within $10^{-3}$ of reference values"                                              |
-| [oseiskar/black-hole](https://github.com/oseiskar/black-hole) (2017, MIT)                                                                         | Schwarzschild, disk, Doppler        | WebGL, $u(\phi)$ integration                               | No published numbers; README notes low step counts bend rays too much                                                                    |
-| [rantonels/starless](https://github.com/rantonels/starless) (2017, GPL-3.0)                                                                       | Schwarzschild, disk                 | Python CPU ray tracer                                      | None quantitative                                                                                                                        |
+| Project                                                                                                                             | Created to last push (UTC); licence                                                                                                           | Renders                                                                                                                    | Technology                                                                                             | What it validates (as its README, paper or documentation states)                                                                                                                                                                                                                   | GPU output checked in CI?                                                                          |
+| ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| [Dashrath175/LensForge](https://github.com/Dashrath175/LensForge)                                                                   | 2026-07-19 to 2026-10-21; MIT (its licence file adds notes on bundled NASA and star catalogue data, so GitHub reports NOASSERTION)            | Kerr, Page-Thorne disk, redshift                                                                                           | WebGPU compute, TypeScript f64 oracle                                                                  | GPU against f64: escape direction within 0.99 arcmin (High tier), disk $\Delta g/g \le 1.03\times10^{-4}$; shadow within 0.50 px of Bardeen's contour                                                                                                                              | No: CI runs 70 CPU oracle tests; the GPU checks run by hand in the browser through console hooks   |
+| [kyleyhw/black_hole](https://github.com/kyleyhw/black_hole)                                                                         | 2026-07-12 to 2026-10-07; no licence                                                                                                          | Kerr, disk, free-fall camera, merger mode                                                                                  | WebGL2 fragment shader (real time), WebGPU compute for a progressive still; Python f64 mirror          | A 12-check validation suite and 20 checks of the f64 mirror, $b_c$ to $5\times10^{-7}$; in the browser, the shadow at 18 M within 0.006 % of the finite-distance formula; Playwright tests in headless Chromium with SwiftShader, including a GLSL against WGSL pixel parity check | No: its only workflow builds and deploys; the Playwright suite runs locally                        |
+| [YIHnb/schwarzschild-ray-tracer](https://github.com/YIHnb/schwarzschild-ray-tracer)                                                 | 2026-10-12, no push since; MIT                                                                                                                | Schwarzschild, disk                                                                                                        | WebGL2, RK4 on $u(\phi)$; Python reference                                                             | Deflection against quadrature (about $10^{-8}$) and finite-distance shadow, for the Python reference only                                                                                                                                                                          | No workflows                                                                                       |
+| [ebruneton/black_hole_shader](https://github.com/ebruneton/black_hole_shader), [arXiv:2010.08735](https://arxiv.org/abs/2010.08735) | 2020-03-12 to 2020-11-11; BSD-3-Clause                                                                                                        | Schwarzschild, disk, Doppler                                                                                               | WebGL2 with precomputed tables                                                                         | C++ tests of the GLSL against numerical integration, "within $10^{-3}$ of reference values"                                                                                                                                                                                        | No workflows                                                                                       |
+| [oseiskar/black-hole](https://github.com/oseiskar/black-hole)                                                                       | 2015-12-06 to 2019-06-15; MIT for its own files (`COPYRIGHT.md`), a bundled Milky Way image under CC BY-NC 2.0, so GitHub reports NOASSERTION | Schwarzschild, disk, Doppler                                                                                               | WebGL, $u(\phi)$ integration                                                                           | No published numbers; README notes low step counts bend rays too much                                                                                                                                                                                                              | No workflows                                                                                       |
+| [rantonels/starless](https://github.com/rantonels/starless)                                                                         | 2015-03-05 to 2024-06-01; GPL-3.0                                                                                                             | Schwarzschild, disk                                                                                                        | Python CPU ray tracer                                                                                  | None quantitative                                                                                                                                                                                                                                                                  | No workflows                                                                                       |
+| [tgergo1/blackhole](https://github.com/tgergo1/blackhole) (new)                                                                     | 2026-11-03, created and last pushed; no licence                                                                                               | Kerr, Novikov-Thorne disk                                                                                                  | WebGL2 shader; f64 reference                                                                           | GPU ray data (hit type, radius, redshift, escape direction) against the f64 reference pixel by pixel in five scenes: classification 100 % identical, median radius error about $10^{-5}$, redshift about $10^{-6}$                                                                 | Yes: `npm run test:gpu` in headless Chromium on an Ubuntu runner (WebGL2, not WebGPU)              |
+| [quantdale/browser-blackhole](https://github.com/quantdale/browser-blackhole) (new)                                                 | 2026-08-21 to 2026-11-08; MIT                                                                                                                 | Schwarzschild and Kerr (black-hole presets), several other scenes                                                          | Three.js WebGPU with a WebGL2 fallback; binary64 CPU oracle; a precomputed trajectory table by default | Numerical parity and visual goldens in Playwright                                                                                                                                                                                                                                  | Partly: hosted CI runs a browser smoke test in WebGL2; the parity and golden suite is a local gate |
+| [CuplexUser/KerrSimulation](https://github.com/CuplexUser/KerrSimulation) (new)                                                     | 2026-07-29 to 2026-09-22; MIT                                                                                                                 | Kerr, disk                                                                                                                 | WebGPU compute; f64 reference                                                                          | The shipped WGSL against f64 values computed in the browser on demand (`/?validate=1`)                                                                                                                                                                                             | No: its README says the WGSL cannot be checked headless                                            |
+| [reversesingularity/black-hole-explorer-web-app](https://github.com/reversesingularity/black-hole-explorer-web-app) (new)           | 2026-07-12, last push the same day; MIT                                                                                                       | Schwarzschild, Novikov-Thorne profile                                                                                      | Three.js TSL compiled to WGSL; CPU mirror                                                              | 54 Vitest tests of the CPU code                                                                                                                                                                                                                                                    | No                                                                                                 |
+| [master666-max/gargantua-kn-neo](https://github.com/master666-max/gargantua-kn-neo) (new)                                           | 2026-09-18 to 2026-09-21; MIT licence file (its Chinese README's licence sentence is vaguer)                                                  | Kerr-Newman, polarisation                                                                                                  | WebGL2; f64 CPU twin                                                                                   | 108 checks on the CPU twin; run-to-run comparisons of GPU renders; per-pixel comparisons of the GPU polarisation angle against the CPU twin (9 to 10 of 14 cases pass), run by hand                                                                                                | No workflows                                                                                       |
+| [ShuoleiWang/blackhole](https://github.com/ShuoleiWang/blackhole) (new)                                                             | 2026-07-13 to 2026-10-05; MIT                                                                                                                 | A binary black hole scene (an approximate superposed Kerr-Schild metric); a Schwarzschild scene with a Novikov-Thorne disk | WebGPU, with a weak-field WebGL2 fallback; CPU oracle; reference maps made offline in Python           | Fixed-camera Schwarzschild and Kerr reference maps, generated offline and checked by separate verifier scripts, kept as calibration and regression oracles; Node tests                                                                                                             | No workflows: the repository has no `.github` folder (GitHub API, 2026-11-08)                      |
+| [dgreenheck/webgpu-black-hole](https://github.com/dgreenheck/webgpu-black-hole) (new)                                               | 2026-01-06 to 2026-01-07; MIT                                                                                                                 | Schwarzschild, disk                                                                                                        | Three.js TSL on WebGPU, ray marching                                                                   | None published                                                                                                                                                                                                                                                                     | No                                                                                                 |
 
 Research codes (GYOTO, ipole, RAPTOR, Odyssey, GRay, kgeo, AART) validate carefully but do not run
 in a browser. Shadertoy shaders could not be inspected (the site blocks automated access); none is
-known to validate anything.
+known to validate anything. No code from any project above is used; kyleyhw/black_hole and
+tgergo1/blackhole have no licence, so nothing may be copied from them.
 
-What could still set this project apart, for the check-in decision:
+Whether the October list of what could set this project apart still holds:
 
-- Validation that runs against the actual WebGPU output, headless, in CI, rather than against a
-  separate reference implementation or by hand.
-- Image-level comparison of the GPU render against the CPU reference renderer, with documented
-  tolerances, plus measured error budgets per pixel (section 3 already has the f32 one).
-- Two independent reference methods for the deflection (quadrature and elliptic integrals) that
-  agree to about $10^{-15}$ near $b_c$ ($1.05\times10^{-15}$ relative at the test's values up to
-  $1.1\thinspace b_c$, `npm run measure`), and an integrator chosen by measurement with the comparison
-  published.
-- A narrow, finished, documented Schwarzschild scope rather than a broad Kerr feature list.
+| Stated in October 2026                                                                                  | On 2026-11-08                                                                                                                                                                                                                       |
+| ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Validation against the actual WebGPU output, headless, in CI                                            | Holds for WebGPU: no surveyed project checks WebGPU output in CI. It no longer holds for GPU output in general: tgergo1/blackhole has checked its WebGL2 shader against a 64-bit reference, pixel by pixel, in CI since 2026-11-03. |
+| Image-level comparison of the GPU render against the CPU reference renderer, with documented tolerances | Still uncommon: tgergo1 compares per-pixel ray data, not final images; quantdale keeps visual goldens, checked locally; gargantua-kn-neo compares its GPU polarisation angle with its CPU twin pixel by pixel, by hand.             |
+| Two independent reference methods for the deflection that agree to about $10^{-15}$                     | Not found in the READMEs read. Not every project's documentation was read in full, so this is "not found", not "unique".                                                                                                            |
+| A narrow, finished, documented Schwarzschild scope                                                      | No longer a difference: quantdale, reversesingularity, YIHnb and dgreenheck render Schwarzschild too. Dropped.                                                                                                                      |
+
+What sets this project apart now:
+
+1. The WebGPU output itself is compared with a 64-bit CPU reference, ray by ray and image by
+   image, in CI: the GPU parity tests run in the macOS job on the runner's paravirtual Apple GPU
+   (section 5). The built page also runs in CI in Chrome with SwiftShader (the offline test and the
+   smoke tests, which do not compare with the CPU reference).
+2. Final images are compared with a CPU reference renderer, not only ray data, with documented
+   tolerances, plus measured error budgets per pixel (section 3 has the f32 one).
+3. Two independent reference methods for the deflection (quadrature and elliptic integrals) agree
+   to about $10^{-15}$ near $b_c$ ($1.05\times10^{-15}$ relative at the test's values up to
+   $1.1\thinspace b_c$, `npm run measure`).
+4. The measured errors are published with the machine and browser behind them, and the integrator
+   was chosen by measurement, with the comparison published (section 3).
 
 ## 2. Stack
 
@@ -465,7 +491,9 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
   0.005 at 1500 K).
 - **Disk defaults:** inner edge at the ISCO, outer edge at $20M$, 6500 K at the hottest radius,
   exposure 1, and opaque (opacity 1), which the user confirmed at the Stage 1 visual check-in
-  after comparing it with a 0.6-opacity render.
+  after comparing it with a 0.6-opacity render. The 6500 K is a display choice; this record gives
+  no physical reason for it, and since Stage 8 the README, About and `docs/PHYSICS.md` say so
+  (section 17).
 - **CPU reference settings:** $d\phi = 0.0125$ (f64 deflection error $8\times10^{-8}$, section 3),
   step cap 4000. Rendering 320x180 with 3x3 samples (518,400 rays) takes 1.0 to 3.5 s per image
   on the Apple M5 in Node 25.6.1.
@@ -663,7 +691,8 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
 - **About** (`src/ui/about.ts`): a native modal dialog with the brief's honesty note first, what
   the image shows and its limits, what each line means, the units, the controls, a privacy
   statement (no analytics, cookies or storage, nothing loaded from other sites, the view kept in
-  the part of the address after #) and links to these documents on GitHub. It states no numbers.
+  the part of the address after #) and links to these documents on GitHub. It states no measured
+  values; since Stage 8 it names the display settings a visitor cannot see (section 17).
 - **Saving the image.** The settled full-quality image at the internal resolution, with the
   visible overlays and a small legend (also in the termination view), encoded by the browser as
   PNG and offered as a download; nothing leaves the device. A save waits until the image is
@@ -712,9 +741,12 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
     `CSP_POLICY` once HTML entities are decoded, none of the directives a meta cannot enforce;
     the charset element within the first 1024 bytes;
   - in every built text file, absolute URLs only from an exact allowlist (the SVG namespace and
-    the two repository links in `src/ui/links.ts`), no `data:` URI in media-type form (a bare
-    `data:` also matches minified properties such as `{data:r}`), and in CSS no `@import` and
-    `url()` only to files in `dist/`.
+    the two repository links in `src/ui/links.ts`, and in `index.html` only, the two link preview
+    URLs of `tools/site.ts`), no `data:` URI in media-type form (a bare `data:` also matches
+    minified properties such as `{data:r}`), and in CSS no `@import` and `url()` only to files in
+    `dist/`;
+  - since Stage 8, the link preview tags: `og:url`, `og:image` and `twitter:image` exactly once
+    each in `index.html`, with exactly the absolute URLs of `tools/site.ts` (section 17).
 
   Token scans for network APIs (`fetch(`, `sendBeacon` and so on) were considered and dropped: a
   UI string could trip them and block every build, and the policy below blocks such calls at run
@@ -906,7 +938,8 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
   bytes, 64.0 s), close at 5 M and elevation 20 degrees with the automatic 120 degree field of
   view (568,429 bytes, 67.7 s), and wide at 60 M and elevation 8 degrees (402,160 bytes, 60.1 s).
   Every image has 0 step-limit and 0 non-finite samples. At the Stage 6 check-in (2026-11-04) the owner kept the default view for the README image and the social preview, so `HERO_VIEW` in `tools/hero-views.ts` stays `'default'`.
-- **Social preview now, Open Graph tags after the deploy.** After the owner's pick,
+- **Social preview now, Open Graph tags after the deploy** (reversed in Stage 8: the tags came
+  before the deploy, section 17). After the owner's pick,
   `npm run render:hero -- --social` wrote `public/social-preview.png` (c13ec2a): the default view
   at 1280 x 640, GitHub's recommended size for a repository's social preview, 248,032 bytes in
   41.6 s, byte for byte the candidate `01-social-default.png`. It is copied into `dist/` unhashed
@@ -924,9 +957,9 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
   without WebGPU (b310128): that page had shown the Stage 0 list on `main` since eeef81c, which
   named Edge on ChromeOS. When the owner tags the first release, the section gets its version and
   date, and a new empty Unreleased section opens.
-- **Open for the owner:** four values of the CIE 1931 dataset (CC BY-SA 4.0) are quoted as test
-  expectations in this MIT-licensed repository, with the dataset's DOI and licence
-  (`tests/unit/colour.test.ts`). They are treated as insubstantial, but brief section 11 leaves
+- **Open for the owner** (closed on 2026-11-08: the values stay, section 17): four values of the
+  CIE 1931 dataset (CC BY-SA 4.0) are quoted as test expectations in this MIT-licensed repository,
+  with the dataset's DOI and licence (`tests/unit/colour.test.ts`). They are treated as insubstantial, but brief section 11 leaves
   unclear licence questions to the owner, so this needs the owner's confirmation.
 - **Not verified:** Safari, Firefox and Edge (the page has run only in Google Chrome: 156 on the
   M5, 152 on the macOS runner, 155 and 156 with SwiftShader on the Ubuntu runner); VoiceOver and
@@ -1022,3 +1055,99 @@ the owner's visual check-in (the owner's choice; every commit is still pushed).
   the EHT-style view and the strip have not been seen in Safari, Firefox or on a real phone; the
   strip's 32-bit limit is an estimate from four edges per distance on one GPU; the page labels
   say "measured on an Apple M5".
+
+## 17. Stage 8 decisions
+
+Stage 8 began on 2026-11-08 with a research-and-design pass and an independent critique of each
+design (`artifacts/stage8/design/`, gitignored). From its options the owner chose "ship and
+fidelity first" on 2026-11-08.
+
+- **The owner's answers of 2026-11-08.**
+  - Ship first: pull request 8a (link preview tags, display choices disclosed, the survey refresh,
+    the credit fix and the kept deploy artifact); then the owner deploys `main` and checks Safari;
+    then pull request 8b with the README's live link, the CHANGELOG section 0.1.0, and the tag
+    `v0.1.0` with a GitHub release. The Page-Thorne disk, the comparison with the EHT data and the
+    cross-checks against published formulas and an outside code follow as 0.2.0.
+  - Outside GPL code: kgeo and ehtim may run in a Python environment outside the repository; only
+    the numbers they output are committed.
+  - The public 2017 M87\* data (csv files) are to be committed under `data/`, with a notice
+    written for this repository.
+  - The four CIE 1931 values quoted in `tests/unit/colour.test.ts` stay, with their attribution.
+    This closes the licence question left open at Stage 6 (section 15).
+- **Link preview tags before the deploy** (this reverses the Stage 6 choice, section 15).
+  `index.html` has Open Graph and X card tags that point at `public/social-preview.png`.
+  `tools/site.ts` holds the site's URL, `https://waiivyy.github.io/photonring/`: the form GitHub
+  documents for a project site, in lower case (host names are not case sensitive), with no custom
+  domain. The tags may come before the deploy because nothing serves `index.html` until the first
+  deploy, and the deploy that first serves them also makes both URLs answer; GitHub's own view of
+  the repository does not use them. They stay right as long as there is no custom domain and the
+  account and repository keep their names. The README's live link is different: GitHub shows the
+  README at once, so the link waits for the deploy (pull request 8b).
+  - The description, the same text in all three description tags, starts with "A toy model" and
+    says that the page is not a simulation of any real observation, so a preview that cuts the
+    text short still shows that part (where previews cut was not checked).
+  - The image's alt text describes the social preview as it looks: the disk nearly white on the
+    left and darker brown on the right, its far side arched over the shadow, the thin bright arc,
+    the smeared stars.
+  - The X tags are written out in full: X's documentation answered HTTP 402, so its fallback to
+    the Open Graph tags could not be confirmed. Its 420-character limit for the alt text comes only
+    from a search snippet.
+  - The URLs must be absolute: Vite rewrites a root-relative `og:image` to `./social-preview.png`,
+    which a link preview cannot use. The dist rules allow the two URLs in `index.html` only (in JS,
+    CSS or SVG they are still an absolute URL), and a sixth rule requires `og:url`, `og:image` and
+    `twitter:image` exactly once each, with exactly these values. `tests/unit/site-meta.test.ts`
+    checks the tags in the source, and the offline test checks `og:image` in the served page.
+  - Not checked until after the deploy: the cards X and other services draw, whether they crop
+    the 2:1 image, and whether Pages redirects `/photonring` to `/photonring/`.
+- **The deploy artifact is kept 90 days.** `actions/upload-pages-artifact` at the pinned commit
+  fc324d35 (v5.0.0) declares `retention-days`, with a default of 1 day (its `action.yml`, read at
+  that commit); `pages.yml` sets 90, the most the repository's Actions settings allow. So the
+  deployed files can still be compared with a local build of pull request 8b
+  (`tests/unit/workflows.test.ts` checks the setting).
+- **Release order.** Pull request 8a is merged once CI is green in all three jobs and the owner
+  says go. The owner then sets Settings > Pages > Source to GitHub Actions, deploys `main`, adds a
+  protection rule so that only `main` deploys to the `github-pages` environment, uploads the
+  social preview and sets the repository's website field. The developer checks the live site once
+  by hand, read only (headers, served files and their sizes, the URL the deploy reports), outside
+  any test run, so no automated run makes requests to github.io (section 14). Then the owner's
+  Safari check. Pull request 8b adds the live link with its test, the Safari result, the CHANGELOG
+  section 0.1.0 with its date and the version 0.1.0; it changes no input of the build, and its
+  build is compared with the deployed files by sha256. If they differ, the owner deploys 8b before
+  the tag. The tag waits for the owner's approval. So the page goes live with the disclosures
+  already in it, and no step states anything before it is true.
+- **The Safari check.** By hand, on the live site, in Safari 27.0 on the development Mac (macOS
+  27.0), and on a device with Safari 26 if the owner has one; only what is tested is claimed, with
+  the exact version and device. The tag waits for a passing Safari check. A defect means a fix, a
+  new deploy and a new check. The checklist is in the design (load, console, requests, response
+  headers, the CSP and Trusted Types, every view and overlay, the Validation panel, saving,
+  keyboard, trackpad, resizing, links, device loss, About, a private window, and the page with
+  WebGPU turned off); results go to `docs/VALIDATION.md` and the README in pull request 8b.
+- **Display choices disclosed.** The README's Limits, the About dialog and `docs/PHYSICS.md`,
+  section 10, now say that the disk's 6500 K peak temperature (in the gas's own frame) is a display
+  choice that was not derived from a black hole mass or accretion rate; that the page's exposure is
+  fixed (the README and `docs/PHYSICS.md` give its value, 1; the About dialog gives none) and a
+  fixed tone curve turns the brightest parts white; how colours are made (the disk
+  and the stars are blackbodies, converted to sRGB with no adjustment for the eye, colours outside
+  sRGB clipped); that the stars are invented; and that the disk is opaque. A new Limits item says
+  that the page is not a model of M87\* or Sgr A\*, whose EHT images are explained by models in
+  which hot gas shines by synchrotron emission (EHT 2019, Papers I and V; EHT 2022, Sgr A\*
+  Paper V, section 1), and that its black hole does not spin. Every number these texts quote is
+  recorded first by `tests/unit/colour.test.ts`. The About text takes the temperature from
+  `DEFAULT_DISK`, and the page takes its exposure, tone curve and disk from `PAGE_SCENE`
+  (`src/ui/page-scene.ts`); `tests/unit/disclosures.test.ts` checks that the texts follow those
+  values, that the temperature and the words "display choice" share a paragraph, and that the
+  About text names the fixed exposure, the tone curve, the clipping, the invented stars and that
+  its black hole does not spin; `tests/e2e/about.spec.ts` checks the open dialog. A sentence saying that the tone curve makes
+  the two sides of the disk look less different than the factor of 71 was left out: it was not
+  measured, and a first estimate in the critique did not support it. The page for browsers without
+  WebGPU, the EHT-style view's legend and the Controls panel are unchanged.
+- **The survey refreshed** (section 1): re-checked through the GitHub API and the READMEs on
+  2026-11-08, with seven more projects, a column for whether each checks its GPU output in CI, and
+  the October list of differences re-checked one by one.
+- **Credit for the subring law.** `docs/PHYSICS.md`, section 6b, said that the leading-order law
+  for the subring offsets at finite distances was derived for this project, and the README said
+  that photonring derives it. It is the strong deflection law of Bozza and Scarpetta (2007, eqs. 65
+  to 68), which Aldi and Bozza (2017) applied to an inclined disk and Bisnovatyi-Kogan and Tsupko
+  (2022), Tsupko (2022) and Aratore, Tsupko and Perlick (2024) to the rings of a disk. Both places
+  now credit them in that order and claim no derivation; section 6b shows that their eq. (68) and
+  the form with the critical orbit's sweep are the same expression.

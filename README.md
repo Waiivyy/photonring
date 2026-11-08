@@ -212,7 +212,10 @@ multiplies it by $e^\pi \approx 23.14$. So rays aimed ever closer to the edge ci
 twice and more before they meet the disk, and each extra half-turn gives another image of the disk,
 $e^\pi$ times closer to the edge. Bozza's (2002) strong-field law
 $\alpha(b) = -\ln(b/b_c - 1) + \ln[216(7 - 4\sqrt3)] - \pi + \dots$ makes this exact for rays from
-infinity; for a camera at $r_o$ and a disk ring at $R$, photonring derives
+infinity. For a camera at $r_o$ and a disk ring at $R$, the law of Bozza and Scarpetta (2007) for a
+source and an observer at finite distances, which Aldi and Bozza (2017) applied to the images of a
+disk and Bisnovatyi-Kogan and Tsupko (2022), Tsupko (2022) and Aratore, Tsupko and Perlick (2024)
+to its rings, gives for the sweep $\phi_0 + n\pi$ to the image of order $n$
 
 ```math
 \varepsilon_n(R) \approx C\,e^{-\Delta\phi_c(1/r_o) - \Delta\phi_c(1/R)}\,e^{-\phi_0}\,e^{-n\pi},\qquad
@@ -220,10 +223,11 @@ C = 216(7 - 4\sqrt3),
 ```
 
 where $\varepsilon = b/b_c - 1$, $\Delta\phi_c(u)$ is the critical orbit's sweep from infinity to
-$u$ and $\phi_0$ where the ray first meets the disk's plane, and solves the exact equation for any
-$n$ with its 64-bit library: the ratios in the [Gallery](#gallery) table, converging on $e^\pi$ as
-Gralla, Holz and Wald (2019) and Johnson et al. (2020) published. Details:
-[docs/PHYSICS.md](docs/PHYSICS.md), section 6b.
+$u$ and $\phi_0$ where the ray first meets the disk's plane: their law, written with
+$\Delta\phi_c$. photonring starts from it and solves the exact equation for any $n$ with its
+64-bit library: the ratios in the [Gallery](#gallery) table, converging on $e^\pi$ as Gralla, Holz
+and Wald (2019) and Johnson et al. (2020) published. Details: [docs/PHYSICS.md](docs/PHYSICS.md),
+section 6b.
 
 ### One side is brighter
 
@@ -315,7 +319,7 @@ GPU time per image, from `npm run bench:gpu`. **Machine:** Apple M5 (10-core GPU
 
 - The **first pass** traces one ray per pixel; the **anti-aliasing** pass then adds 3 x 3 samples only where the image needs them (6.1 % of the pixels in the default view at 1920 x 1080). Supersampling every pixel 3 x 3 takes 40.37 ms there instead of 7.47 ms. **Full image** is the sum of the two. **While moving** applies the page's 12 ms frame budget to the measured first pass.
 - The brief's target is 30 frames per second at 1920 x 1080 with the disk, 33 ms per frame. A moving frame costs 5.31 ms of GPU time in this setting; the frame rate in a visible browser window was not measured.
-- Download with WebGPU: 109,216 bytes, 38,610 with gzip, and no runtime dependencies (`npm run size` on the build of commit b310128; among the build inputs, later commits change only a comment in `src/physics/colour.ts`, and a build with that change gives byte for byte the same files).
+- Download with WebGPU: 147,952 bytes, 50,261 with gzip, and no runtime dependencies (`npm run size` on 2026-11-08, on the build of pull request 8a before it was committed, on top of commit 8f00217; [docs/PERFORMANCE.md](docs/PERFORMANCE.md#download-size-stage-8)).
 - The EHT-style view adds its blur at every present: 0.66 to 0.72 ms of GPU time at 1920 x 1080 and 1.77 ms at 3840 x 2160 (Chrome 156.0.8078.80, median of 15). The photon subring view's rays all pass close to the photon sphere: its first pass takes 8.19 ms (default camera) and 13.24 ms (face-on) at 1920 x 1080, against 5.51 and 4.59 ms for the colour view of the same cameras. Method: [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 - Software WebGPU is far slower: on GitHub's Ubuntu runner, in Chrome 156.0.8078.47 with SwiftShader, the first pass of the default view at 1280 x 720, zoomed out to 33 M, took 4349.4 and 4502.5 ms of GPU time in two attempts.
 
@@ -324,7 +328,9 @@ Caveats: one machine and one browser; headless, so nothing was composited to a d
 ## Limits
 
 - **Non-rotating black hole only** (Schwarzschild); no spin.
-- **The disk is a toy:** infinitely thin, from the innermost stable circular orbit (ISCO, 6 M) to 20 M, with the Newtonian Shakura-Sunyaev temperature profile instead of the relativistic Page-Thorne solution, and no radiative transfer, no thickness, no self-illumination and no magnetic fields.
+- **The disk is a toy:** infinitely thin and opaque, from the innermost stable circular orbit (ISCO, 6 M) to 20 M, with the Newtonian Shakura-Sunyaev temperature profile instead of the relativistic Page-Thorne solution, and no radiative transfer, no thickness, no self-illumination and no magnetic fields. Its hottest ring has a temperature of 6500 K in the gas's own frame. That is a display choice: it was not derived from a black hole mass or accretion rate. A 6500 K blackbody is close to the white point of an sRGB screen, and the Doppler and gravitational shifts make the approaching side of the disk whiter and the receding side brown, as in the image at the top.
+- **Not a model of M87\* or Sgr A\*.** The Event Horizon Telescope's images of both are explained by models in which hot gas shines by synchrotron emission. For M87\* the EHT describes a hot, geometrically thick, optically thin flow (EHT Collaboration 2019, Paper I, section 1, and Paper V, section 1). For Sgr A\*, its low luminosity suggests that matter falls in as a radiatively inefficient flow rather than as a radiatively efficient thin disk (EHT Collaboration 2022, Paper V, section 1). photonring's disk is a thin, opaque blackbody toy with the temperature profile of Shakura and Sunyaev (1973). Its black hole also does not spin, and the EHT found the models of non-spinning black holes in its library inconsistent with the observations of M87\*, because they do not produce sufficiently powerful jets (2019, Paper V, abstract).
+- **Colours and brightness are display choices.** The disk and the stars are blackbodies, converted to sRGB with no adjustment for how an eye adapts; colours outside sRGB are clipped. Brightness is scaled so that a 6500 K blackbody has luminance 1, at a fixed exposure of 1, and then compressed by the tone curve $1 - e^{-x}$ per colour channel, which turns the brightest parts white. Computed by the library, a 6500 K blackbody is drawn at (210, 207, 210) of 255, one at 3000 K at (35, 23, 9) and one at 9000 K at (248, 250, 253). The stars are invented, and their brightness next to the disk is chosen for display. Details: [docs/PHYSICS.md](docs/PHYSICS.md), sections 10 and 10a.
 - **A static camera** between 5 M and 200 M; no orbiting or falling observer. Near the hole the field of view widens by itself, up to 120 degrees, so the shadow fits.
 - **32-bit floats on the GPU.** Just outside the shadow edge, rays circle the photon sphere and rounding errors grow fast. Measured with emulated 32-bit arithmetic on the CPU (not on the GPU), at 30 M the escape direction is off by 0.24 px at $b/b_c - 1 = 10^{-3}$, 15 px at $10^{-5}$ and 90.5 px at $10^{-6}$. Errors above about 1 px were measured only for $b/b_c - 1 < 10^{-4}$, a band at most 0.018 px wide at 30 M (0.14 px at 5 M; computed, not measured), and anti-aliasing averages over it.
 - **A fixed step and a step limit:** $d\phi = 0.05$ and at most 1000 steps per ray. A ray that reaches the limit is magenta in the termination view; no test has seen one.
@@ -339,7 +345,7 @@ Caveats: one machine and one browser; headless, so nothing was composited to a d
 
 ## Privacy
 
-photonring runs entirely in your browser. It has no analytics, telemetry or cookies, stores nothing on your device and loads nothing from other sites. The view settings are kept in the part of the address after `#`, which browsers do not send to servers. Saved images are made on your device. The documentation links in the About dialog open GitHub.
+photonring runs entirely in your browser. It has no analytics, telemetry or cookies, stores nothing on your device and loads nothing from other sites. The view settings are kept in the part of the address after `#`, which browsers do not send to servers. Saved images are made on your device. The documentation links in the About dialog open GitHub. When someone shares a link to the page, the chat or social site where it is shared may fetch the page and its preview image from GitHub Pages to show a preview.
 
 The built page enforces this with a Content-Security-Policy that allows only its own scripts, styles and images, and no connections at all:
 
@@ -351,7 +357,7 @@ A test loads the built page and fails on any request to another origin or for a 
 
 ## FAQ
 
-**How can I check these numbers myself?** `npm test` runs the 901 Vitest tests (physics, CPU renderer and golden images, URL state, page logic, README tools). `npm run measure` runs them again and prints the worst values the test files record, among them the CPU deflection and photon subring numbers above (the tolerances are in [docs/VALIDATION.md](docs/VALIDATION.md)). `npm run test:gpu` runs the 30 GPU tests in your installed Google Chrome and logs their errors, and `npm run render:cpu` writes the CPU reference renders to `artifacts/stage1/` and prints the shadow-size table. On another machine or browser the values can differ; the tests check that each stays within its tolerance.
+**How can I check these numbers myself?** `npm test` runs the 952 Vitest tests (physics, CPU renderer and golden images, URL state, page logic, README tools). `npm run measure` runs them again and prints the worst values the test files record, among them the CPU deflection and photon subring numbers above (the tolerances are in [docs/VALIDATION.md](docs/VALIDATION.md)). `npm run test:gpu` runs the 30 GPU tests in your installed Google Chrome and logs their errors, and `npm run render:cpu` writes the CPU reference renders to `artifacts/stage1/` and prints the shadow-size table. On another machine or browser the values can differ; the tests check that each stays within its tolerance.
 
 **Why is the black shadow so much larger than the event horizon? What are the thin rings just outside it? Why is one side of the disk brighter?** See [How it works](#how-it-works): the shadow is larger than the horizon, rings inside rings, and one side is brighter.
 
@@ -365,7 +371,7 @@ A test loads the built page and fails on any request to another origin or for a 
 
 **Does it work on my phone?** Not tested on a real device. The vendors list WebGPU in Safari 26 on iOS 26 and iPadOS 26, and in Chrome 121 or later on Android 12 or later with Qualcomm or ARM GPUs (others in [Browser support](#browser-support)). The page has touch controls (one finger orbits, two fingers zoom) and a phone layout with the panels as bottom sheets, tested only in Chrome's mobile emulation (390 x 844 CSS px); no GPU time was measured on a phone or tablet.
 
-**Is this what a real black hole looks like?** No. The light paths, the shadow and the frequency shifts are computed from general relativity and checked, but the disk is a toy model (see [Limits](#limits)) and the star field is invented. This is a toy model for learning and demonstration, not a scientific simulation of any real observation.
+**Is this what a real black hole looks like?** No. The light paths, the shadow and the frequency shifts are computed from general relativity and checked, but the disk is a toy model (see [Limits](#limits)) and the star field is invented. The disk's colour also rests on a display choice: its hottest ring is set to 6500 K in the gas's own frame. The two black holes the Event Horizon Telescope has imaged, M87\* and Sgr A\*, are explained by other models (see [Limits](#limits)). This is a toy model for learning and demonstration, not a scientific simulation of any real observation.
 
 **Why WebGPU, and why no WebGL fallback?** Each pixel's ray is integrated by its own GPU thread in a compute shader, in tiles that fit a time budget per frame. WebGL2 has no compute shaders, so a fallback would be a second renderer with a different architecture, another shading language (GLSL instead of WGSL) and its own parity tests; it is on the stretch list. Raw WebGPU without a framework keeps the WGSL visible and lets the tests call the same shader functions that draw the image. Details: [docs/DESIGN.md](docs/DESIGN.md), sections 2 and 4.
 
@@ -373,7 +379,7 @@ A test loads the built page and fails on any request to another origin or for a 
 
 **How does the Validation panel work?** While it is open, the page renders the current camera twice more, offscreen at 1024 x 1024: once in validation mode (no disk, a uniform sky of brightness 1, no tone mapping, one ray per pixel) and once as the termination view of the same rays. It counts the black pixels, turns the count into a radius and compares it with the analytic angular radius for the current distance, within 1 px or 0.5 %, whichever is larger. It also shows how many rays reached the step limit and the largest disagreement with the analytic edge, which catches errors that would cancel in the area. These renders are never shown, so nothing flashes. Details: [docs/DESIGN.md](docs/DESIGN.md), section 13.
 
-**Is this the first validated black hole renderer in a browser?** No. A survey in October 2026 found validated, real-time, in-browser black hole renderers that already exist, some with spinning (Kerr) black holes; [docs/DESIGN.md](docs/DESIGN.md), section 1, lists them with what each one publishes. photonring's focus is narrow: a non-rotating hole only, with the WebGPU output itself compared with a 64-bit CPU reference ray by ray and image by image, in tests that run in CI with fixed tolerances, and the measured errors published here.
+**Is this the first validated black hole renderer in a browser?** No. A survey in October 2026, re-checked on 2026-11-08, found validated, real-time, in-browser black hole renderers that already exist, some with spinning (Kerr) black holes, and one that checks its WebGL2 shader against a 64-bit reference in CI; [docs/DESIGN.md](docs/DESIGN.md), section 1, lists them with what each one publishes, as their own READMEs, papers or documentation state it. photonring's focus is narrow: a non-rotating hole only, with the WebGPU output itself compared with a 64-bit CPU reference ray by ray and image by image, in tests with fixed tolerances that run in CI on the macOS runner's paravirtual Apple GPU, and the measured errors published here.
 
 ## Documentation
 
@@ -424,6 +430,8 @@ The full list, with the equation behind every formula, is in [docs/PHYSICS.md](d
 - The second, independent deflection method: NIST Digital Library of Mathematical Functions, [section 19.29](https://dlmf.nist.gov/19.29) (reduction to Carlson's integrals), and B. C. Carlson (1995), "Numerical computation of real or complex elliptic integrals", Numer. Algorithms 10, 13-26. [arXiv:math/9409227](https://arxiv.org/abs/math/9409227)
 - Photon subrings: S. E. Gralla, D. E. Holz and R. M. Wald (2019), "Black hole shadows, photon rings, and lensing rings", Phys. Rev. D 100, 024018, [arXiv:1906.00873](https://arxiv.org/abs/1906.00873); M. D. Johnson et al. (2020), "Universal interferometric signatures of a black hole's photon ring", Sci. Adv. 6, eaaz1310, [arXiv:1907.04329](https://arxiv.org/abs/1907.04329); S. E. Gralla and A. Lupsasca (2020), "Lensing by Kerr black holes", Phys. Rev. D 101, 044031, [arXiv:1910.12873](https://arxiv.org/abs/1910.12873).
 - The EHT-style view's resolution, mass scale and orientation: Event Horizon Telescope Collaboration (2019), "First M87 Event Horizon Telescope Results. I. The Shadow of the Supermassive Black Hole", ApJL 875, L1, [arXiv:1906.11238](https://arxiv.org/abs/1906.11238), and "V. Physical Origin of the Asymmetric Ring", ApJL 875, L5, [arXiv:1906.11242](https://arxiv.org/abs/1906.11242).
+- Photon subring offsets for a camera and a disk ring at finite distances: V. Bozza and G. Scarpetta (2007), "Strong deflection limit of black hole gravitational lensing with arbitrary source distances", Phys. Rev. D 76, 083008, eqs. (65) to (68), [arXiv:0705.0246](https://arxiv.org/abs/0705.0246); G. F. Aldi and V. Bozza (2017), "Relativistic iron lines in accretion disks: the contribution of higher order images in the strong deflection limit", JCAP 2017(02), 033, [arXiv:1607.05365](https://arxiv.org/abs/1607.05365); G. S. Bisnovatyi-Kogan and O. Yu. Tsupko (2022), Phys. Rev. D 105, 064040, [arXiv:2201.01716](https://arxiv.org/abs/2201.01716); O. Yu. Tsupko (2022), Phys. Rev. D 106, 064033, [arXiv:2208.02084](https://arxiv.org/abs/2208.02084); F. Aratore, O. Yu. Tsupko and V. Perlick (2024), Phys. Rev. D 109, 124057, [arXiv:2402.14733](https://arxiv.org/abs/2402.14733). What was read of each: [docs/PHYSICS.md](docs/PHYSICS.md#references).
+- Not a model of M87\* or Sgr A\*: Event Horizon Telescope Collaboration (2022), "First Sagittarius A\* Event Horizon Telescope Results. V. Testing Astrophysical Models of the Galactic Center Black Hole", ApJL 930, L16, [arXiv:2311.09478](https://arxiv.org/abs/2311.09478), section 1; and the 2019 M87\* Papers I and V above (Paper V's abstract for the spin).
 - Disk temperature profile (Newtonian, used here as a toy model): N. I. Shakura and R. A. Sunyaev (1973), "Black holes in binary systems. Observational appearance", Astron. Astrophys. 24, 337-355, eq. (2.6). [Scan at NASA ADS](https://articles.adsabs.harvard.edu/pdf/1973A%26A....24..337S)
 - Blackbody colours: C. Wyman, P.-P. Sloan and P. Shirley (2013), "Simple analytic approximations to the CIE XYZ color matching functions", Journal of Computer Graphics Techniques 2(2), 1-11, [jcgt.org](https://jcgt.org/published/0002/02/01/); tested against the [CIE 1931 colour-matching functions](https://cie.co.at/datatable/cie-1931-colour-matching-functions-2-degree-observer) (doi:10.25039/CIE.DS.xvudnb9b, CC BY-SA 4.0).
 - Platform: [WebGPU](https://www.w3.org/TR/webgpu/) and the [WebGPU Shading Language](https://www.w3.org/TR/WGSL/) (W3C Candidate Recommendation Drafts); the WGSL floating-point accuracy rules shape the shaders.
