@@ -87,7 +87,7 @@ export interface HarnessShadowRequest {
 
 export interface HarnessShadowResult {
   readonly counts: ValidationCounts;
-  /** GPU milliseconds of the colour and termination passes, when timed. */
+  /** GPU milliseconds of the colour and termination passes, when timed; NaN for a rejected span. */
   readonly gpuMs?: readonly [number, number];
   /** Wall-clock milliseconds of the readback (mapAsync), when timed. */
   readonly readbackMs?: number;
@@ -139,13 +139,15 @@ export interface Harness {
   /**
    * Renders the full image `repeats` times after a warm-up run, and a preview at 1/2 and 1/4
    * scale after each. Milliseconds are GPU time from timestamp queries when available (else
-   * wall-clock): for a pass, from the start of its first tile to the end of its last.
+   * wall-clock): for a pass, from the start of its first tile to the end of its last. A repeat
+   * whose span was rejected (src/gpu/host/timestamps.ts) gives NaN.
    */
   benchmark(request: HarnessImageRequest, repeats: number): Promise<HarnessBenchmark>;
   /**
    * Renders the image once, then times `repeats` presents of it (the EHT post-process and blit,
    * or the tone-mapping blit), after ten warm-up presents whose times are discarded. `factor`
-   * fixes the EHT reduce.
+   * fixes the EHT reduce. `timing` is the device's clock; with timestamp queries a repeat whose
+   * span was rejected gives NaN, so `ms` never mixes the two clocks.
    */
   benchmarkPresent(
     request: HarnessImageRequest,

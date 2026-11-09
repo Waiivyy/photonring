@@ -2,11 +2,12 @@
 
 Every number here was measured. Machine for all of them: Apple M5 (10-core GPU), 24 GB, macOS
 27.0, except the CI run times, which name their GitHub runners. Every browser number is from
-Google Chrome; Safari, Firefox and Edge were not measured. The macOS CI runner has no
+Google Chrome, except in "Timestamps in Safari", which has Safari 27.0 and an embedded Chromium
+152.0.7977.167; Firefox and Edge were not measured. The macOS CI runner has no
 `timestamp-query`, so CI gives no GPU times on a hardware GPU; the only GPU times from CI are the
 SwiftShader ones at the end of the CI section. The power source, Low Power Mode and background
-load were not recorded. Re-run with the commands given (two measurements, marked where they
-appear, have no script in the repository); results depend on the browser, the power state and
+load were not recorded. Re-run with the commands given (measurements without a script in the
+repository are marked where they appear); results depend on the browser, the power state and
 what else the GPU is doing.
 
 ## GPU renderer (Stage 3)
@@ -152,7 +153,11 @@ Playwright; adapter "apple / metal-3". Measured on 2026-11-05 on the code of com
 anti-aliasing), then times one present into an offscreen target: in the EHT-style view the six
 compute passes (tent reduce along x and y, blur along x and y, peak, normalisation) and the
 colour-mapped upsample; in the colour view the tone-mapping blit. GPU milliseconds from one pair
-of timestamp queries around the whole present, median of 15 after 10 untimed presents. Chrome
+of timestamp queries around the whole present, median of 15 after 10 untimed presents. In the
+EHT-style view that pair runs from the first compute pass to the render pass, which a diagnostic
+on 2026-11-09 found unreliable on this Mac (section "Timestamps in Safari"), so the EHT-style rows
+are in question until they are measured again; the colour view's pair lies within one render
+pass. Chrome
 rounds these timestamps to steps of 0.0655 ms, so differences below that are not resolved. A
 first run without that warm-up measured the same 960 x 540 present at 2.43 ms first and
 0.52 ms a few presents later, so the GPU's clock state matters.
@@ -176,8 +181,9 @@ axis. An earlier version reduced in one two-dimensional pass ($(2f)^2$ reads per
 and measured 1.57 ms at 1920 x 1080 and 9.6 ms at 3840 x 2160; doing it along x and then y
 brought those to 0.66 to 0.72 ms and 1.77 ms. Without the reduce, the blur at 960 x 540 costs
 five times as much. The page's frame budget of 12 ms counts only the tiles; the design's rule was
-to subtract the post-process from it if it took more than 1 ms at 1920 x 1080, which it does not,
-so the budget is unchanged. At 4K each present adds about 1.8 ms to its frame.
+to subtract the post-process from it if it took more than 1 ms at 1920 x 1080, which these times,
+in question above, do not reach, so the budget is unchanged for now. At 4K each present measured
+about 1.8 ms.
 
 ## Photon subring view: the strip (Stage 7)
 
@@ -207,7 +213,14 @@ first frames after switching are planned without the colour view's estimate.
 The status line's "GPU time" is the sum of the timestamp-query times of the batches that made the
 current image (the first pass, then anti-aliasing), each from the start of its first tile to the
 end of its last; the page keeps one batch in flight, so every batch gets the query set and no
-queue wait is counted. It is often much larger than the benchmark above, because the GPU's clock
+queue wait is counted. Since Stage 8 the timestamps are copied out only after the queue has
+finished the batch, and a batch's span counts only if it is not negative and no longer than the
+batch's wall-clock time plus 2 ms (`src/gpu/host/timestamps.ts`; why: next section). Equal
+timestamps count as 0 ms, since Chrome rounds timestamps to steps of 0.0655 ms and a short batch
+can fall within one step. If any batch of the image fails the check, the line says "frame time"
+and shows the wall-clock times of all its batches instead, each from just before its first
+submission until the queue reported the batch done; the present submitted after the batch may or
+may not be counted (`src/ui/image-timing.ts`). One line never mixes the two clocks. It is often much larger than the benchmark above, because the GPU's clock
 depends on how busy it has been. Measured on 2026-11-05 at commit 36a298d in headless Chrome
 156.0.8078.80, viewport 960 x 540 at device pixel ratio 1 (internal 960 x 540), default view,
 with a throwaway script (`artifacts/stage7/scratch/timing.ts`, not in the repository): the first
@@ -215,6 +228,58 @@ pass took 7.86 ms on first load, 3.93 to 4.00 ms when re-rendered every few hund
 milliseconds, and 8.13 ms again after 5 s idle; the benchmark of the same size, which renders
 back to back, gives 1.51 ms (table above). Both are GPU times; they differ by the GPU's state.
 Screenshots of the page show the status line as it was when they were taken.
+
+## Timestamps in Safari (Stage 8)
+
+At the owner's Safari check of the live site on 2026-11-09 (Safari 27.0, macOS 27.0, Apple M5;
+the site deployed from commit a526c7d), the image was right but the status line showed negative
+GPU times: first pass -119.7, -16905.1, -443.7, -131.6, -142.5 and -16.5 ms, anti-aliasing
+-121.8, -124.4, -60.9, -26.4, -103.7 and -24.6 ms.
+
+Three console scripts, each creating its own device and timing a compute shader, narrowed it
+down. The owner ran them in Safari 27.0 and the developer in an embedded Chromium 152.0.7977.167
+on the same Mac; the scripts are kept in `artifacts/stage8/safari/` (gitignored).
+
+- Compute passes timed from the beginning of one pass to the end of a pass in a later submission
+  gave spans that agree with the passes they cover, in both browsers.
+- With the copy of the query set in the same submission as the pass that writes the end, or in
+  the next one, some Safari runs returned an end from before the run (the scripts recorded spans,
+  not raw values): -500.9 and -501.2 ms, about the 500 ms pause before them, and -3350.5 ms on a
+  query set created moments before, about the time since an earlier case's last run. With the
+  page's pattern and no wait, 3 of 8 runs were negative (-252.2, -351.4 and -451.0 ms); two of
+  them repeated no earlier value exactly, so a check for repeated values would miss them. Two
+  single-pass runs repeated the previous run's span to the microsecond, most likely a stale pair
+  of values, so a stale reading can also look plausible.
+- With the copy submitted only after `onSubmittedWorkDone()` resolved, all 16 Safari runs gave
+  8.1 to 19.3 ms: 8 spans in the page's pattern and 8 sums of three spans, one per pass.
+- In Chromium no span between compute passes was negative in any of these runs, and the third
+  script flagged no stale value (Chromium rounds timestamps to steps of 65.536 microseconds, so
+  equal spans there are expected).
+
+The likely cause, from WebKit's source (main at commit 50276a01f7ae, 2026-11-09; which revision
+Safari 27.0 ships was not checked): WebKit records timestamps as Metal counter samples in a pool of
+counter buffers shared by every query set in the process (`QuerySet.h`), and `resolveQuerySet` is a
+blit of the raw values (`CommandEncoder.mm`). For a known race between that blit and the counter
+writes of earlier passes (WebKit bug 283088), it waits on a shared event for the value 1, which by
+Apple's documentation no longer waits once the event has reached 1. Chromium's WebGPU engine,
+Dawn, works around the same race on Apple GPUs from the A15 and M2 on with an event value that
+grows each time. Metal guarantees only that command buffers start in order, and as far as
+Apple's documentation goes, counter sample buffers are not tracked resources, so nothing
+documented orders a copy in a later submission after the writes either. Whatever the cause, the
+WebGPU specification requires pages to cope with such values: "Timestamp values are
+implementation-defined. Applications must handle arbitrary timestamp results" (section 20.4,
+editor's draft of 2026-11-06).
+
+What changed in the page is in the previous section. It has not yet been checked in Safari; that
+waits for the next deploy.
+
+Render passes are a separate problem. In the same Chromium on this Mac, a render pass's beginning
+timestamp lay 5.05 to 66.65 ms before the end of the compute pass in front of it in the same command
+buffer, and the span from a compute pass's beginning to the end of a following render pass ranged
+from -16.1 to 40.9 ms (with a draw) and from -28.2 to 0 ms (with an empty render pass). The
+EHT-style present is timed that way, from its first compute pass to its render pass (section
+"EHT-style view: the post-process", above), so its times are in question until they are measured
+again.
 
 ## Download size (Stage 8)
 

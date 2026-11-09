@@ -6,6 +6,7 @@ import { choosePreviewScale } from '../../src/gpu/host/progressive.ts';
 import { autoFieldOfView, DEFAULT_DISK } from '../../src/physics/index.ts';
 import type { HarnessImageRequest } from '../gpu/harness-api.ts';
 import { openHarness } from '../gpu/page.ts';
+import { median, rejected } from './median.ts';
 
 const views = {
   'default (30 M, 12 deg, fov 60)': { distance: 30, azimuthDeg: 0, elevationDeg: 12, fovYDeg: 60 },
@@ -27,11 +28,6 @@ const resolutions: [number, number][] = [
 const BUDGET_MS = 12;
 const REPEATS = 9;
 
-const median = (v: number[]) => {
-  if (v.length === 0) return NaN;
-  const s = [...v].sort((a, b) => a - b);
-  return s[Math.floor(s.length / 2)] as number;
-};
 const fmt = (v: number) => (Number.isFinite(v) ? v.toFixed(2) : '-');
 
 test('GPU time per stage by view, disk and resolution', async ({ page }) => {
@@ -87,6 +83,12 @@ test('GPU time per stage by view, disk and resolution', async ({ page }) => {
         previewQuarterMs: median(r.previewQuarterMs),
         wallMs: median(r.wallMs),
         interactiveScale: scale,
+        rejected: {
+          trace: rejected(r.traceMs),
+          refine: rejected(r.refineMs),
+          previewHalf: rejected(r.previewHalfMs),
+          previewQuarter: rejected(r.previewQuarterMs),
+        },
       };
       rows.push(row);
       console.log(

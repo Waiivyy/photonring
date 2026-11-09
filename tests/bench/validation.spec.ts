@@ -5,13 +5,10 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { test } from '@playwright/test';
 import { autoFieldOfView } from '../../src/physics/index.ts';
 import { openHarness } from '../gpu/page.ts';
+import { median } from './median.ts';
 
 const SIDE = 1024;
 const REPEATS = 9;
-const median = (v: number[]) => {
-  const s = [...v].filter(Number.isFinite).sort((a, b) => a - b);
-  return s.length === 0 ? NaN : (s[Math.floor(s.length / 2)] as number);
-};
 const fmt = (v: number) => (Number.isFinite(v) ? v.toFixed(2) : '-');
 
 test('validation measurement cost by distance', async ({ page }) => {
