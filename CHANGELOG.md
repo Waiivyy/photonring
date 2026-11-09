@@ -129,7 +129,9 @@ branch.
   north is up as for M87* on the sky. A preset button, "Tilt 17°, as for M87*", sets the camera
   the EHT's models assume. Every place the view appears, saved images included, says "false
   colour" and "not a simulation of the EHT observation". Blur and colour run on the GPU after
-  each frame (0.66 to 0.72 ms at 1920 x 1080) and in the CPU reference renderer, which agree
+  each frame (0.66 to 0.72 ms at 1920 x 1080, timed from a compute pass to a render pass and in
+  question until measured again, [docs/PERFORMANCE.md](docs/PERFORMANCE.md)) and in the CPU
+  reference renderer, which agree
   within 1 level of 255 ([docs/PHYSICS.md](docs/PHYSICS.md), section 10d).
 - **Photon subrings, measured**: a 64-bit solver for the image of a disk ring after any number of
   half-turns, checked against an independent quadrature and the ray tracer; GPU fans of rays that
@@ -185,6 +187,13 @@ branch.
 
 ### Fixed
 
+- **Negative GPU times in Safari** (`src/gpu/host/timestamps.ts`, `src/ui/image-timing.ts`):
+  Safari 27.0 on an Apple M5 showed negative GPU times on the status line, because it copied the
+  timestamp queries out before the passes that write them had finished. The page now copies them
+  only after the queue has finished, uses a GPU time only if it is not negative and no longer than
+  the wall-clock time of the same work plus 2 ms, and otherwise shows the wall-clock times of the
+  whole image as frame time ([docs/PERFORMANCE.md](docs/PERFORMANCE.md), "Timestamps in Safari").
+  Not yet checked in Safari after the fix.
 - **Credit for the photon subring law** ([docs/PHYSICS.md](docs/PHYSICS.md), section 6b, and the
   README's "How it works"): the docs said that the leading-order law for the subring offsets of a
   camera and a disk ring at finite distances was derived for this project. It is published: the

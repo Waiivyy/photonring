@@ -18,6 +18,7 @@ import { halfToFloat } from './host/half.ts';
 import { layoutStruct, packStruct } from './host/layout.ts';
 import { BLACKBODY_LUT } from './host/lut.ts';
 import { planTiles, type Tile } from './host/tiles.ts';
+import { timeSubmissions, type PassTime, type TimestampSlots } from './host/timestamps.ts';
 import {
   BLIT_FIELDS,
   CROSSING_LOG_SIZE,
@@ -35,6 +36,8 @@ export const GPU_DPHI = 0.05;
 export const GPU_MAX_STEPS = 1000;
 export const TILE_SIZE = 256;
 const IMAGE_FORMAT: GPUTextureFormat = 'rgba16float';
+
+type GpuTimestampSlots = TimestampSlots<GPUQuerySet, GPUBuffer>;
 
 export type { RenderMode, Sky } from './host/wgsl.ts';
 
@@ -123,11 +126,7 @@ export class GpuRenderer {
   /** Benchmarks only: a fixed reduce factor for the EHT post-process. */
   private ehtFactorOverride: number | undefined = undefined;
   /** Timestamp queries for timed presents, apart from the tile timing. */
-  private readonly presentQuery: {
-    readonly set: GPUQuerySet;
-    readonly resolve: GPUBuffer;
-    readonly read: GPUBuffer;
-  } | null;
+  private readonly presentQuery: GpuTimestampSlots | null;
   /** One sample per pixel (first pass). */
   private image: GPUTexture | null = null;
   private imageGroup: GPUBindGroup | null = null;
@@ -148,9 +147,8 @@ export class GpuRenderer {
     readonly bytesPerRow: number;
   } | null = null;
   private validationBusy: Promise<unknown> | null = null;
-  private querySet: GPUQuerySet | null = null;
-  private queryResolve: GPUBuffer | null = null;
-  private queryRead: GPUBuffer | null = null;
+  /** Timestamp queries for tile batches; busy from a timed batch's submission to its readback. */
+  private readonly tileQuery: GpuTimestampSlots | null;
   private queryBusy = false;
   private readonly layouts: Layouts;
   private readonly pipelines: Pipelines;
@@ -219,30 +217,19 @@ export class GpuRenderer {
     this.common = this.commonGroup();
     this.empty = device.createBindGroup({ layout: layouts.empty, entries: [] });
     this.sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
-    this.presentQuery = timestampQuery
-      ? {
-          set: device.createQuerySet({ type: 'timestamp', count: 2 }),
-          resolve: device.createBuffer({
-            size: 16,
-            usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC,
-          }),
-          read: device.createBuffer({
-            size: 16,
-            usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
-          }),
-        }
-      : null;
-    if (timestampQuery) {
-      this.querySet = device.createQuerySet({ type: 'timestamp', count: 2 });
-      this.queryResolve = device.createBuffer({
+    const slots = (): GpuTimestampSlots => ({
+      set: device.createQuerySet({ type: 'timestamp', count: 2 }),
+      resolve: device.createBuffer({
         size: 16,
         usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC,
-      });
-      this.queryRead = device.createBuffer({
+      }),
+      read: device.createBuffer({
         size: 16,
         usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
-      });
-    }
+      }),
+    });
+    this.presentQuery = timestampQuery ? slots() : null;
+    this.tileQuery = timestampQuery ? slots() : null;
   }
 
   static async create(device: GPUDevice, timestampQuery = false): Promise<GpuRenderer> {
@@ -524,11 +511,12 @@ export class GpuRenderer {
 
   /**
    * Submits one compute pass per tile (each preceded by its own parameter write, which the queue
-   * orders before the pass). With timestamp queries, the first and last pass are timed and the
-   * returned promise resolves to GPU milliseconds; otherwise to wall-clock milliseconds until the
-   * queue drains, which overestimates.
+   * orders before the pass). Resolves once the queue has drained, to the wall-clock milliseconds
+   * until then (which overestimates) and, with timestamp queries, the GPU milliseconds from the
+   * start of the first tile to the end of the last, or null when that span was rejected
+   * (host/timestamps.ts).
    */
-  dispatchTiles(tiles: readonly Tile[], pass: TilePass = 'trace'): Promise<number> {
+  dispatchTiles(tiles: readonly Tile[], pass: TilePass = 'trace'): Promise<PassTime> {
     const group = pass === 'trace' ? this.imageGroup : this.refineGroup;
     if (!group) throw new Error('resize must be called before rendering');
     const pipeline = pass === 'trace' ? this.pipelines.render : this.pipelines.refine;
@@ -539,7 +527,7 @@ export class GpuRenderer {
    * Renders the whole image at `scale` (at most 1/2) of the full resolution per axis, one sample
    * per pixel, for blit(..., 'preview'). Resolves to milliseconds as dispatchTiles does.
    */
-  renderPreview(scale: number): Promise<number> {
+  renderPreview(scale: number): Promise<PassTime> {
     if (!this.previewGroup) throw new Error('resize must be called before rendering');
     if (!(scale > 0 && scale <= 0.5)) throw new RangeError('preview scale must be in (0, 1/2]');
     const width = Math.ceil(this.width * scale);
@@ -551,8 +539,8 @@ export class GpuRenderer {
 
   /**
    * Submits the tiles of a width x height image. `scene` overrides the current scene (offscreen
-   * renders); `timed: false` leaves the single timestamp query set to the interactive frames and
-   * measures wall-clock time instead.
+   * renders); `timed: false` leaves the tile query set to the interactive frames and measures
+   * wall-clock time only, as does a batch that starts while the query set is busy.
    */
   private submitTiles(
     tiles: readonly Tile[],
@@ -561,59 +549,51 @@ export class GpuRenderer {
     width: number,
     height: number,
     opts: { readonly scene?: SceneParams; readonly timed?: boolean } = {},
-  ): Promise<number> {
+  ): Promise<PassTime> {
     const scene = opts.scene ?? this.scene;
-    const timed =
-      (opts.timed ?? true) && this.querySet !== null && !this.queryBusy && tiles.length > 0;
-    const start = performance.now();
-    tiles.forEach((tile, k) => {
-      this.writeFrame(tile, width, height, scene);
-      const encoder = this.device.createCommandEncoder();
-      const timestampWrites: GPUComputePassTimestampWrites | undefined =
-        timed && this.querySet
-          ? {
-              querySet: this.querySet,
-              ...(k === 0 ? { beginningOfPassWriteIndex: 0 } : {}),
-              ...(k === tiles.length - 1 ? { endOfPassWriteIndex: 1 } : {}),
-            }
-          : undefined;
-      const writesAny = timestampWrites && (k === 0 || k === tiles.length - 1);
-      const compute = encoder.beginComputePass(writesAny ? { timestampWrites } : {});
-      compute.setPipeline(pipeline);
-      compute.setBindGroup(0, this.common);
-      compute.setBindGroup(1, group);
-      compute.dispatchWorkgroups(Math.ceil(tile.width / 8), Math.ceil(tile.height / 8));
-      compute.end();
-      if (timed && k === tiles.length - 1 && this.querySet && this.queryResolve && this.queryRead) {
-        encoder.resolveQuerySet(this.querySet, 0, 2, this.queryResolve, 0);
-        encoder.copyBufferToBuffer(this.queryResolve, 0, this.queryRead, 0, 16);
-      }
-      this.device.queue.submit([encoder.finish()]);
-    });
-    if (timed && this.queryRead) {
-      const read = this.queryRead;
-      this.queryBusy = true;
-      return read.mapAsync(GPUMapMode.READ).then(() => {
-        const t = new BigUint64Array(read.getMappedRange());
-        const ms = Number((t[1] as bigint) - (t[0] as bigint)) / 1e6;
-        read.unmap();
-        this.queryBusy = false;
-        return ms;
+    const query =
+      (opts.timed ?? true) && !this.queryBusy && tiles.length > 0 ? this.tileQuery : null;
+    const submit = () =>
+      tiles.forEach((tile, k) => {
+        this.writeFrame(tile, width, height, scene);
+        const encoder = this.device.createCommandEncoder();
+        const first = k === 0;
+        const last = k === tiles.length - 1;
+        const compute = encoder.beginComputePass(
+          query && (first || last)
+            ? {
+                timestampWrites: {
+                  querySet: query.set,
+                  ...(first ? { beginningOfPassWriteIndex: 0 } : {}),
+                  ...(last ? { endOfPassWriteIndex: 1 } : {}),
+                },
+              }
+            : {},
+        );
+        compute.setPipeline(pipeline);
+        compute.setBindGroup(0, this.common);
+        compute.setBindGroup(1, group);
+        compute.dispatchWorkgroups(Math.ceil(tile.width / 8), Math.ceil(tile.height / 8));
+        compute.end();
+        this.device.queue.submit([encoder.finish()]);
       });
-    }
-    return this.device.queue.onSubmittedWorkDone().then(() => performance.now() - start);
+    if (!query) return timeSubmissions(this.device, null, submit);
+    this.queryBusy = true;
+    return timeSubmissions(this.device, query, submit).finally(() => {
+      this.queryBusy = false;
+    });
   }
 
   /**
    * Renders the whole image (first pass, then anti-aliasing when the scene asks for it) and
-   * waits for the GPU. Returns the milliseconds of each pass, as dispatchTiles measures them.
+   * waits for the GPU. Returns the time of each pass, as dispatchTiles measures it.
    */
-  async renderAll(): Promise<{ traceMs: number; refineMs: number | null }> {
+  async renderAll(): Promise<{ trace: PassTime; refine: PassTime | null }> {
     const tiles = planTiles(this.width, this.height, TILE_SIZE);
     this.clearRefined();
-    const traceMs = await this.dispatchTiles(tiles, 'trace');
-    const refineMs = this.antialiasing ? await this.dispatchTiles(tiles, 'refine') : null;
-    return { traceMs, refineMs };
+    const trace = await this.dispatchTiles(tiles, 'trace');
+    const refine = this.antialiasing ? await this.dispatchTiles(tiles, 'refine') : null;
+    return { trace, refine };
   }
 
   /**
@@ -621,7 +601,8 @@ export class GpuRenderer {
    * sky, no tone mapping, one ray per pixel centre) and the termination view of the same camera
    * into an offscreen side x side image, and reads both back. Never touches the current scene,
    * the interactive images or the canvas. With `timed`, each pass gets timestamp-query GPU time
-   * (only where no interactive frame competes for the query set, as in the bench).
+   * (only where no interactive frame competes for the query set, as in the bench), NaN where
+   * there was none or its span was rejected.
    */
   async measureShadow(
     camera: CameraParams,
@@ -662,13 +643,13 @@ export class GpuRenderer {
         scene: base,
         timed,
       });
-      const colourMs = timed ? await colour : NaN;
+      const colourMs = timed ? ((await colour).gpuMs ?? NaN) : NaN;
       copy(0);
       const termination = this.submitTiles(tiles, this.pipelines.render, v.group, side, side, {
         scene: { ...base, mode: 'termination' },
         timed,
       });
-      const terminationMs = timed ? await termination : NaN;
+      const terminationMs = timed ? ((await termination).gpuMs ?? NaN) : NaN;
       copy(v.bytesPerRow * side);
       const t0 = performance.now();
       await v.read.mapAsync(GPUMapMode.READ);
@@ -912,17 +893,14 @@ export class GpuRenderer {
     );
     render.draw(3);
     render.end();
-    if (q) {
-      encoder.resolveQuerySet(q.set, 0, 2, q.resolve, 0);
-      encoder.copyBufferToBuffer(q.resolve, 0, q.read, 0, 16);
-    }
     d.queue.submit([encoder.finish()]);
   }
 
   /**
    * Benchmarks: GPU milliseconds of one present into an offscreen target (in the EHT-style view,
    * its six passes and the colour-mapped upsample; otherwise the tone-mapping blit), from
-   * timestamp queries, or wall-clock milliseconds until the queue drains without them. `factor`
+   * timestamp queries read after the queue drains (host/timestamps.ts), or wall-clock
+   * milliseconds until the queue drains when there are none or their span was rejected. `factor`
    * fixes the EHT reduce factor for a comparison.
    */
   async timePresent(
@@ -935,19 +913,13 @@ export class GpuRenderer {
       usage: GPUTextureUsage.RENDER_ATTACHMENT,
     });
     this.ehtFactorOverride = factor;
-    const q = this.presentQuery;
     try {
-      const t0 = performance.now();
-      this.blit(target.createView(), 'rgba8unorm', source, true);
-      if (q) {
-        await q.read.mapAsync(GPUMapMode.READ);
-        const t = new BigUint64Array(q.read.getMappedRange());
-        const ms = Number((t[1] as bigint) - (t[0] as bigint)) / 1e6;
-        q.read.unmap();
-        return { ms, timing: 'timestamp-query' };
-      }
-      await this.device.queue.onSubmittedWorkDone();
-      return { ms: performance.now() - t0, timing: 'wall-clock' };
+      const t = await timeSubmissions(this.device, this.presentQuery, () =>
+        this.blit(target.createView(), 'rgba8unorm', source, true),
+      );
+      return t.gpuMs === null
+        ? { ms: t.wallMs, timing: 'wall-clock' }
+        : { ms: t.gpuMs, timing: 'timestamp-query' };
     } finally {
       this.ehtFactorOverride = undefined;
       target.destroy();
@@ -956,7 +928,8 @@ export class GpuRenderer {
 
   /**
    * Tone maps (or clamps) into a render target: the full image with its anti-aliased pixels, or
-   * the last preview, upscaled with bilinear filtering.
+   * the last preview, upscaled with bilinear filtering. `timed` writes the beginning and end
+   * timestamps into the present query set, which only timePresent reads.
    */
   blit(
     target: GPUTextureView,
@@ -1014,10 +987,6 @@ export class GpuRenderer {
     pass.setBindGroup(0, group);
     pass.draw(3);
     pass.end();
-    if (q) {
-      encoder.resolveQuerySet(q.set, 0, 2, q.resolve, 0);
-      encoder.copyBufferToBuffer(q.resolve, 0, q.read, 0, 16);
-    }
     this.device.queue.submit([encoder.finish()]);
   }
 
@@ -1290,11 +1259,10 @@ export class GpuRenderer {
     this.ehtPeak.destroy();
     this.ehtWeights?.destroy();
     this.ehtLow?.forEach((t) => t.destroy());
-    this.querySet?.destroy();
-    this.queryResolve?.destroy();
-    this.queryRead?.destroy();
-    this.presentQuery?.set.destroy();
-    this.presentQuery?.resolve.destroy();
-    this.presentQuery?.read.destroy();
+    for (const q of [this.tileQuery, this.presentQuery]) {
+      q?.set.destroy();
+      q?.resolve.destroy();
+      q?.read.destroy();
+    }
   }
 }

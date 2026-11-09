@@ -27,6 +27,11 @@ export interface AppStats {
   previewMs: number;
   traceMs: number;
   refineMs: number;
+  /**
+   * Clock of traceMs and refineMs: timestamp queries only when every batch of the image got a
+   * valid GPU span, otherwise wall-clock for all of them (ui/image-timing.ts). previewMs is the
+   * last preview's GPU time when it had one, else its wall-clock time.
+   */
   timing: 'timestamp-query' | 'wall-clock';
   /** Enabled overlays, in canonical order. */
   overlays: string[];

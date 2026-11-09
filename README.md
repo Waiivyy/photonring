@@ -131,7 +131,7 @@ photonring needs WebGPU. Without it the page explains why, lists the browsers wh
 
 </details>
 
-Not tested: Safari, Firefox (not installed on the development machine), Edge, and Chrome on Windows, on Linux GPUs or on Android. Touch control and the phone layout were tested only in Chrome's mobile emulation (390 x 844 CSS px), not on a real phone or tablet, and no screen reader has been tried by hand.
+Not tested: Firefox (not installed on the development machine), Edge, and Chrome on Windows, on Linux GPUs or on Android. Safari: a check of the live page in Safari 27.0 on the M5 is not finished; so far it found negative GPU times on the status line ([docs/PERFORMANCE.md](docs/PERFORMANCE.md), "Timestamps in Safari"), not yet checked again with the fix. Touch control and the phone layout were tested only in Chrome's mobile emulation (390 x 844 CSS px), not on a real phone or tablet, and no screen reader has been tried by hand.
 
 ## Controls
 
@@ -324,7 +324,7 @@ GPU time per image, from `npm run bench:gpu`. **Machine:** Apple M5 (10-core GPU
 - The **first pass** traces one ray per pixel; the **anti-aliasing** pass then adds 3 x 3 samples only where the image needs them (6.1 % of the pixels in the default view at 1920 x 1080). Supersampling every pixel 3 x 3 takes 40.37 ms there instead of 7.47 ms. **Full image** is the sum of the two. **While moving** applies the page's 12 ms frame budget to the measured first pass.
 - The brief's target is 30 frames per second at 1920 x 1080 with the disk, 33 ms per frame. A moving frame costs 5.31 ms of GPU time in this setting; the frame rate in a visible browser window was not measured.
 - Download with WebGPU: 151,581 bytes, 51,360 with gzip, and no runtime dependencies (`npm run size` on 2026-11-09 at commit d25071e; 147,978 and 50,319 at commit 4f29a52; [docs/PERFORMANCE.md](docs/PERFORMANCE.md#download-size-stage-8)).
-- The EHT-style view adds its blur at every present: 0.66 to 0.72 ms of GPU time at 1920 x 1080 and 1.77 ms at 3840 x 2160 (Chrome 156.0.8078.80, median of 15). The photon subring view's rays all pass close to the photon sphere: its first pass takes 8.19 ms (default camera) and 13.24 ms (face-on) at 1920 x 1080, against 5.51 and 4.59 ms for the colour view of the same cameras. Method: [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
+- The EHT-style view adds its blur at every present: 0.66 to 0.72 ms of GPU time at 1920 x 1080 and 1.77 ms at 3840 x 2160 (Chrome 156.0.8078.80, median of 15), timed from a compute pass to a render pass, which a later diagnostic found unreliable on this Mac, so these times are in question until measured again ([docs/PERFORMANCE.md](docs/PERFORMANCE.md)). The photon subring view's rays all pass close to the photon sphere: its first pass takes 8.19 ms (default camera) and 13.24 ms (face-on) at 1920 x 1080, against 5.51 and 4.59 ms for the colour view of the same cameras. Method: [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 - Software WebGPU is far slower: on GitHub's Ubuntu runner, in Chrome 156.0.8078.47 with SwiftShader, the first pass of the default view at 1280 x 720, zoomed out to 33 M, took 4349.4 and 4502.5 ms of GPU time in two attempts.
 
 Caveats: one machine and one browser; headless, so nothing was composited to a display; Chrome quantises timestamps to multiples of 0.065536 ms, and each value includes the idle gaps between tile submissions; the power source and background load were not recorded. Full tables and method: [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
@@ -344,7 +344,7 @@ Caveats: one machine and one browser; headless, so nothing was composited to a d
 - **Overlay lines are drawn even where the disk hides that part of the ring**, and so are the photon subring view's band edges.
 - **The EHT-style view is a display of the toy disk**, not a model of M87*: no thick, optically thin flow, no emission inside the ISCO, all frequencies instead of 1.3 mm, a perfect image blurred instead of an interferometric reconstruction, and a beam matched at the shadow edge, exact only for a distant observer. Its 108 degree turn applies at every camera, not only at the preset.
 - **The photon subring view is magnified and logarithmic**: a diagnostic of where the images lie, not what a camera sees. On the GPU the bands below about $10^{-7}$ in $b/b_c - 1$ are beyond 32-bit arithmetic; the page draws that limit as measured on an Apple M5, which another GPU may not match.
-- **Without `timestamp-query`** the page times its work with the wall clock. The feature is optional: Chrome has offered it since 121 but not on every adapter (CI's macOS runner has none), MDN lists it in Safari 26, and Firefox is unverified.
+- **Without `timestamp-query`** the page times its work with the wall clock. It does the same, and says frame time, for an image whose GPU timestamps fail its checks; Safari 27.0 returned stale ones ([docs/PERFORMANCE.md](docs/PERFORMANCE.md)). The feature is optional: Chrome has offered it since 121 but not on every adapter (CI's macOS runner has none), MDN lists it in Safari 26, and Firefox is unverified.
 - **A Content-Security-Policy in a meta tag cannot set `frame-ancestors`, `sandbox` or `report-uri`, and `report-to` has no endpoint without a response header**, so any site can frame the page and violations are not reported; the page has no accounts, forms or sensitive actions.
 
 ## Privacy
@@ -361,7 +361,7 @@ A test loads the built page and fails on any request to another origin or for a 
 
 ## FAQ
 
-**How can I check these numbers myself?** `npm test` runs the 1082 Vitest tests (physics, CPU renderer and golden images, URL state, page logic, README tools). `npm run measure` runs them again and prints the worst values the test files record, among them the CPU deflection and photon subring numbers above (the tolerances are in [docs/VALIDATION.md](docs/VALIDATION.md)). `npm run test:gpu` runs the 33 GPU tests in your installed Google Chrome and logs their errors, and `npm run render:cpu` writes the CPU reference renders to `artifacts/stage1/` and prints the shadow-size table. On another machine or browser the values can differ; the tests check that each stays within its tolerance.
+**How can I check these numbers myself?** `npm test` runs the 1097 Vitest tests (physics, CPU renderer and golden images, URL state, page logic, README tools). `npm run measure` runs them again and prints the worst values the test files record, among them the CPU deflection and photon subring numbers above (the tolerances are in [docs/VALIDATION.md](docs/VALIDATION.md)). `npm run test:gpu` runs the 33 GPU tests in your installed Google Chrome and logs their errors, and `npm run render:cpu` writes the CPU reference renders to `artifacts/stage1/` and prints the shadow-size table. On another machine or browser the values can differ; the tests check that each stays within its tolerance.
 
 **Why is the black shadow so much larger than the event horizon? What are the thin rings just outside it? Why is one side of the disk brighter?** See [How it works](#how-it-works): the shadow is larger than the horizon, rings inside rings, and one side is brighter.
 
