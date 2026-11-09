@@ -357,9 +357,9 @@ script checks this).
    mpmath at 50 digits and $u = 23$, its cn and dn are off by $3.6\times10^{-3}$ for
    $1 - m = 9.9\times10^{-11}$ and by $4.2\times10^{-15}$ for $1.01\times10^{-10}$ (scipy 1.18.1,
    mpmath 1.4.1). kgeo's radii there are off by up to 20.7 % at 100 M and 30.3 % at 1000 M, while its
-   crossing counts and its classification stay right (K4 passes on these rays, and K5 on those
-   at $b_c(1 - 10^{-9})$). These rays are compared with the oracle's radii instead (the row "K1
-   just inside the critical curve").
+   crossing counts and its classification stay right: K4 passes on these rays, and K5 on those at
+   $b_c(1 - 10^{-9})$. These rays are compared with the oracle's radii instead (the row "K1 just
+   inside the critical curve").
    kgeo also returns NaN for $b = b_c$ exactly, which is not sampled.
 2. kgeo stops counting crossings at $r_o$ on the way out: its largest Mino time is twice the time
    from $r_o$ to the turning point. The oracle, which integrates on to escape, found more crossings

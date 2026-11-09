@@ -6,6 +6,10 @@
 // - its pages refuse some macros ("The following macros are not allowed: operatorname");
 // - Prettier reads a line that starts with $$ and does not end with one as an open math block,
 //   strips escapes from it and appends a $$ at the end of the file.
+// Checked on GitHub's renderer (its /markdown API) for the Stage 8 cross-check branch: it leaves
+// an inline span as text when its closing $ is followed by a letter or digit, as in $x$y, or when
+// the span ends in ")" and the closing $ is followed by ")", as in ($f(x)$); ($x$) and ($[x]$)
+// render.
 import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -31,14 +35,21 @@ function inlineMath(text: string): string[] {
 /**
  * Lines with inline math GitHub leaves as text: a span broken across lines (an odd number of $),
  * an opening $ after anything but a line start, whitespace, "(" or a bold mark (as in order-$n$),
- * or a space just inside a $.
+ * a space just inside a $, a closing $ followed by a letter or digit, or a span ending in ")"
+ * whose closing $ is followed by ")".
  */
 function unrenderedInlineMath(text: string): string[] {
   return text.split('\n').filter((line) => {
     if ((line.replace(/\\\$/g, '').match(/\$/g)?.length ?? 0) % 2 !== 0) return true;
     return [...line.matchAll(/(?<!\$)\$(?!\$)([^$\n]+?)(?<!\\)\$(?!\$)/g)].some((m) => {
       const before = m.index === 0 ? ' ' : line[m.index - 1]!;
-      return !/[\s(*]/.test(before) || /^\s|\s$/.test(m[1]!);
+      const after = line[m.index + m[0].length] ?? ' ';
+      return (
+        !/[\s(*]/.test(before) ||
+        /^\s|\s$/.test(m[1]!) ||
+        /[A-Za-z0-9]/.test(after) ||
+        (m[1]!.endsWith(')') && after === ')')
+      );
     });
   });
 }
@@ -131,6 +142,9 @@ describe('Markdown math as GitHub renders it', () => {
           '\\approx 5.196$ here',
           'the order-$n$ image',
           'solves $\\Phi = $ sweep',
+          'at $x$y and $x$5',
+          '(at $b_c(1 - 10^{-9})$) here',
+          'fine ($x$), ($[x]$), $f(x)$, and $n$-th',
         ].join('\n'),
       ),
     ).toEqual([
@@ -138,6 +152,8 @@ describe('Markdown math as GitHub renders it', () => {
       '\\approx 5.196$ here',
       'the order-$n$ image',
       'solves $\\Phi = $ sweep',
+      'at $x$y and $x$5',
+      '(at $b_c(1 - 10^{-9})$) here',
     ]);
   });
 });
