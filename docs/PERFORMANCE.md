@@ -249,7 +249,7 @@ on the same Mac; the scripts are kept in `artifacts/stage8/safari/` (gitignored)
   single-pass runs repeated the previous run's span to the microsecond, most likely a stale pair
   of values, so a stale reading can also look plausible.
 - With the copy submitted only after `onSubmittedWorkDone()` resolved, all 16 Safari runs gave
-  spans of 8.1 to 19.3 ms.
+  8.1 to 19.3 ms: 8 spans in the page's pattern and 8 sums of three spans, one per pass.
 - In Chromium no span between compute passes was negative in any of these runs, and the third
   script flagged no stale value (Chromium rounds timestamps to steps of 65.536 microseconds, so
   equal spans there are expected).
