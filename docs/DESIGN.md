@@ -786,14 +786,14 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
   violation is a console error that fails the test.
 - **What a policy in a meta tag cannot enforce**, and what that means here:
 
-  | Limit                                                                                                                              | Consequence                                                                                                                                                                                                                                            |
-  | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-  | `frame-ancestors` is ignored (CSP Level 3, section 6.4.2; measured: a page on another origin framed the build and its scripts ran) | Any site can frame the page. There are no accounts, forms or sensitive actions; the worst case is a tricked click on Save image, which downloads a file locally. Accepted. Pages' own response headers for this site are unknown until it is deployed. |
-  | `sandbox` is ignored (CSP Level 3, section 6.3.2)                                                                                  | Not needed.                                                                                                                                                                                                                                            |
-  | `report-uri` is ignored; `report-to` has no endpoint without a response header; Report-Only cannot be sent in a meta               | Production reports nothing, which also keeps the page free of requests. Violations are found only by the tests on the build.                                                                                                                           |
-  | The policy does not cover what comes before the meta, a meta outside head is ignored, and edits after parsing have no effect       | The dist rules require exactly one CSP meta in head, after nothing but `<meta charset>`. Measured in Chrome 156: a meta placed after the assets let them load despite `'none'`.                                                                        |
-  | One static policy for every response                                                                                               | No inline script or style anywhere, enforced by the dist rules.                                                                                                                                                                                        |
-  | `'self'` is the origin `https://waiivyy.github.io`, which every Pages project site of the account shares                           | Scripts from the account's other Pages sites would also be allowed; only the owner can publish there. A path-restricted source would tie the build to its deploy URL and break the local preview checks.                                               |
+  | Limit                                                                                                                              | Consequence                                                                                                                                                                                                                                                                                                                                                                                |
+  | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+  | `frame-ancestors` is ignored (CSP Level 3, section 6.4.2; measured: a page on another origin framed the build and its scripts ran) | Any site can frame the page. There are no accounts, forms or sensitive actions; the worst case is a tricked click on Save image, which downloads a file locally. Accepted. Pages' own response headers for this site are unknown until it is deployed. (Stage 8: Pages sends no `X-Frame-Options` or CSP header, so framing stays possible and the decision stands; `docs/VALIDATION.md`.) |
+  | `sandbox` is ignored (CSP Level 3, section 6.3.2)                                                                                  | Not needed.                                                                                                                                                                                                                                                                                                                                                                                |
+  | `report-uri` is ignored; `report-to` has no endpoint without a response header; Report-Only cannot be sent in a meta               | Production reports nothing, which also keeps the page free of requests. Violations are found only by the tests on the build.                                                                                                                                                                                                                                                               |
+  | The policy does not cover what comes before the meta, a meta outside head is ignored, and edits after parsing have no effect       | The dist rules require exactly one CSP meta in head, after nothing but `<meta charset>`. Measured in Chrome 156: a meta placed after the assets let them load despite `'none'`.                                                                                                                                                                                                            |
+  | One static policy for every response                                                                                               | No inline script or style anywhere, enforced by the dist rules.                                                                                                                                                                                                                                                                                                                            |
+  | `'self'` is the origin `https://waiivyy.github.io`, which every Pages project site of the account shares                           | Scripts from the account's other Pages sites would also be allowed; only the owner can publish there. A path-restricted source would tie the build to its deploy URL and break the local preview checks.                                                                                                                                                                                   |
 
   The three ignored directives are left out rather than written for documentation: Chrome logs
   a console error for each, which would fail every test on the build.
@@ -884,6 +884,11 @@ $\hat r/r^5$, both typos (its code is correct); this project cites the code, not
   - screen readers and real touch devices: the VoiceOver and Safari touch checks requested at the
     Stage 4 check-in were not reported;
   - what GitHub Pages serves compressed, and whether builds are byte-identical across machines.
+  - Stage 8 update: the Pages workflow first ran on 2026-11-09, the `github-pages` environment
+    accepts deploys only from `main`, and the response headers, the compression and the byte
+    identity of a local build with the deployed one were checked; the manual checks ran in Safari
+    27.0 (`docs/VALIDATION.md`, "Manual checks in Safari"). Firefox, screen readers and real touch
+    devices are still not checked.
 
 ## 15. Stage 6 decisions
 
@@ -1108,7 +1113,8 @@ fidelity first" on 2026-11-08.
     `twitter:image` exactly once each, with exactly these values. `tests/unit/site-meta.test.ts`
     checks the tags in the source, and the offline test checks `og:image` in the served page.
   - Not checked until after the deploy: the cards X and other services draw, whether they crop
-    the 2:1 image, and whether Pages redirects `/photonring` to `/photonring/`.
+    the 2:1 image, and whether Pages redirects `/photonring` to `/photonring/` (Stage 8: it does,
+    with a 301; the cards were not checked).
 - **The deploy artifact is kept 90 days.** `actions/upload-pages-artifact` at the pinned commit
   fc324d35 (v5.0.0) declares `retention-days`, with a default of 1 day (its `action.yml`, read at
   that commit); `pages.yml` sets 90, the most the repository's Actions settings allow. So the
@@ -1149,6 +1155,16 @@ fidelity first" on 2026-11-08.
   pass), so those times stay in question until the benchmarks are run again; its timestamps are
   now copied out and checked like the tiles', and the benchmarks leave out a rejected repeat
   instead of mixing clocks (`tests/bench/median.ts`).
+- **Live site and Safari (pull request 8b).** The owner deployed `main` on 2026-11-09 (commit
+  a526c7d, then 06c65d0 with the fix for Safari's GPU times), set the Website field and uploaded the
+  social preview. The developer's read-only checks and the owner's manual checks in Safari 27.0 are
+  in `docs/VALIDATION.md`, "Manual checks in Safari", each with the deploy it was seen on: all
+  passed (the keyboard check with some doubt) except S18, which was not run (it needs an iPhone or
+  iPad), and S5 was read with curl, not in Safari. Pages sends no response header that adds to the
+  page's own policy, compresses the HTML, JS and CSS with gzip only, and a local build
+  on the M5 equals the deployed CI build byte for byte for both deploys. Pull request 8b changes no
+  input of the build, which a build of its branch confirms by SHA-256 against the deployed files;
+  the tag v0.1.0 and its release wait for the owner's approval.
 - **Display choices disclosed.** The README's Limits, the About dialog and `docs/PHYSICS.md`,
   section 10, now say that the disk's 6500 K peak temperature (in the gas's own frame) is a display
   choice that was not derived from a black hole mass or accretion rate; that the page's exposure is
