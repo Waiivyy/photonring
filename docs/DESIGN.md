@@ -1212,21 +1212,24 @@ fidelity first" on 2026-11-08.
     `docs/VALIDATION.md`. The docs describe kgeo as called from a separate Python driver run
     outside photonring's build and tests, with no kgeo code in the repository. The credit for the
     subring law was fixed in pull request 8a and was not redone.
-  - Decided for this step, for the owner's check-in. A7 pins its definitions ($\Omega_S$ exactly
-    $\pi(15^2 - 6^2)$, the observer at infinity, no other factor) and allows one unit of the last
-    quoted digit, because Bisnovatyi-Kogan and Tsupko state neither their rounding nor their
-    accuracy and their printed $\Omega_S = 594$ alone moves the first ratio by $4.4\times10^{-4}$.
+  - Decided for this step. At the check-in of 2026-11-09 the owner accepted A7's unit of the last
+    digit, A8 as a consistency check, dropping A9, the committed Fig. 6 values and the factor 2
+    of K1's rounding model (Tolerance changes in `docs/VALIDATION.md`). A7 pins its definitions
+    ($\Omega_S$ exactly $\pi(15^2 - 6^2)$, the observer at infinity, no other factor) and allows
+    one unit of the last quoted digit, because Bisnovatyi-Kogan and Tsupko state neither their
+    rounding nor their accuracy and their printed $\Omega_S = 594$ alone moves the first ratio by
+    $4.4\times10^{-4}$.
     A8 is a consistency check of photonring's own shadow formula, with its rounding floor derived
     and tested on 4001 distances. Tsupko's Fig. 6 is committed as digitized values with the raw
     pixel coordinates of every marker and tick and a tolerance in value units per panel, without
     the image. Tsupko's 2.0 % area case is added as a cheap outside check. A4 has an explicit
     branch guard. The fitted ratio bound in `tests/unit/subrings.test.ts` is unchanged. The
-    next-order term is described as derived here and not found in the sources read, which are
-    listed. kgeo runs at 100 and 1000 M; its error was measured against its own ODE oracle at the
-    compared samples before any tolerance used it, crossing counts are its $N_{max} + 1$, capture
-    is at $2.001M$, and an order with no crossing matches only if neither code has one; a kgeo
-    crossing between $2M$ and $2.001M$, which photonring's capture cannot reach, is compared in
-    neither K1 nor K4.
+    next-order term is described as derived here; of the sources read, which are listed, only
+    Iyer and Petters (2007) give it, for a source and an observer at infinity. kgeo runs at 100
+    and 1000 M; its error was measured against its own ODE oracle at the compared samples before
+    any tolerance used it, crossing counts are its $N_{max} + 1$, capture is at $2.001M$, and an
+    order with no crossing matches only if neither code has one; a kgeo crossing between $2M$ and
+    $2.001M$, which photonring's capture cannot reach, is compared in neither K1 nor K4.
   - A9, the CPU strip at 1000 M, is dropped. The page's distances run from 5 to 200 M
     (`ORBIT_LIMITS` in `src/ui/quantise.ts`), so it would test a view the page never shows. The
     physics at 1000 M is covered by A4 and by K1, which checks `traceRay`, the CPU renderer's
