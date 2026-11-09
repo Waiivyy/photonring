@@ -6,6 +6,7 @@ import { test } from '@playwright/test';
 import { DEFAULT_DISK, type CameraParams } from '../../src/physics/index.ts';
 import type { HarnessImageRequest } from '../gpu/harness-api.ts';
 import { openHarness } from '../gpu/page.ts';
+import { median, rejected } from './median.ts';
 
 const REPEATS = 9;
 const resolutions: [number, number][] = [
@@ -16,7 +17,6 @@ const cameras: Record<string, CameraParams> = {
   'default (30 M, 12 deg)': { distance: 30, azimuthDeg: 0, elevationDeg: 12, fovYDeg: 60 },
   'face-on (30 M, 90 deg)': { distance: 30, azimuthDeg: 0, elevationDeg: 90, fovYDeg: 60 },
 };
-const median = (v: number[]) => [...v].sort((a, b) => a - b)[Math.floor(v.length / 2)] as number;
 
 test('GPU time of the photon subring strip against the colour view', async ({ page }) => {
   test.setTimeout(600_000);
@@ -55,6 +55,11 @@ test('GPU time of the photon subring strip against the colour view', async ({ pa
           traceMs: median(r.traceMs),
           previewHalfMs: median(r.previewHalfMs),
           previewQuarterMs: median(r.previewQuarterMs),
+          rejected: {
+            trace: rejected(r.traceMs),
+            previewHalf: rejected(r.previewHalfMs),
+            previewQuarter: rejected(r.previewQuarterMs),
+          },
         };
         rows.push(row);
         console.log(

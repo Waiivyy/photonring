@@ -5,6 +5,7 @@
 import { initWebGpu } from '../gpu/device.ts';
 import { ProgressiveRenderer, type FrameAction } from '../gpu/host/progressive.ts';
 import { chooseInternalResolution, type Resolution } from '../gpu/host/resolution.ts';
+import type { PassTime } from '../gpu/host/timestamps.ts';
 import { GpuRenderer, TILE_SIZE, type RenderMode } from '../gpu/renderer.ts';
 import { shadowAngularRadius, type CameraParams } from '../physics/index.ts';
 import { createAbout, type About } from './about.ts';
@@ -34,6 +35,7 @@ import { screenshotName } from './screenshot-name.ts';
 import { composeImage, download } from './screenshot.ts';
 import { createToolbar } from './toolbar.ts';
 import { showUnsupported } from './unsupported.ts';
+import { ImageTiming } from './image-timing.ts';
 import { formatHash, needsNotice, parseHash } from './url-state.ts';
 import { createUrlSync, type UrlSync } from './url-sync.ts';
 import { announcement, shadowResult } from './validation.ts';
@@ -184,14 +186,12 @@ class App {
   private frames = 0;
   private previews = 0;
   private previewScale = 0;
-  private previewMs = 0;
-  private traceMs = 0;
-  private refineMs = 0;
 
   private readonly root: HTMLElement;
   private readonly device: GPUDevice;
   private readonly renderer: GpuRenderer;
-  private readonly timestampQuery: boolean;
+  /** Times of the image being drawn and of the last preview, for the status line. */
+  private readonly timing: ImageTiming;
   private debugHook: Window['photonring'];
 
   constructor(
@@ -203,7 +203,7 @@ class App {
     this.root = root;
     this.device = device;
     this.renderer = renderer;
-    this.timestampQuery = timestampQuery;
+    this.timing = new ImageTiming(timestampQuery);
     const context = this.canvas.getContext('webgpu');
     if (!context) throw new Error('WebGPU canvas context unavailable');
     this.context = context;
@@ -398,10 +398,7 @@ class App {
       previews: this.previews,
       previewScale: this.previewScale,
       tilesRemaining: this.plan.remaining.trace + this.plan.remaining.refine,
-      previewMs: this.previewMs,
-      traceMs: this.traceMs,
-      refineMs: this.refineMs,
-      timing: this.timestampQuery ? 'timestamp-query' : 'wall-clock',
+      ...this.timingStats(),
       overlays: [...this.view.overlays],
       controlsOpen: this.panels.includes('controls'),
       requestedDisk: this.view.disk,
@@ -416,6 +413,17 @@ class App {
       validationOpen: this.view.validationOpen,
       validationRuns: this.validationScheduler.runs,
       validationMs: this.validationScheduler.lastMs,
+    };
+  }
+
+  /** The status line's times, with the clock of the first-pass and anti-aliasing sums. */
+  private timingStats(): Pick<AppStats, 'previewMs' | 'traceMs' | 'refineMs' | 'timing'> {
+    const t = this.timing.view();
+    return {
+      previewMs: t.previewMs,
+      traceMs: t.traceMs,
+      refineMs: t.refineMs,
+      timing: t.clock === 'GPU' ? 'timestamp-query' : 'wall-clock',
     };
   }
 
@@ -507,10 +515,9 @@ class App {
   private run(action: Exclude<FrameAction, { kind: 'idle' }>): void {
     if (action.reset) {
       this.renderer.clearRefined();
-      this.traceMs = 0;
-      this.refineMs = 0;
+      this.timing.reset();
     }
-    let work: Promise<number>;
+    let work: Promise<PassTime>;
     if (action.kind === 'preview') {
       this.previews++;
       this.previewScale = action.scale;
@@ -519,11 +526,9 @@ class App {
       work = this.renderer.dispatchTiles(action.tiles, action.kind);
     }
     work
-      .then((ms) => {
-        if (action.kind === 'preview') this.previewMs = ms;
-        else if (action.kind === 'trace') this.traceMs += ms;
-        else this.refineMs += ms;
-        this.plan.completed(action, ms);
+      .then((t) => {
+        this.timing.add(action.kind, t);
+        this.plan.completed(action, t.gpuMs ?? t.wallMs);
       })
       .catch(() => this.plan.completed(action, NaN));
     if (action.present) {
@@ -573,15 +578,17 @@ class App {
 
   private updateHud(): void {
     const { width, height } = this.resolution;
-    const timing = this.timestampQuery ? 'GPU' : 'frame';
+    const t = this.timing.view();
+    let timing = t.clock;
     const ms = (v: number) => `${v.toFixed(1)} ms`;
     const { trace, refine } = this.plan.remaining;
     let status: string;
     if (this.plan.done) {
-      status = `first pass ${ms(this.traceMs)}`;
-      if (this.renderer.antialiasing) status += `, anti-aliasing ${ms(this.refineMs)}`;
+      status = `first pass ${ms(t.traceMs)}`;
+      if (this.renderer.antialiasing) status += `, anti-aliasing ${ms(t.refineMs)}`;
     } else if (this.plan.stage === 'preview') {
-      status = `moving: preview at ${Math.round(100 * this.previewScale)} % (${ms(this.previewMs)})`;
+      timing = t.previewClock;
+      status = `moving: preview at ${Math.round(100 * this.previewScale)} % (${ms(t.previewMs)})`;
     } else if (this.plan.stage === 'trace') {
       status = `full resolution, ${trace} tiles left`;
     } else {
