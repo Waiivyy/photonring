@@ -68,6 +68,13 @@ describe('link preview tags', () => {
     expect(one('twitter:image')).toBe(SOCIAL_IMAGE_URL);
   });
 
+  it('match the live link in the README', () => {
+    const readme = readFileSync(new URL('README.md', ROOT), 'utf8');
+    const live = readme.split('\n').filter((l) => l.startsWith('**Live page:**'));
+    expect(live).toHaveLength(1);
+    expect(live[0]).toContain(`](${SITE_URL})`);
+  });
+
   it('name the image a file the build copies unhashed from public/', () => {
     const name = SOCIAL_IMAGE_URL.slice(SITE_URL.length);
     expect(PUBLIC_FILES).toContain(name);

@@ -1,6 +1,6 @@
 {
   "name": "photonring",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Validated, real-time Schwarzschild black hole renderer for the browser (WebGPU)",
   "license": "MIT",

@@ -270,8 +270,9 @@ WebGPU specification requires pages to cope with such values: "Timestamp values 
 implementation-defined. Applications must handle arbitrary timestamp results" (section 20.4,
 editor's draft of 2026-11-06).
 
-What changed in the page is in the previous section. It has not yet been checked in Safari; that
-waits for the next deploy.
+What changed in the page is in the previous section. On the deploy of commit 06c65d0 the status
+line in Safari 27.0 showed positive GPU times, for example first pass 11.8 ms and anti-aliasing
+13.7 ms at 33 M (`docs/VALIDATION.md`, "Manual checks in Safari", S1).
 
 Render passes are a separate problem. In the same Chromium on this Mac, a render pass's beginning
 timestamp lay 5.05 to 66.65 ms before the end of the compute pass in front of it in the same command
@@ -316,10 +317,13 @@ re-rendered gallery images and social preview changed size.
 | `social-preview.png`   | 247,530 | 247,463 | 247,535 |
 | Everything in `dist/`  | 810,398 | 709,622 | 703,344 |
 
-With WebGPU: 151,581 bytes, 51,360 with gzip. The gallery images load only on the page for
-browsers without WebGPU, and the social preview is never loaded by the page (link previews fetch
-it). What GitHub Pages actually
-sends compressed was not measured. There is no size budget.
+With WebGPU: 151,581 bytes, 51,360 with gzip. The gallery images load only on the page for browsers
+without WebGPU, and the social preview is never loaded by the page (link previews fetch it). GitHub
+Pages sends `index.html`, the JS and the CSS with gzip, not brotli, and the PNGs and the favicon
+uncompressed: measured on 2026-11-10 on the deploy of commit 06c65d0, whose JS is 138,924 bytes, it
+arrived as 48,067 bytes, the CSS (6,087) as 1,975 and `index.html` (3,086) as 914, and a request for
+brotli alone got the uncompressed files. These requests went through the development machine's
+office network, which passes traffic through a proxy. There is no size budget.
 
 ## CI run times (Stage 5)
 
