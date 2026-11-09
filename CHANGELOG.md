@@ -159,6 +159,20 @@ branch.
   which hot gas shines by synchrotron emission. The values the texts quote are recorded by
   `tests/unit/colour.test.ts`; `tests/unit/disclosures.test.ts` and the About page test check that
   the texts follow the page's settings.
+- **Cross-checks against published formulas and an outside code**
+  ([docs/VALIDATION.md](docs/VALIDATION.md)). `tests/unit/published-rings.test.ts` checks the
+  photon subring solver against the published strong deflection law of Bozza and Scarpetta (2007),
+  Bisnovatyi-Kogan and Tsupko (2022), Tsupko (2022) and Aratore, Tsupko and Perlick (2024), with a
+  tolerance from the next term of its expansion, derived here and not found in the sources read
+  ([docs/PHYSICS.md](docs/PHYSICS.md), section 6b, lists them), and reproduces numerical results printed in
+  those papers: Tsupko's Fig. 6 (digitized into `tests/data/tsupko2022-fig6.json`, with the
+  method), the solid angles of Bisnovatyi-Kogan and Tsupko's eqs. (50) and (51), and Tsupko's
+  2.0 % area error. `tests/unit/cross-check.test.ts` checks the ray tracer, the ring images and
+  the redshift against kgeo (A. Chael, GPL-3.0) at spin 0 for observers at 100 and 1000 M, using
+  kgeo's output numbers in `tests/data/kgeo-bc5affe.json`; kgeo was called from a separate Python
+  driver run outside photonring's build and tests, and no kgeo code is in the repository.
+  `tools/cross-check/kgeo-report.ts` applies the same comparisons to all 10,368 sampled rays. No
+  bug in photonring was found.
 - **Documentation**: [README.md](README.md) (what the page shows, how to run it, the controls,
   measured validation and performance numbers, browser support, limits, privacy, an FAQ and
   references), [docs/PHYSICS.md](docs/PHYSICS.md) (derivations and references),
@@ -182,6 +196,11 @@ branch.
   and a disk with $M \le 0$; a disk with a larger inner edge is the same disk cut off there.
   The README images, the hero, the social preview and the page's gallery for browsers without
   WebGPU are re-rendered with the new disk.
+- **The photon subring ratio law is derived, not fitted** ([docs/PHYSICS.md](docs/PHYSICS.md),
+  section 6b): the $5/18$ coefficient for a camera and a ring at finite distances, and the
+  constants that Stage 7 fitted to the computed ratios ($-0.28$ and $+0.69$), now follow from the
+  next term of the strong deflection expansion ($-0.2804$ and $+0.6874$). The test's bound is
+  unchanged.
 
 ### Fixed
 
