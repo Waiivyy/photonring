@@ -163,11 +163,13 @@ branch.
   ([docs/VALIDATION.md](docs/VALIDATION.md)). `tests/unit/published-rings.test.ts` checks the
   photon subring solver against the published strong deflection law of Bozza and Scarpetta (2007),
   Bisnovatyi-Kogan and Tsupko (2022), Tsupko (2022) and Aratore, Tsupko and Perlick (2024), with a
-  tolerance from the next term of its expansion, derived here and not found in the sources read
-  ([docs/PHYSICS.md](docs/PHYSICS.md), section 6b, lists them), and reproduces numerical results printed in
-  those papers: Tsupko's Fig. 6 (digitized into `tests/data/tsupko2022-fig6.json`, with the
-  method), the solid angles of Bisnovatyi-Kogan and Tsupko's eqs. (50) and (51), and Tsupko's
-  2.0 % area error. `tests/unit/cross-check.test.ts` checks the ray tracer, the ring images and
+  tolerance from the next term of its expansion, derived here. Of the sources read
+  ([docs/PHYSICS.md](docs/PHYSICS.md), section 6b, lists them), only Iyer and Petters (2007) give
+  that term, for a source and an observer at infinity, and the test reproduces their value. The
+  test also reproduces numerical results printed by Bisnovatyi-Kogan and Tsupko (2022) and Tsupko
+  (2022): Tsupko's Fig. 6 (digitized into `tests/data/tsupko2022-fig6.json`, with the method),
+  the solid angles of Bisnovatyi-Kogan and Tsupko's eqs. (50) and (51), and Tsupko's 2.0 % area
+  error. `tests/unit/cross-check.test.ts` checks the ray tracer, the ring images and
   the redshift against kgeo (A. Chael, GPL-3.0) at spin 0 for observers at 100 and 1000 M, using
   kgeo's output numbers in `tests/data/kgeo-bc5affe.json`; kgeo was called from a separate Python
   driver run outside photonring's build and tests, and no kgeo code is in the repository.
