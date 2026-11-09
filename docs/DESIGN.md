@@ -314,8 +314,9 @@ Sources, all fetched on 2026-11-02:
 its wall-clock path). Chrome has offered it since 121, quantised by default, but not on every
 adapter (the macOS CI runner's paravirtual GPU has none, section 5). BCD lists it in Safari 26
 (WebKit offers it only when the Metal GPU can sample timestamps, never on Intel GPUs) and not in
-Firefox, although Firefox's source has exposed it since 141 when wgpu reports it. This page has
-not been run in Safari or Firefox. (Chrome's announcement for 120 gives a resolution of 100
+Firefox, although Firefox's source has exposed it since 141 when wgpu reports it. This page was
+first run in Safari at the owner's check of the live site on 2026-11-09 (section 17) and has not
+been run in Firefox. (Chrome's announcement for 120 gives a resolution of 100
 microseconds, which Stage 0 had from secondary sources; in Chrome 156 on the Apple M5 every
 measured value is a multiple of 65.536 microseconds, that is $2^{16}$ ns, Stage 3.)
 
@@ -1000,7 +1001,9 @@ the owner's visual check-in (the owner's choice; every commit is still pushed).
   averaged over sub-texel phase, and the kernel supplies the rest. Measured cost: 0.39 to 0.72 ms
   per present at 960 x 540 and 1920 x 1080, 1.77 ms at 3840 x 2160 (`docs/PERFORMANCE.md`); the
   design's rule to subtract it from the 12 ms tile budget above 1 ms at 1920 x 1080 does not
-  trigger.
+  trigger. (Stage 8: these times were taken from a compute pass to a render pass, which a
+  diagnostic found unreliable on this Mac, so they and the decision that rests on them are in
+  question until the benchmarks are run again; section 17.)
 - **Purity rule.** `src/gpu/host/eht-post.ts` imports only the physics library and holds no GPU
   calls, so the CPU renderer, the tools and the tests share the exact plan the GPU uses (the same
   status as `antialias.ts`).
@@ -1122,6 +1125,23 @@ fidelity first" on 2026-11-08.
   headers, the CSP and Trusted Types, every view and overlay, the Validation panel, saving,
   keyboard, trackpad, resizing, links, device loss, About, a private window, and the page with
   WebGPU turned off); results go to `docs/VALIDATION.md` and the README in pull request 8b.
+- **Safari's GPU times (found at the Safari check, 2026-11-09).** Safari 27.0 showed negative GPU
+  times on the status line: it copied the timestamp queries out before the passes that write them
+  had finished and returned earlier values (`docs/PERFORMANCE.md`, "Timestamps in Safari"). The
+  page now copies the query set only after `onSubmittedWorkDone()`, in a submission of its own,
+  and accepts a span only if it is not negative and no longer than the batch's wall-clock time
+  plus 2 ms (equal timestamps count as 0 ms, below Chrome's timestamp step); an image with any
+  rejected batch is shown as frame time, with the wall-clock times of all
+  its batches (`src/gpu/host/timestamps.ts`, `src/ui/image-timing.ts`). Kept: one span per batch
+  from the first tile to the last, so the benchmarks' definition is unchanged. Timing each tile on
+  its own and adding the spans would avoid comparing timestamps across submissions, which a WebGPU
+  working group issue (gpuweb #4361) calls not always guaranteed, but the diagnostics found those
+  comparisons consistent between compute passes in Safari and Chromium. The extra submission and
+  readback after each timed batch were not measured for their effect on the frame rate. Not
+  changed: which passes the EHT-style present's span covers (from a compute pass to a render
+  pass), so those times stay in question until the benchmarks are run again; its timestamps are
+  now copied out and checked like the tiles', and the benchmarks leave out a rejected repeat
+  instead of mixing clocks (`tests/bench/median.ts`).
 - **Display choices disclosed.** The README's Limits, the About dialog and `docs/PHYSICS.md`,
   section 10, now say that the disk's 6500 K peak temperature (in the gas's own frame) is a display
   choice that was not derived from a black hole mass or accretion rate; that the page's exposure is
