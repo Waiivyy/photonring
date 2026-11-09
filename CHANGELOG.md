@@ -7,8 +7,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-No version has been released and the page is not deployed yet; everything below is on the `main`
-branch.
+## [0.1.0] - 2026-11-10
+
+The first release. The page is live at https://waiivyy.github.io/photonring/: first deployed on
+2026-11-09 from commit a526c7d, then the same day from commit 06c65d0, which adds the fix for
+Safari's GPU times below. The tagged commit builds the same files as that deploy
+([docs/VALIDATION.md](docs/VALIDATION.md), "Manual checks in Safari").
 
 ### Added
 
@@ -114,8 +118,8 @@ branch.
   Third-party actions are pinned to commit SHAs.
 - **Deploy workflow** for GitHub Pages (`.github/workflows/pages.yml`), started by hand only: it is
   set up to run the checks, build the page, run the offline test on that build and then publish
-  that same build, which it keeps for 90 days so it can be compared with a later build. It has not
-  run yet.
+  that same build, which it keeps for 90 days so it can be compared with a later build. First run
+  on 2026-11-09.
 - **README image** (`npm run render:hero`): the CPU reference renderer draws the page's opening
   view at 1600 x 900 with 3 x 3 samples per pixel into `docs/images/hero.png`, and writes nothing
   if a sample is not finite or the file is over its size budget. `npm run render:hero -- --candidates` renders four candidate views and a contact sheet into
@@ -161,6 +165,13 @@ branch.
   which hot gas shines by synchrotron emission. The values the texts quote are recorded by
   `tests/unit/colour.test.ts`; `tests/unit/disclosures.test.ts` and the About page test check that
   the texts follow the page's settings.
+- **Manual checks in Safari** ([docs/VALIDATION.md](docs/VALIDATION.md)): the live page, checked
+  by hand in Safari 27.0 on an Apple M5 (macOS 27.0) on 2026-11-09 and 2026-11-10: the console,
+  requests, the CSP and Trusted Types, every view and overlay, the Validation panel, saving, the
+  keyboard, the trackpad, links, device loss, About, a private window and the page without WebGPU.
+  All passed (the keyboard check with some doubt), part on the first deploy and part on the second,
+  which has the fix for Safari's GPU times; Safari 26 itself and Safari on iOS and iPadOS were not
+  tested.
 - **Documentation**: [README.md](README.md) (what the page shows, how to run it, the controls,
   measured validation and performance numbers, browser support, limits, privacy, an FAQ and
   references), [docs/PHYSICS.md](docs/PHYSICS.md) (derivations and references),
@@ -177,7 +188,8 @@ branch.
   only after the queue has finished, uses a GPU time only if it is not negative and no longer than
   the wall-clock time of the same work plus 2 ms, and otherwise shows the wall-clock times of the
   whole image as frame time ([docs/PERFORMANCE.md](docs/PERFORMANCE.md), "Timestamps in Safari").
-  Not yet checked in Safari after the fix.
+  Checked in Safari 27.0 on the deploy of commit 06c65d0: the status line shows positive GPU times
+  ([docs/VALIDATION.md](docs/VALIDATION.md), "Manual checks in Safari", S1).
 - **Credit for the photon subring law** ([docs/PHYSICS.md](docs/PHYSICS.md), section 6b, and the
   README's "How it works"): the docs said that the leading-order law for the subring offsets of a
   camera and a disk ring at finite distances was derived for this project. It is published: the
@@ -211,4 +223,5 @@ branch.
   Markdown file. Every math span of the README and docs/ was compared with GitHub's rendering of
   it, and all match.
 
-[Unreleased]: https://github.com/Waiivyy/photonring/commits/main
+[Unreleased]: https://github.com/Waiivyy/photonring/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/Waiivyy/photonring/releases/tag/v0.1.0
