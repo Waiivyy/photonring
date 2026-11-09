@@ -13,6 +13,7 @@ import {
 } from '../../src/physics/index.ts';
 import type { HarnessImageRequest } from '../gpu/harness-api.ts';
 import { openHarness } from '../gpu/page.ts';
+import { median, rejected } from './median.ts';
 
 const REPEATS = 15;
 const resolutions: [number, number][] = [
@@ -31,8 +32,6 @@ const cameras: Record<string, (aspect: number) => CameraParams> = {
   'preset (200 M, -73 deg)': (a) => ehtCamera(200, -73, a),
   'default camera (30 M, 12 deg)': (a) => ehtCamera(30, 12, a),
 };
-
-const median = (v: number[]) => [...v].sort((a, b) => a - b)[Math.floor(v.length / 2)] as number;
 
 test('GPU time of the EHT-style present by camera and resolution', async ({ page }) => {
   test.setTimeout(600_000);
@@ -69,11 +68,13 @@ test('GPU time of the EHT-style present by camera and resolution', async ({ page
       lowHeight: eht ? plan.lowHeight : null,
       timing: r.timing,
       medianMs: ms,
+      rejected: rejected(r.ms),
       ms: r.ms,
     });
     console.log(
       `| ${label} | ${cameraName} | ${request.width} x ${request.height} | ${eht ? plan.f : '-'} | ` +
-        `${eht ? `${plan.lowWidth} x ${plan.lowHeight}` : '-'} | ${ms.toFixed(3)} |`,
+        `${eht ? `${plan.lowWidth} x ${plan.lowHeight}` : '-'} | ` +
+        `${Number.isFinite(ms) ? ms.toFixed(3) : '-'}${rejected(r.ms) > 0 ? ` (${rejected(r.ms)} rejected)` : ''} |`,
     );
   };
   const request = (camera: CameraParams, width: number, height: number, mode: 'eht' | 'colour') =>

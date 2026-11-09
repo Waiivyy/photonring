@@ -70,6 +70,15 @@ test('a camera move previews at reduced resolution, then refines with anti-alias
   expect(after.traceMs).toBeGreaterThan(0);
   expect(after.refineMs).toBeGreaterThan(0);
   expect(after.tilesRemaining).toBe(0);
+  // Every batch's GPU span passed the checks of src/gpu/host/timestamps.ts where the browser
+  // has timestamp queries, so the status line shows GPU time, not frame time.
+  const timestamps = await page.evaluate(
+    async () => (await navigator.gpu.requestAdapter())?.features.has('timestamp-query') ?? false,
+  );
+  expect(after.timing).toBe(timestamps ? 'timestamp-query' : 'wall-clock');
+  await expect(page.locator('p.hud .timing')).toContainText(
+    timestamps ? 'GPU time: first pass' : 'frame time: first pass',
+  );
 });
 
 test('A toggles anti-aliasing', async ({ page }) => {

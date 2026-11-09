@@ -1,6 +1,7 @@
 // Test harness page: exposes the WebGPU renderer to Playwright specs through window.harness.
 import { initWebGpu } from '../../src/gpu/device.ts';
 import { classifyValidation } from '../../src/gpu/host/shadow-count.ts';
+import type { PassTime } from '../../src/gpu/host/timestamps.ts';
 import { GpuRenderer, type SceneParams } from '../../src/gpu/renderer.ts';
 import { shadowAngularRadius } from '../../src/physics/index.ts';
 import type { Harness, HarnessInfo } from './harness-api.ts';
@@ -116,6 +117,9 @@ const harness: Harness = {
     r.resize(request.width, request.height);
     r.setScene({ ...parityScene, ...request });
     await r.renderAll(); // warm-up: pipeline caches, first allocation
+    // GPU time when the device has timestamp queries, NaN for a span that was rejected, so a
+    // median never mixes the two clocks; wall-clock time without timestamp queries.
+    const ms = (t: PassTime) => (info.timestampQuery ? (t.gpuMs ?? Number.NaN) : t.wallMs);
     const result = {
       timestampQuery: info.timestampQuery,
       traceMs: [] as number[],
@@ -126,13 +130,13 @@ const harness: Harness = {
     };
     for (let i = 0; i < repeats; i++) {
       const t0 = performance.now();
-      const { traceMs, refineMs } = await r.renderAll();
+      const { trace, refine } = await r.renderAll();
       await r.device.queue.onSubmittedWorkDone();
       result.wallMs.push(performance.now() - t0);
-      result.traceMs.push(traceMs);
-      if (refineMs !== null) result.refineMs.push(refineMs);
-      result.previewHalfMs.push(await r.renderPreview(0.5));
-      result.previewQuarterMs.push(await r.renderPreview(0.25));
+      result.traceMs.push(ms(trace));
+      if (refine !== null) result.refineMs.push(ms(refine));
+      result.previewHalfMs.push(ms(await r.renderPreview(0.5)));
+      result.previewQuarterMs.push(ms(await r.renderPreview(0.25)));
     }
     await r.renderAll();
     const counts = await r.readSampleCounts();
@@ -141,20 +145,21 @@ const harness: Harness = {
   },
   async benchmarkPresent(request, repeats, factor) {
     const r = await get();
+    const info = await ready;
     r.resize(request.width, request.height);
     r.setScene({ ...parityScene, ...request });
     await r.renderAll();
     // Warm-up: pipelines, reduced images, and GPU clocks (a cold first present measured several
     // times slower than the same present later).
     for (let i = 0; i < 10; i++) await r.timePresent('full', factor);
+    // As in benchmark(): GPU time with timestamp queries, NaN for a repeat whose span was
+    // rejected, so a median never mixes the two clocks; wall-clock time without them.
     const ms: number[] = [];
-    let timing = '';
     for (let i = 0; i < repeats; i++) {
       const t = await r.timePresent('full', factor);
-      ms.push(t.ms);
-      timing = t.timing;
+      ms.push(!info.timestampQuery || t.timing === 'timestamp-query' ? t.ms : Number.NaN);
     }
-    return { timing, ms };
+    return { timing: info.timestampQuery ? 'timestamp-query' : 'wall-clock', ms };
   },
   async measureShadow(request) {
     const r = await get();
