@@ -7,6 +7,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **The disk follows the relativistic Page-Thorne flux** ([docs/PHYSICS.md](docs/PHYSICS.md),
+  section 10): the thin disk's brightness is the flux of Page and Thorne (1974) for a
+  non-rotating black hole, with zero torque at the ISCO, in the physics library, the CPU reference
+  renderer, the GPU shader and the EHT-style view. The Newtonian Shakura-Sunyaev profile is gone
+  and stays only as the large-radius check in the tests. The disk's hottest ring, in the gas's own
+  frame, moved from 8.17 M to 9.55 M and keeps the display temperature of 6500 K; the inner rim is
+  now dark. The EHT-style ring moved from 22.4 M to 25.1 M across, 2.3 times M87*'s ring in units
+  of M, and its legend now says the real ring is less than half this size. On the GPU the
+  temperature comes from a 1024-entry table built in 64-bit floats, within $5.3\times10^{-7}$ of
+  the library at the same 32-bit radius for the page's $M = 1$ (Apple M5, Chrome 157.0.8103.38). Both renderers reject a disk whose inner edge lies inside the ISCO,
+  and a disk with $M \le 0$; a disk with a larger inner edge is the same disk cut off there.
+  The README images, the hero, the social preview and the page's gallery for browsers without
+  WebGPU are re-rendered with the new disk.
+
 ## [0.1.0] - 2026-11-10
 
 The first release. The page is live at https://waiivyy.github.io/photonring/: first deployed on

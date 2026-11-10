@@ -27,6 +27,11 @@ const TERMINATIONS = ['escaped', 'captured', 'stepLimit'] as const;
 /** Translucent, so that every crossing inside the disk contributes to the light. */
 const DISK: DiskSettings = { ...DEFAULT_DISK, opacity: 0.6 };
 /**
+ * The same disk cut at 7 M. Its zero torque stays at 6 M, so a shader that took the zero torque
+ * from the inner edge would draw the inner rim black and fail the light comparison.
+ */
+const DISK_CUT_7M: DiskSettings = { ...DISK, rIn: 7 };
+/**
  * Radii are compared up to twice the outer edge. Farther crossings never reach the disk, and
  * their relative error grows as u = 1/r approaches 0 near escape (it is logged, not asserted).
  */
@@ -48,11 +53,22 @@ const CAMERAS: Record<string, CameraParams> = {
 
 const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 
+/** Every camera with the translucent disk, and two of them again with the disk cut at 7 M. */
+const CASES: [string, CameraParams, DiskSettings][] = [
+  ...Object.entries(CAMERAS).map(([name, camera]): [string, CameraParams, DiskSettings] => [
+    name,
+    camera,
+    DISK,
+  ]),
+  ['inclined, 30 M, disk cut at 7 M', CAMERAS['inclined, 30 M']!, DISK_CUT_7M],
+  ['nearly face-on, 30 M, disk cut at 7 M', CAMERAS['nearly face-on, 30 M']!, DISK_CUT_7M],
+];
+
 test.describe('GPU against CPU parity with the disk', () => {
   test('plane crossings and disk light per ray', async ({ page }) => {
     test.setTimeout(300_000);
     await openHarness(page);
-    for (const [name, camera] of Object.entries(CAMERAS)) {
+    for (const [name, camera, disk] of CASES) {
       const f = cameraFrame(camera, M);
       const gObserver = staticObserverFactor(camera.distance, M);
       const rays: { ray: HarnessRay; b: number }[] = [];
@@ -66,9 +82,9 @@ test.describe('GPU against CPU parity with the disk', () => {
           });
         }
       }
-      const gpu = await page.evaluate(([r, disk]) => window.harness!.traceRays(r, disk), [
+      const gpu = await page.evaluate(([r, d]) => window.harness!.traceRays(r, d), [
         rays.map((r) => r.ray),
-        DISK,
+        disk,
       ] as const);
 
       let compared = 0;
@@ -105,10 +121,10 @@ test.describe('GPU against CPU parity with the disk', () => {
         });
         // A crossing this close to an edge may land on either side of it in f32.
         const nearEdge = radii.some(
-          (r) => Math.abs(r / DISK.rIn - 1) < 1e-4 || Math.abs(r / DISK.rOut - 1) < 1e-4,
+          (r) => Math.abs(r / disk.rIn - 1) < 1e-4 || Math.abs(r / disk.rOut - 1) < 1e-4,
         );
         if (nearEdge) return;
-        const ref = compositeDisk(DISK, radii, cpu.lzOverE, M, gObserver);
+        const ref = compositeDisk(disk, radii, cpu.lzOverE, M, gObserver);
         const scale = Math.max(1e-3, luminance(ref.emission));
         for (let c = 0; c < 3; c++) {
           worstLight = Math.max(worstLight, Math.abs(g.emission[c]! - ref.emission[c]!) / scale);

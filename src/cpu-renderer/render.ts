@@ -2,6 +2,7 @@
 // writing files is left to the callers (tools/ and tests/).
 import { colourMapTable, ehtPlan, postProcessEht } from '../gpu/host/eht-post.ts';
 import {
+  assertDiskSettings,
   cameraFrame,
   compositeDisk,
   compositeDiskBolometric,
@@ -78,16 +79,7 @@ function validate(s: RenderSettings): void {
   }
   if (!positiveInt(s.samplesPerAxis, 8)) throw new RangeError('samplesPerAxis must be 1 to 8');
   if (!(Number.isFinite(s.exposure) && s.exposure >= 0)) throw new RangeError('bad exposure');
-  if (s.disk) {
-    const { rIn, rOut, opacity, peakTemperature } = s.disk;
-    if (!(rIn > 3 * s.M && rOut > rIn && Number.isFinite(rOut))) {
-      throw new RangeError('disk needs 3M < rIn < rOut');
-    }
-    if (!(opacity >= 0 && opacity <= 1)) throw new RangeError('opacity must be in [0, 1]');
-    if (!(peakTemperature > 0 && Number.isFinite(peakTemperature))) {
-      throw new RangeError('peak temperature must be positive');
-    }
-  }
+  if (s.disk) assertDiskSettings(s.disk, s.M);
 }
 
 export function renderImage(s: RenderSettings): RenderOutput {

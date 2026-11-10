@@ -58,6 +58,22 @@ const harness: Harness = {
     r.setScene({ ...parityScene, camera: { ...parityScene.camera, distance }, disk, mode });
     return r.traceRays(rays);
   },
+  async diskProfile(radii, disk) {
+    const r = await get();
+    r.setScene({ ...parityScene, disk });
+    return r.sampleDiskProfile(radii);
+  },
+  async sceneError(M, disk) {
+    const r = await get();
+    try {
+      r.setScene({ ...parityScene, M, disk });
+      return null;
+    } catch (error) {
+      return String(error);
+    } finally {
+      r.setScene(parityScene);
+    }
+  },
   async skyRadiance(directions, g) {
     const r = await get();
     r.setScene(parityScene);

@@ -31,7 +31,7 @@ export function ehtLegendLines(s: { readonly distance: number; readonly disk: bo
   );
   lines.push(
     'Not a simulation of the EHT observation: the real ring is light from hot, tenuous gas at ' +
-      '1.3 mm and, in units of M, about half this size.',
+      '1.3 mm and, in units of M, less than half this size.',
   );
   lines.push('Turned so that north is up, as for M87* on the sky.');
   if (s.distance < DISTANT_OBSERVER_M) {
