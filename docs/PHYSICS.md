@@ -161,6 +161,14 @@ eq. 14; Synge treats emitters inside $3M$). It differs from the naive $\arcsin(b
 $r_o = 30M$ it is $9.633°$ against $9.974°$, 3.4 % smaller (`npm run measure`). The brief's
 formula is confirmed.
 
+Far away, with $t = M/r_o$, the sine above and the arcsine series give
+$\psi_{sh}r_o/b_c = 1 - t + 4t^2 - 14t^3 + \tfrac{304}{5}t^4 - 272t^5 + \tfrac{9024}{7}t^6 - \dots$,
+with exact rational coefficients. Its first term is the $\theta_{sh} = b_c/D_d$ of papers that put
+the observer at infinity, such as Bisnovatyi-Kogan and Tsupko (2022); the static observer sees
+the shadow smaller by $M/r_o$ relative, to first order. A test checks `shadowAngularRadius`
+against this series for $r_o$ from $10^2$ to $10^6M$: a consistency check of the formula, not an
+outside check (`docs/VALIDATION.md`, Stage 8 cross-checks, A8).
+
 **Local direction to Euclidean velocity.** A local unit direction $d$ has coordinate velocity
 proportional to $(\sqrt{1-2M/r} d_{\hat r},\ d_{\hat\theta}/r,\ d_{\hat\phi}/(r\sin\theta))$, so
 in the Euclidean picture of section 4
@@ -369,15 +377,104 @@ and Wald's $C_+$.) Its error is $-2.4$ %, $-0.28$ % and $-0.019$ % at $R = 6M$ f
 to 3 face-on at $30M$, and within $0.304\thinspace\varepsilon\thinspace(\ln(1/\varepsilon) + 2)$ for $n = 1$ to 5
 in the five view directions of the test, at both disk edges.
 
+**The next term, derived here.** The sources read state no general error bound for this law.
+Tsupko (2022, section III D) shows errors from his own ray integration for $n = 2$ (his Figs. 6
+and 7, and a 2.0 % error in the area of the image of a face-on disk from 6 to 30 M), and Bozza
+and Scarpetta (2007, Fig. 4b) find that the error of a ring's angular radius stays of order
+$\varepsilon^2$. A test of the exact solver against the published law needs the size of that
+error, so the next term of the expansion was derived here. It was not found in the sources read:
+Bozza (2002), Bozza and Scarpetta (2007), Iyer and Petters (2007, who give it for a source and an
+observer at infinity, below), Aldi and Bozza (2017, section 3 only), Bisnovatyi-Kogan and Tsupko
+(2022), Tsupko (2022) and Aratore, Tsupko and Perlick (2024), in the parts the References list.
+In units $M = 1$ put $y = \tfrac13 - u$ and $F(y) = y\sqrt{1 - 2y}$. Then $P_c = F^2$ and
+$P = F^2 - \eta$ with $\eta = \tfrac{1}{27} - 1/b^2 = (2\varepsilon - 3\varepsilon^2 + \dots)/27$.
+One leg, from $u_A$ to the turning point, sweeps, with $w = F(y)$ and $G = dy/dw$,
+
+```math
+L(y_A) = \int_{\sqrt\eta}^{w_A}\frac{G(w)\,dw}{\sqrt{w^2 - \eta}},\qquad G(w) = 1 + 2w + \tfrac{15}{2}w^2 + H(w),\quad H(w) = O(w^3),
+```
+
+because inverting $w = y - y^2 - \tfrac12 y^3 + \dots$ gives $y = w + w^2 + \tfrac52 w^3 + \dots$.
+The first three terms integrate in closed form: $1$ gives
+$\mathrm{arcosh}(w_A/\sqrt\eta) = \tfrac12\ln(1/\eta) + \ln(2w_A) - \eta/(4w_A^2) + \dots$; $2w$
+gives $2\sqrt{w_A^2 - \eta}$, so no $\sqrt\eta$ term appears; and $\tfrac{15}{2}w^2$ gives the
+only $\eta\ln\eta$ term, $\tfrac{15}{8}\thinspace\eta\ln(1/\eta)$. In $H$, odd powers of $w$
+integrate to functions regular in $\eta$, and even powers start at $\eta^2\ln\eta$. So
+
+```math
+L = \tfrac12\ln\tfrac1\eta + K(y_A) + \tfrac{15}{8}\,\eta\ln\tfrac1\eta + d(y_A)\,\eta + O(\eta^2\ln\eta) + O(\eta^2/w_A^4),
+```
+
+```math
+K(y_A) = 2\ln 2 - 2\,\mathrm{artanh}\sqrt{1 - 2y_A},\qquad
+d(y_A) = -\tfrac{15}{8} + \tfrac{15}{4}\ln 2 + \tfrac12\left[\mathrm{Reg}(y_A) - \frac{1}{2y_A^2} - \frac{3}{y_A} + \tfrac{15}{2}\ln y_A - 4\right],
+```
+
+```math
+\mathrm{Reg}(y_A) = \int_0^{y_A}\left[\frac{1}{y^3(1 - 2y)^{3/2}} - \frac{1}{y^3} - \frac{3}{y^2} - \frac{15}{2y}\right]dy .
+```
+
+Three checks: $K(y_A) - K(\tfrac13) = -\Delta\phi_c(u_A)$; $\ln\tfrac{27}{2} + 2K(\tfrac13) = \ln C$,
+Bozza's constant; and $d(y_A) - d(y_B) = \tfrac12\int_{y_B}^{y_A}dy/F^3$, the $\eta$-derivative
+of a regular integral, which a direct quadrature of $P_c^{-3/2}$ confirms. Summing the two legs
+and expanding $\eta$ in $\varepsilon$ gives
+
+```math
+\Phi = -\ln\varepsilon + \ln\tfrac{27}{2} + K(y_o) + K(y_R) + \tfrac{5}{18}\,\varepsilon\ln\tfrac1\varepsilon + D\,\varepsilon + \rho,\qquad
+D = \tfrac32 + \tfrac{5}{18}\ln\tfrac{27}{2} + \tfrac{2}{27}\left[d(y_o) + d(y_R)\right].
+```
+
+The first four terms are the published law, $-\ln\varepsilon + \ln C - \Delta\phi_c(u_o) - \Delta\phi_c(u_R)$,
+so at the same sweep
+
+```math
+\ln\frac{\varepsilon}{\varepsilon_{pub}} = \tfrac{5}{18}\,\varepsilon\ln\tfrac1\varepsilon + D\,\varepsilon + \rho .
+```
+
+- **$c = 5/18$ for any end radii.** Each leg contributes
+  $\tfrac{15}{8}\cdot\tfrac{2}{27}\thinspace\varepsilon\ln(1/\varepsilon) = \tfrac{5}{36}\thinspace\varepsilon\ln(1/\varepsilon)$,
+  whatever its end. Stage 7 found this for finite radii from computed values and called it a
+  fit; it is now derived.
+- **At infinity it is a published series.** With $b' = 1 - b_c/b = \varepsilon - \varepsilon^2 + \dots$,
+  Iyer and Petters (2007, eqs. 25 and 27) give $D(\infty, \infty) = 1 + \tfrac{5}{18}\ln\lambda_0 + \rho_1 = 1.20194535$,
+  with $\lambda_0 = C$ and $\rho_1 = (-17 + 4\sqrt3)/18$. The closed form above gives the same
+  to $2.2\times10^{-16}$.
+- **Values**, written $D(r_o, R)$ and computed with `nextOrderD` in
+  `tests/helpers/strong-deflection.ts`: $D(\infty, 6M) = -0.07797$, $D(\infty, 20M) = 0.93363$,
+  $D(30M, 6M) = -0.25369$, $D(30M, 20M) = 0.75791$.
+- **The remainder.** Per leg the next terms are powers of $\eta/w_A^2$, from the expansion of the
+  arcosh, and $\eta^2\ln\eta$. With $z_A = 2\varepsilon/(27\thinspace F(y_A)^2)$ the tests bound
+  $\lvert\rho\rvert$ by $B = \varepsilon^2\ln(1/\varepsilon) + z_o^2 + z_R^2 + 10^{-15}/\varepsilon$, where the
+  last term is the f64 floor of $\varepsilon$ (Solver, below). The form of $B$ is derived; its
+  coefficient 1 is a choice. Over the 6796 cases of the test (observers at 5, 30, 200 and
+  1000 M and at infinity, rings from 3.1 to 30 M, $n = 1$ to 5, 21 phases, three solver routes)
+  $\lvert\rho\rvert$ is at most 0.19 of $B$. The $z$ terms grow as the ring nears the photon
+  sphere, where $F(y_R) \to 0$.
+- **The branch.** The expansion is for rays that turn between the two ends: the outbound branch
+  of section 6a. Near the photon sphere a low order can lie on the inbound branch even where $B$
+  is small: at $R = 3.1M$, an observer at $30M$, $n = 1$ and $\phi_0 = 3\pi/16$,
+  $B = 6.5\times10^{-4}$ but $\rho = -5.09$ (computed with `subringOffset`). Aratore, Tsupko and
+  Perlick note this limit too: the law holds only from an order that grows without bound as $R$
+  approaches $3M$. The test checks the branch explicitly: this case is on its grid, and the test
+  fails if the guard is removed.
+- **The law as published.** For a polar observer at infinity and $n = 2$ the published
+  $\varepsilon$ is too small by 0.37 % at the ISCO and by 1.13 % at 20 M, which is
+  $8.3\times10^{-6}$ and $5.25\times10^{-5}$ of the angular radius. Over all the test's cases its
+  worst error in $\varepsilon$ is 5.3 % at $n = 1$, 4.3 % at $n = 2$, 0.35 % at $n = 3$,
+  $1.5\times10^{-4}$ at $n = 4$ and $7.6\times10^{-6}$ at $n = 5$.
+
 **How fast the ratio approaches $e^{\pi}$.** Write
-$\Phi = -\ln\varepsilon + K + c\thinspace\varepsilon\ln(1/\varepsilon) + d\thinspace\varepsilon + \dots$. The step
+$\Phi = -\ln\varepsilon + K + c\thinspace\varepsilon\ln(1/\varepsilon) + D\thinspace\varepsilon + \dots$. The step
 $\Phi(\varepsilon_{n+1}) - \Phi(\varepsilon_n) = \pi$ then gives
-$\delta_n \equiv (\varepsilon_n/\varepsilon_{n+1})/e^{\pi} - 1 \approx (1 - e^{-\pi})\thinspace c\thinspace\varepsilon_n\ln(1/\varepsilon_n) + A\thinspace\varepsilon_n$.
-For rays from infinity $c = 5/18$ (Iyer and Petters 2007, eq. 25, section 8). With that $c$ the
-fitted $A$ is constant to three or four digits ($-0.28$ at $6M$, $+0.69$ at $20M$, $\lvert A\rvert \le 0.72$
-including $n = 1$). That $c = 5/18$ also holds for finite radii is a fit to these numbers, not a
-derivation. The test bound $\lvert\delta_n\rvert \le \tfrac{5}{18}\varepsilon_n\ln(1/\varepsilon_n) + 1.5\thinspace\varepsilon_n$
-covers both terms; its first term is larger than the leading one by $1/(1 - e^{-\pi}) = 1.045$.
+$\delta_n \equiv (\varepsilon_n/\varepsilon_{n+1})/e^{\pi} - 1 \approx (1 - e^{-\pi})\thinspace c\thinspace\varepsilon_n\ln(1/\varepsilon_n) + A\thinspace\varepsilon_n$,
+with $A = (1 - e^{-\pi})\thinspace D - c\thinspace\pi e^{-\pi}$. For rays from infinity $c = 5/18$
+(Iyer and Petters 2007, eq. 25, section 8), and by the derivation above $c = 5/18$ for any
+observer and ring. Stage 7 fitted $A$ to the computed ratios with that $c$ and found it constant
+to three or four digits ($-0.28$ at $6M$, $+0.69$ at $20M$, $\lvert A\rvert \le 0.72$ including
+$n = 1$); with $D(30M, 6M)$ and $D(30M, 20M)$ the formula gives $-0.2804$ and $+0.6874$. The test
+bound $\lvert\delta_n\rvert \le \tfrac{5}{18}\varepsilon_n\ln(1/\varepsilon_n) + 1.5\thinspace\varepsilon_n$
+covers both terms and stays as Stage 7 set it: its 1.5 is a margin above the fitted
+$\lvert A\rvert$, and its first term is larger than the leading one by $1/(1 - e^{-\pi}) = 1.045$.
 
 **Solver.** `outboundImageOffset(u_o, u_R, sweep)` solves $\Phi = \text{sweep}$ by Brent's method
 (section 6a) in $\ln\varepsilon$, so $\varepsilon$ keeps full relative precision, with $\Phi$ from
@@ -437,6 +534,44 @@ boundaries of Gralla, Holz and Wald round to their published 5.02, 5.19, 5.23 an
 5.0151, 5.1878, 5.2279 and 6.1676 M; the two below $b_c$ from the plunging sweep of section 8a);
 and the escape sweep from $30M$ grows by one radian per factor $e$ in $1/\varepsilon$
 (least-squares slope against $\ln\varepsilon$ over $10^{-6}$ to $10^{-3}$).
+
+**Checked against the papers** (`tests/unit/published-rings.test.ts`, Stage 8; the papers'
+formulas are transcribed in `tests/helpers/strong-deflection.ts`, which imports nothing from
+`src/physics`; measured values in `docs/VALIDATION.md`). Bisnovatyi-Kogan and Tsupko's eq. (15),
+Bozza and Scarpetta's eqs. (65) to (68), and Aratore et al.'s eq. (10) with the observer kept
+(their $k_O$ from eq. 34 at $\eta_O$) equal `subringOffsetLeadingOrder` to rounding. Tsupko's
+eq. (18) sweeps $(n + 1)\pi - \arccos(\sin\varphi/\sqrt{\sin^2\varphi + \cot^2\vartheta_O})$ for an
+observer at $\vartheta_O$ from the disk axis and a screen angle $\varphi$ counterclockwise from
+the horizontal axis; this equals $\phi_0 + n\pi$ with $\vartheta_O$ equal to 90 degrees minus the
+camera's elevation and $\varphi$ the image angle of section 6a, and in both the top of the image
+has the larger sweep. These are identities: they show that photonring and the papers use the
+same law, and they cannot fail on their own. The tests that can fail are the exact solver against
+the published law plus the next term, and three numerical results of the papers that photonring
+reproduces: Tsupko's Fig. 6 ($b_{exact} - b_{analytic}$ for sweeps of $2\pi$, $5\pi/2$ and $3\pi$,
+digitized), Bisnovatyi-Kogan and Tsupko's solid angles of the $n = 0$ and $n = 1$ images of a disk
+from 6 to 15 M (their eqs. 50 and 51), and Tsupko's 2.0 % area error.
+
+**A misprint in Tsupko (2022).** His eqs. (23), (24) and (27) in arXiv v2 print
+$e^{-(n+1)\pi/2}$. His eq. (18) at $\vartheta_O = 0$, Bisnovatyi-Kogan and Tsupko's eq. (15) and
+his own text (a sweep of $5\pi/2$ for $n = 2$) give $e^{-(n+1/2)\pi}$, which photonring follows.
+The journal version was not checked.
+
+**Range.** The papers state the law for $n \ge 2$. At $n = 1$ it is off by up to 5.3 % in
+$\varepsilon$ (above), and the tests use it at $n = 1$ only where $B \le 0.01$. Order 0 is outside
+the papers' stated range: the direct image of a disk ring outside the ISCO, seen face-on, lies on
+the inbound branch, with no turning point, and the formula gives an angular radius 1.66 times the
+exact one at 6 M and 0.862 times at 20 M (observer at infinity; computed with the 64-bit library,
+not a test). Order 0 is checked by Bisnovatyi-Kogan and Tsupko's eq. (50) and by the outside code
+below.
+
+**Against an outside code** (`tests/unit/cross-check.test.ts`, Stage 8; `docs/VALIDATION.md`,
+"Outside code: kgeo"). The radius at every disk-plane crossing of `traceRay`, the number of
+crossings, the ring images of `subringOffset`, the redshift of the Keplerian disk and the
+critical curve agree with kgeo (A. Chael), a Kerr ray tracer in Python run at spin 0, for
+observers at 100 and 1000 M, within tolerances built from kgeo's error measured against its own
+ODE oracle and from photonring's own error terms. The exception is the radii just inside the
+critical curve ($b_c - b < 2\times10^{-9}b_c$): there kgeo's radii are off by up to 30 % (scipy's
+`ellipj` near $m = 1$), and photonring is compared with kgeo's ODE oracle instead.
 
 ## 7. The Binet form used for integration
 
@@ -1082,27 +1217,35 @@ Each entry was confirmed from its text, or, where the entry says so, from publis
   reference is taken from the DOI)
 - Aratore, F., Tsupko, O. Yu. and Perlick, V. (2024). Constraining spherically symmetric metrics by
   the gap between photon rings. Phys. Rev. D 109, 124057. doi:10.1103/PhysRevD.109.124057,
-  arXiv:2402.14733 (abstract and eqs. 4 to 13 with the text around eq. 10, numbered as in arXiv
-  v2; the journal reference is taken from the DOI)
+  arXiv:2402.14733 (abstract, eqs. 4 to 36 with the text around eqs. 10, 22 and 26, and eqs. 67
+  to 71, numbered as in arXiv v2; the journal reference is taken from the DOI)
 - Bardeen, J. M., Press, W. H. and Teukolsky, S. A. (1972). Rotating black holes: locally
   nonrotating frames, energy extraction, and scalar synchrotron radiation. ApJ 178, 347-369.
   doi:10.1086/151796 (eqs. 2.13, 2.16, 2.18 and 2.21)
 - Bisnovatyi-Kogan, G. S. and Tsupko, O. Yu. (2022). Analytical study of higher-order ring images
   of the accretion disk around a black hole. Phys. Rev. D 105, 064040. doi:10.1103/PhysRevD.105.064040,
-  arXiv:2201.01716 (abstract, and eqs. 8 to 16 with the text that credits eq. 8, numbered as in
-  arXiv v1)
+  arXiv:2201.01716 (abstract, eqs. 8 to 16 with the text that credits eq. 8, and eqs. 34 to 56
+  with section VII, the example of a disk from 6 to 15 M whose solid angles eqs. 50 and 51 give
+  from a numerical integration, numbered as in arXiv v1)
 - Bozza, V. (2002). Gravitational lensing in the strong field limit. Phys. Rev. D 66, 103001.
   doi:10.1103/PhysRevD.66.103001, arXiv:gr-qc/0208075 (eqs. 25, 29 and 47 to 50, numbered as in
   arXiv v3)
 - Bozza, V. and Scarpetta, G. (2007). Strong deflection limit of black hole gravitational lensing
   with arbitrary source distances. Phys. Rev. D 76, 083008. doi:10.1103/PhysRevD.76.083008,
-  arXiv:0705.0246 (abstract and section II, eqs. 1 to 71, numbered as in arXiv v2)
+  arXiv:0705.0246 (abstract, section II, eqs. 1 to 71, Fig. 4 and Appendix A, numbered as in
+  arXiv v2)
 - Cardoso, V., Miranda, A. S., Berti, E., Witek, H. and Zanchin, V. T. (2009). Geodesic
   stability, Lyapunov exponents, and quasinormal modes. Phys. Rev. D 79, 064016.
   doi:10.1103/PhysRevD.79.064016, arXiv:0812.1806 (eqs. 49 and 50, numbered as in arXiv v3)
 - Carlson, B. C. (1995). Numerical computation of real or complex elliptic integrals. Numer.
   Algorithms 10, 13-26. doi:10.1007/BF02198293, arXiv:math/9409227 (duplication algorithm and
   the check values of section 3, numbered as in arXiv v1)
+- Chael, A. kgeo: ray tracing of null geodesics in the Kerr metric (software, Python, GPL-3.0),
+  https://github.com/achael/kgeo, commit bc5affe810650fdb2396a1defc645c089db9f9e4, version 0.0.1
+  (its README, the four package files that define `r_equatorial`, `is_outside_crit`, `Iobs` and
+  `Velocity`, and its ODE oracle `tests/geodesic_ode.py`, read at that commit; used for the
+  cross-check of section 6b, called from a separate Python driver run outside photonring's build
+  and tests; no kgeo code is in the repository; `docs/VALIDATION.md`, "Outside code: kgeo")
 - Chael, A., Johnson, M. D. and Lupsasca, A. (2021). Observing the inner shadow of a black hole:
   a direct view of the event horizon. ApJ 918, 6. doi:10.3847/1538-4357/ac09ee, arXiv:2106.00683
   (arXiv v1, pp. 2 to 3)
@@ -1139,7 +1282,8 @@ Each entry was confirmed from its text, or, where the entry says so, from publis
   arXiv v2)
 - Iyer, S. V. and Petters, A. O. (2007). Light's bending angle due to black holes: from the photon
   sphere to infinity. Gen. Rel. Grav. 39(10), 1563-1582. doi:10.1007/s10714-007-0481-8,
-  arXiv:gr-qc/0611086 (eqs. 8 and 25, numbered as in arXiv v2)
+  arXiv:gr-qc/0611086 (eqs. 8, 25 and 27 with the definition $b' = 1 - b_c/b$ and the constants
+  $\sigma_1$ and $\rho_1$ of eq. 27, numbered as in arXiv v2)
 - Johnson, M. D. et al. (2020). Universal interferometric signatures of a black hole's photon
   ring. Sci. Adv. 6, eaaz1310. doi:10.1126/sciadv.aaz1310, arXiv:1907.04329 (eqs. 7, 12 and 14
   and footnote 3, read in the HTML rendering of arXiv v2)
@@ -1178,8 +1322,9 @@ Each entry was confirmed from its text, or, where the entry says so, from publis
   463-466. doi:10.1093/mnras/131.3.463 (eqs. 8 to 11 and 14)
 - Tsupko, O. Yu. (2022). Shape of higher-order images of equatorial emission rings around a
   Schwarzschild black hole: analytical description with polar curves. Phys. Rev. D 106, 064033.
-  doi:10.1103/PhysRevD.106.064033, arXiv:2208.02084 (abstract, introduction, eqs. 16 to 18 and
-  Appendix A, eqs. 44 to 54, numbered as in arXiv v2)
+  doi:10.1103/PhysRevD.106.064033, arXiv:2208.02084 (abstract, introduction, eqs. 1 to 27,
+  section III D with Figs. 6 and 7, and Appendix A, eqs. 28 to 54, numbered as in arXiv v2; Fig. 6
+  digitized from the raster embedded in the arXiv v2 PDF, as `docs/VALIDATION.md` describes)
 - W3C CSS Color Module Level 4, Candidate Recommendation Draft, 27 October 2026, section 19
   "Sample code for Color Conversions", https://www.w3.org/TR/2026/CRD-css-color-4-20261027/, and
   its sample code file https://drafts.csswg.org/css-color-4/conversions.js (`XYZ_to_lin_sRGB`,

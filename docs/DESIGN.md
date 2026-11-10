@@ -1233,3 +1233,66 @@ fidelity first" on 2026-11-08.
   (2022), Tsupko (2022) and Aratore, Tsupko and Perlick (2024) to the rings of a disk. Both places
   now credit them in that order and claim no derivation; section 6b shows that their eq. (68) and
   the form with the critical orbit's sweep are the same expression.
+- **The cross-checks (item 5 of the stage).** Designed with an independent critique
+  (`artifacts/stage8/design/cross-checks.md` and `cross-checks-critique.md`, gitignored), whose
+  fixes are all applied except where a decision below overrides one; the owner started the step on
+  2026-11-09. `tests/unit/published-rings.test.ts` checks photonring against the published
+  strong deflection formulas and numerical results, `tests/unit/cross-check.test.ts` against
+  kgeo; the rows, tolerances and measured values are in `docs/VALIDATION.md`, the derivation of
+  the next-order term in `docs/PHYSICS.md`, section 6b. No bug in photonring was found, and
+  `src/` did not change.
+  - The owner's decisions. kgeo (commit bc5affe, GPL-3.0) and ehtim 1.3.2 (GPL-3.0) run in a
+    pinned Python environment outside the repository. The driver scripts that import them stay
+    outside too (`artifacts/stage8/cross-check/driver/`, gitignored); only their output numbers
+    are committed, as the fixture `tests/data/kgeo-bc5affe.json` and as rows in
+    `docs/VALIDATION.md`. The docs describe kgeo as called from a separate Python driver run
+    outside photonring's build and tests, with no kgeo code in the repository. The credit for the
+    subring law was fixed in pull request 8a and was not redone.
+  - Decided for this step. At the check-in of 2026-11-09 the owner accepted A7's unit of the last
+    digit, A8 as a consistency check, dropping A9, the committed Fig. 6 values and the factor 2
+    of K1's rounding model (Tolerance changes in `docs/VALIDATION.md`). A7 pins its definitions
+    ($\Omega_S$ exactly $\pi(15^2 - 6^2)$, the observer at infinity, no other factor) and allows
+    one unit of the last quoted digit, because Bisnovatyi-Kogan and Tsupko state neither their
+    rounding nor their accuracy and their printed $\Omega_S = 594$ alone moves the first ratio by
+    $4.4\times10^{-4}$.
+    A8 is a consistency check of photonring's own shadow formula, with its rounding floor derived
+    and tested on 4001 distances. Tsupko's Fig. 6 is committed as digitized values with the raw
+    pixel coordinates of every marker and tick and a tolerance in value units per panel, without
+    the image. Tsupko's 2.0 % area case is added as a cheap outside check. A4 has an explicit
+    branch guard. The fitted ratio bound in `tests/unit/subrings.test.ts` is unchanged. The
+    next-order term is described as derived here; of the sources read, which are listed, only
+    Iyer and Petters (2007) give it, for a source and an observer at infinity. kgeo runs at 100
+    and 1000 M; its error was measured against its own ODE oracle at the compared samples before
+    any tolerance used it, crossing counts are its $N_{max} + 1$, capture is at $2.001M$, and an
+    order with no crossing matches only if neither code has one; a kgeo crossing between $2M$ and
+    $2.001M$, which photonring's capture cannot reach, is compared in neither K1 nor K4.
+  - A9, the CPU strip at 1000 M, is dropped. The page's distances run from 5 to 200 M
+    (`ORBIT_LIMITS` in `src/ui/quantise.ts`), so it would test a view the page never shows. The
+    physics at 1000 M is covered by A4 and by K1, which checks `traceRay`, the CPU renderer's
+    per-pixel tracer, against kgeo down to $\varepsilon = 10^{-9}$; the strip at 30 M by
+    `tests/unit/strip.test.ts`, and on the GPU at 5, 30 and 200 M by `tests/gpu/subrings.spec.ts`.
+    The only thing A9 would add is the strip's pixel mapping at 1000 M, the same code that
+    `tests/unit/strip.test.ts` runs at 30 M.
+  - Found on the way, all in `docs/VALIDATION.md`: kgeo is inaccurate just inside the critical
+    curve (scipy's `ellipj` close to $m = 1$) and stops counting crossings at $r_o$; at one
+    crossing its oracle is the outlier; and the K1 tolerance needs two measured photonring terms,
+    the rounding drift and the input carried by a unit direction vector, beyond the design's
+    three (Tolerance changes). `ringImageAngle` solves a direct image whose root lies next to the
+    ray that turns at $R$ in plain $\alpha$, with an absolute tolerance of $10^{-15}$ (section 6a
+    of `docs/PHYSICS.md`), so for observers far beyond the page's range its relative precision in
+    $\varepsilon$ falls: against a bisection on the swept angle,
+    $1.3\times10^{-10}$ at $R = 20M$ seen from $10^7M$, $1.4\times10^{-9}$ at $15M$ from $10^8M$
+    and $7.8\times10^{-7}$ at $6M$ from $10^{10}M$, while for the same rings it is at most
+    $1.9\times10^{-15}$ at 200 M and $8.1\times10^{-14}$ at 1000 M. That is not a bug in the page's
+    range and does not affect the kgeo comparison; it is why A7 puts its observer at infinity
+    ($u_o = 0$) instead of at a large distance.
+  - After review: A4 now includes a ring at 3.1 M, where the branch guard decides two cases that
+    the $B$ filter alone would keep, and the test fails if the guard is removed. K1's rounding term
+    takes photonring's drift of $b$ capped at a rounding model, with a test that the drift stays
+    under it, because a wrong force law breaks the same conservation and would otherwise widen
+    the tolerance with the error under test; a coefficient off by $10^{-12}$ now fails. K2's
+    $10^{-12}$ rad for photonring's solver, validated before only at 30 M for orders 1 to 5, is
+    checked on the K2 images themselves.
+  - Test-first: each test was run first and failed for the right reason, its helper or fixture
+    not existing yet; deliberate defects in scratch copies (22 for the published formulas, 12 for
+    kgeo) each made a test fail.

@@ -11,8 +11,9 @@ Where the measured values come from:
 
 - **Node-side rows whose "Where" names `npm run measure`.** That command runs the Vitest suites
   with `MEASURE=1`. The analytic, integrator, camera, contrast, raytrace, lensing,
-  overlay-geometry, star field, numerics, colour, subring, EHT, disk flux and GPU host (the
-  Page-Thorne disk table, Stage 8) tests pass the values these rows give
+  overlay-geometry, star field, numerics, colour, subring, EHT, disk flux, GPU host (the
+  Page-Thorne disk table, Stage 8) and cross-check (published rings and kgeo, Stage 8) tests pass
+  the values these rows give
   through `measured()` (`tests/helpers/measured.ts`), and `tools/measured-report.ts` prints the
   worst value of each recorded check: its key, the value, whether the largest or the smallest
   counts, and the test file. It prints no tolerances; they are in the tables below. The values
@@ -31,6 +32,11 @@ Where the measured values come from:
   without the disk were not affected by the change. The logs are kept in
   `artifacts/stage8/page-thorne/logs/` (`test-gpu.log` and `test-gpu-accepted.log`), which is not
   committed.
+- **Stage 8, cross-checks.** `npm run measure` on 2026-11-09 (Node 25.6.1, vitest 5.0.5, Apple
+  M5, macOS 27.0) on the working tree that adds the cross-check tests, all 1119 Vitest tests
+  passing. kgeo and its ODE oracle ran in Python on the same machine and day (section "Outside
+  code: kgeo", with every version), and the comparison over kgeo's full sample set ran with
+  `node tools/cross-check/kgeo-report.ts` on that output.
 - **The CPU shadow table** comes from `npm run render:cpu`, the Stage 0 integrator comparison from
   `npm run spike` (`docs/DESIGN.md`, section 3).
 
@@ -179,6 +185,43 @@ the code of d25071e, which gave the same value for every row.
 | Compositing in the colour view: one crossing is a blackbody at $g\thinspace T_{peak}\hat T(r)$; the peak temperature from the settings; a disk at $M = 2$ gives at $2r$ what $M = 1$ gives at $r$; a disk cut at 7 M is bright at its edge                                                                                                                                                                    | `tests/unit/analytic.test.ts`                                    | Exact; $10^{-12}$ relative                                                                         | Pass                                                                                                                                                       |
 | $\hat T$ from the shipped WGSL (the table, binding 3) against the f64 library at the f32 radius, $M = 1$: 4096 radii from $6M(1 + 10^{-4})$ to $1000M$ and the peak radius, the first eight f32 radii above $6M$, and zero at and inside $6M$; for the default disk and for a disk cut at 7 M                                                                                                                 | `tests/gpu/disk-profile.spec.ts` (`npm run test:gpu`)            | $2\times10^{-6}$ relative (see Tolerance changes); exact zeros                                     | Apple M5, Chrome 157.0.8103.38, 2026-11-08: $5.3\times10^{-7}$ (at 6.308 M); first radii $2.9\times10^{-7}$; zeros exact; the same for the disk cut at 7 M |
 
+Stage 8 adds the cross-checks below (item 5 of the stage): photonring against the published strong
+deflection formulas for the ring images of a thin disk and against numerical results printed in
+those papers (`tests/unit/published-rings.test.ts`; the papers' formulas are transcribed in
+`tests/helpers/strong-deflection.ts`, which imports nothing from `src/physics`), and against an
+outside code, kgeo (`tests/unit/cross-check.test.ts`; section "Outside code: kgeo" below). The
+derivations are in `docs/PHYSICS.md`, section 6b. Node-side values are printed by
+`npm run measure` (2026-11-09; see the list at the top). Not every row is an independent check:
+A1 to A3 are identities between photonring's formulas and the papers', so they document that both
+use the same law; A5 follows from A4; A8 compares photonring's shadow formula with its own series;
+and K5 compares kgeo's classification and `traceRay`'s escape or capture at $b_c(1 \pm 10^{-9})$
+each with $b > b_c$, not with each other. The rows that
+compare photonring with something outside it are A4 (against the law plus a next term derived
+here), A6, A7, the area case and K1 to K4.
+
+| Check                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Where                                                    | Tolerance                                                                                                                                                                                                                                                                             | Measured                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A1. Bisnovatyi-Kogan and Tsupko (2022) eq. (15), polar observer at infinity, against `subringOffsetLeadingOrder` with the observer at infinity: 19 radii from 3.001 to $10^8M$, $n$ = 0 to 10; their two printed forms of eq. (11); Aratore et al. (2024) eq. (36) against their $f(r_S)$                                                                                                                                                                                                                                                                                                                | `tests/unit/published-rings.test.ts` (`npm run measure`) | Rounding only, relative: $(100 + 4(1 + \text{sweep}) + 6/\eta_o + 6/\eta_R)\thinspace2^{-52}$ with $\eta = 1 - 3M/r$ (100 for the cancellation in $C = 216(7 - 4\sqrt3)$; 6 per end for $\eta$ and the slope of $\Delta\phi_c$ near the photon sphere); eq. (11): $205 \cdot 2^{-53}$ | $2.9\times10^{-13}$, 0.24 of the tolerance; the two forms of eq. (11) $46 \cdot 2^{-53}$ ($5.1\times10^{-15}$) apart; eq. (36) $5.6\times10^{-16}$                                                                                                                                                                                                                                                                              |
+| A2. Bozza and Scarpetta (2007) eqs. (65) to (68) and Aratore et al. (2024) eq. (10) with the observer kept (their $k_O$ from eq. 34 at $\eta_O$), against `subringOffsetLeadingOrder`: observers at 5, 6.5, 10, 30, 100, 200, 1000, $10^4$ and $10^6M$ and at infinity, rings from 3.3 to 100 M, $n$ = 0 to 5, five phases                                                                                                                                                                                                                                                                               | `tests/unit/published-rings.test.ts` (`npm run measure`) | As A1                                                                                                                                                                                                                                                                                 | $1.1\times10^{-14}$ for both (0.25 and 0.29 of the tolerance)                                                                                                                                                                                                                                                                                                                                                                   |
+| A3. Tsupko (2022) eq. (18), the sweep $(n + 1)\pi - \arccos(\sin\varphi/\sqrt{\sin^2\varphi + \cot^2\vartheta_O})$, against photonring's $\phi_0 + n\pi$ from camera frames, with $\vartheta_O$ = 90 degrees minus the elevation and $\varphi$ the image angle: 12 elevations from 1 to 90 degrees, two azimuths, 48 image angles, $n$ = 0 to 5 (6912 cases)                                                                                                                                                                                                                                             | `tests/unit/published-rings.test.ts` (`npm run measure`) | $10^{-13}$ rad                                                                                                                                                                                                                                                                        | $9.3\times10^{-15}$ rad                                                                                                                                                                                                                                                                                                                                                                                                         |
+| The derived next term (`docs/PHYSICS.md`, section 6b) on its own: $D(\infty, \infty)$ against Iyer and Petters (2007) eq. (27), $1 + \tfrac{5}{18}\ln\lambda_0 + \rho_1$; differences of $d$ against a direct quadrature of $P_c^{-3/2}$ for four pairs of radii; the constant term against $\ln C - \Delta\phi_c$ at five radii; the ratio-law constants $A$ against the $-0.28$ and $+0.69$ that Stage 7 fitted                                                                                                                                                                                        | `tests/unit/published-rings.test.ts` (`npm run measure`) | $10^{-13}$; $10^{-13}$ relative; $10^{-14}$; 0.005                                                                                                                                                                                                                                    | $2.2\times10^{-16}$; $1.7\times10^{-15}$; $4.4\times10^{-16}$; $A = -0.2804$ and $+0.6874$, at most 0.0026 from the fits                                                                                                                                                                                                                                                                                                        |
+| A4. photonring's exact offsets against the published law plus the derived next term, $\lvert\ln(\varepsilon/\varepsilon_{pub}) - \tfrac{5}{18}\varepsilon\ln(1/\varepsilon) - D\varepsilon\rvert$: `outboundImageOffset` with the observer at infinity, `subringOffset` and `ringImageAngle` (sweeps up to $4\pi$) at 5, 30, 200 and 1000 M; 11 rings from 3.1 to 30 M, $n$ = 1 to 5, 21 phases (16 multiples of $\pi/16$ and the five view directions of the subring tests). Left out: cases with $B > 0.01$, and, by an explicit branch guard, rays that do not turn between the observer and the ring | `tests/unit/published-rings.test.ts` (`npm run measure`) | $B = \varepsilon^2\ln(1/\varepsilon) + z_o^2 + z_R^2 + 10^{-15}/\varepsilon$, $z_A = 2\varepsilon/(27F(y_A)^2)$: the form is derived, the coefficient 1 is a choice                                                                                                                   | 0.19 of $B$ over 6796 cases (`outboundImageOffset` 0.19, `subringOffset` 0.19, `ringImageAngle` 0.10). The guard left out 70 cases; the test asserts that at least one of them has $B \le 0.01$, so that removing the guard fails it, and 2 do (3.1 M, observer at 30 M, $n = 1$, $\phi_0 = 3\pi/16$, on two routes: $B = 6.5\times10^{-4}$, residual $-5.09$). At infinity `outboundImageOffset` itself refuses 12 such sweeps |
+| A5. The published law as published, $\lvert\ln(\varepsilon/\varepsilon_{pub})\rvert$, on the A4 cases; and Bisnovatyi-Kogan and Tsupko's eq. (15) for $n = 2$ at 6 and 20 M                                                                                                                                                                                                                                                                                                                                                                                                                              | `tests/unit/published-rings.test.ts` (`npm run measure`) | $\tfrac{5}{18}\varepsilon\ln(1/\varepsilon) + \lvert D\rvert\varepsilon + B$; it follows from A4, so it is not an independent check                                                                                                                                                   | 0.99997 of the bound, close to 1 by construction where $D > 0$. Worst error of the law in $\varepsilon$: 5.3 % ($n = 1$), 4.3 % ($n = 2$), 0.35 % ($n = 3$), $1.5\times10^{-4}$ ($n = 4$), $7.6\times10^{-6}$ ($n = 5$). Eq. (15), $n = 2$: 0.37 % at 6 M and 1.13 % at 20 M, that is $8.3\times10^{-6}$ and $5.25\times10^{-5}$ of the angular radius                                                                          |
+| A6. Tsupko (2022) Fig. 6, his numerical integration: $b_{exact} - b_{analytic}$ for sweeps of $2\pi$, $5\pi/2$ and $3\pi$ at $r_S$ = 3.3, 4, 6, 10, 20 and 30 M, 18 digitized markers (`tests/data/tsupko2022-fig6.json`, method below), against $b_c(\varepsilon - \varepsilon_{pub})$ from `outboundImageOffset` with the observer at infinity; and the fixture's calibration (ticks on straight axes, marker radii from their positions)                                                                                                                                                              | `tests/unit/published-rings.test.ts` (`npm run measure`) | One pixel of the figure's raster per panel, in value units: $5.8\times10^{-6}M$ ($2\pi$), $2.9\times10^{-7}M$ ($5\pi/2$), $1.5\times10^{-8}M$ ($3\pi$); ticks 0.25 px; radii $10^{-3}$ relative                                                                                       | 0.060 of the tolerance (0.024, 0.0098 and 0.062 px per panel); ticks 0.10 px; radii $2.0\times10^{-5}$                                                                                                                                                                                                                                                                                                                          |
+| A7. Bisnovatyi-Kogan and Tsupko (2022) eqs. (50) and (51), their numerical integration: the solid angles of the $n = 0$ and $n = 1$ images of a disk from 6 to 15 M, polar observer at infinity, with $\Omega_S = \pi(15^2 - 6^2)M^2/D^2$ exactly (their eq. 46 prints 594) and $\theta = b/D$                                                                                                                                                                                                                                                                                                           | `tests/unit/published-rings.test.ts` (`npm run measure`) | One unit of the last quoted digit: 0.01 for 1.10, 0.001 for 0.017 and 0.019 (see Tolerance changes)                                                                                                                                                                                   | $\Omega_0/\Omega_S = 1.09508$ (0.49 units from 1.10), $\Omega_1/\Omega_0 = 0.016995$ (0.005 units), $\Omega_1/\Omega_S = 0.018611$ (0.39 units)                                                                                                                                                                                                                                                                                 |
+| Tsupko (2022) section III D: the area of the $n = 2$ image of a face-on disk from 6 to 30 M, his eq. (18) against the exact radii, for which he finds an error of about 2.0 %                                                                                                                                                                                                                                                                                                                                                                                                                            | `tests/unit/published-rings.test.ts` (`npm run measure`) | 0.1 percentage point, one unit of the quoted digit                                                                                                                                                                                                                                    | 1.990 % of the exact area (0.10 units from 2.0 %) and 2.030 % of eq. 18's (0.30 units)                                                                                                                                                                                                                                                                                                                                          |
+| A8. Consistency check: `shadowAngularRadius` against the series of its own formula, $\psi_{sh}D/b_c = 1 - t + 4t^2 - 14t^3 + \tfrac{304}{5}t^4 - 272t^5$ with $t = M/D$, whose first term is the papers' $b_c/D_d$; 4001 distances from $10^2$ to $10^6M$                                                                                                                                                                                                                                                                                                                                                | `tests/unit/published-rings.test.ts` (`npm run measure`) | $\tfrac{9024}{7}t^6$, the next term of the alternating series, plus $20 \cdot 2^{-53}$ for rounding; the rounding alone, for $D \ge 1000M$: $20 \cdot 2^{-53}$                                                                                                                        | 0.98 of the tolerance, near $D = 330M$, close to 1 by construction (the remainder approaches the next term as $1 - 4.9M/D$); rounding $6.0 \cdot 2^{-53}$                                                                                                                                                                                                                                                                       |
+| The kgeo fixture (`tests/data/kgeo-bc5affe.json`) records kgeo's commit and licence, the machine, the commands, the package versions and the oracle's hash; it holds output numbers only, covers both distances and all three inclinations, and stays under 200,000 bytes                                                                                                                                                                                                                                                                                                                                | `tests/unit/cross-check.test.ts`                         | Exact                                                                                                                                                                                                                                                                                 | Pass: 164,366 bytes, 509 rays, 288 ring images                                                                                                                                                                                                                                                                                                                                                                                  |
+| K1. Emission radius at each disk-plane crossing: kgeo's `r_equatorial` for $\bar m = n$ against `traceRay` (f64, $d\phi = 2.5\times10^{-4}$, capture at $2.001M$) for the same screen point, observers at 100 and 1000 M; 567 and 570 crossings in the fixture                                                                                                                                                                                                                                                                                                                                           | `tests/unit/cross-check.test.ts` (`npm run measure`)     | Per crossing, relative: kgeo's measured error, photonring's step-halving and rounding-drift estimates (the drift capped at the rounding model of the next row), an input and a phase term, and $4 \cdot 2^{-52}$ (derivation in "Outside code: kgeo"; see Tolerance changes)          | 0.98 of the tolerance at both distances. 100 M: $3.7\times10^{-12}$, $4.1\times10^{-13}$, $4.6\times10^{-12}$ at orders 0, 1, 2 and $2.2\times10^{-5}$ at orders 3 and up; 1000 M: $3.4\times10^{-12}$, $2.4\times10^{-12}$, $1.1\times10^{-11}$, $2.9\times10^{-5}$                                                                                                                                                            |
+| K1's rounding term: photonring's drift of $b$ along each fixture ray, up to each crossing inside $r_o$, against the rounding model $2 \cdot 2^{-53}\sqrt{N}$ for $N$ steps of $d\phi = 2.5\times10^{-4}$, so that a force law that breaks the conservation fails instead of widening K1's tolerance                                                                                                                                                                                                                                                                                                      | `tests/unit/cross-check.test.ts` (`npm run measure`)     | Below the model; its factor 2 is a choice (see Tolerance changes)                                                                                                                                                                                                                     | 0.45 (100 M) and 0.38 (1000 M) of the model                                                                                                                                                                                                                                                                                                                                                                                     |
+| K1 just inside the critical curve, $b_c - b < 2\times10^{-9}b_c$, where kgeo is inaccurate (see "Outside code: kgeo"): photonring against kgeo's ODE oracle, 98 crossings at each distance                                                                                                                                                                                                                                                                                                                                                                                                               | `tests/unit/cross-check.test.ts` (`npm run measure`)     | As K1, with the oracle's two-run change as its error                                                                                                                                                                                                                                  | 0.27 (100 M) and 0.66 (1000 M) of the tolerance                                                                                                                                                                                                                                                                                                                                                                                 |
+| K2. Ring images: $\varepsilon$ of the $n$ = 0, 1, 2 images of rings at 6 and 20 M from kgeo's Brent roots of $r_s(b) = R$ along eight image angles at three inclinations, against `subringOffset`; 144 per distance, none within 0.05 rad of the fold sweep, where they would be skipped                                                                                                                                                                                                                                                                                                                 | `tests/unit/cross-check.test.ts` (`npm run measure`)     | Relative in $\varepsilon$: kgeo's measured error times $\lvert d\ln\varepsilon/d\ln R\rvert$, its root tolerance, $8 \cdot 2^{-52}$ for the rounding of $b$, and $10^{-12}$ rad of sweep for photonring's solver times $\lvert d\ln\varepsilon/d\Phi\rvert$                           | $1.6\times10^{-12}$ (0.078 of the tolerance) at 100 M, $5.2\times10^{-13}$ (0.081) at 1000 M                                                                                                                                                                                                                                                                                                                                    |
+| K2's solver term: photonring's root for each of the 144 images per distance put back into an independent Gauss-Legendre quadrature of the sweep, outbound images through `sweptAngleQuadrature` to the turning point (as in the subring tests at 30 M) and inbound ones from $u_o$ to $u_R$ directly (4000 panels)                                                                                                                                                                                                                                                                                       | `tests/unit/cross-check.test.ts` (`npm run measure`)     | $10^{-12}$ rad $+ 2^{-52}/\varepsilon$, as in the subring tests                                                                                                                                                                                                                       | Inbound 0.093 (100 M, 27 images) and 0.083 (1000 M, 39) of it; outbound 0.085 (117) and 0.092 (105)                                                                                                                                                                                                                                                                                                                             |
+| K3. Redshift of the Keplerian disk: kgeo's `Iobs` $g$ with `Velocity('kep')` against `redshiftFactor(circularOrbitEmitter(r), L_z/E)` at photonring's crossing radius, $n$ = 0 and 1 where $6 \le r_s \le 20M$; 65 and 71 values                                                                                                                                                                                                                                                                                                                                                                         | `tests/unit/cross-check.test.ts` (`npm run measure`)     | $\lvert d\ln g/d\ln r\rvert$ times the K1 tolerance, plus $\lvert d\ln g/d\ln L\rvert$ times the rounding of $L_z/E$, plus $16 \cdot 2^{-52}$                                                                                                                                         | $9.8\times10^{-14}$ (0.95 of the tolerance) at 100 M, $6.0\times10^{-14}$ (0.90) at 1000 M                                                                                                                                                                                                                                                                                                                                      |
+| K4. Number of crossings: kgeo's $N_{max} + 1$, less any between the horizon and $2.001M$, against photonring's crossings inside $r_o$ (kgeo stops counting at $r_o$ on the way out), every fixture ray; kgeo's radius after its last crossing is 0                                                                                                                                                                                                                                                                                                                                                       | `tests/unit/cross-check.test.ts` (`npm run measure`)     | Equal; a ray with a crossing within $10^{-9}$ rad of an end of the ray would be left out                                                                                                                                                                                              | Equal for all 255 and 254 rays, none left out (smallest distance of a crossing from an end 0.0034 and 0.0019 rad)                                                                                                                                                                                                                                                                                                               |
+| K5. Critical curve: kgeo's `is_outside_crit` and photonring's escape or capture at $b = b_c(1 \pm 10^{-9})$, 56 fixture rays                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `tests/unit/cross-check.test.ts`                         | Exact                                                                                                                                                                                                                                                                                 | Pass                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| P1 to P4, the conventions that map kgeo's screen onto photonring's: P1, the approaching side ($g$ larger) is on the image left in both codes and a mirrored $\alpha$ fails K3; P2, the direct image of 6 M is larger at the top in both and a mirrored $\beta$ fails K2; P3, radii match only for $\bar m = n$, not $n \pm 1$; P4, kgeo's Keplerian disk turns in $+\phi$ with photonring's $u^t$ and $\Omega$                                                                                                                                                                                           | `tests/unit/cross-check.test.ts` (`npm run measure`)     | Mirrored mappings more than $10^3$ tolerances off; more than 95 % of crossings off with $\bar m = n \pm 1$; P4 $8 \cdot 2^{-52}$                                                                                                                                                      | Mirrored $\alpha$ at least $8.2\times10^{11}$ tolerances off, mirrored $\beta$ $1.8\times10^{11}$; every crossing off with $n \pm 1$; P4 $2.2\times10^{-16}$                                                                                                                                                                                                                                                                    |
+
 ## Shadow radius measured on the CPU render
 
 Validation mode: disk off, uniform sky of radiance 1, no tone mapping, one sample at each pixel
@@ -216,6 +259,210 @@ keeps it as the `shadow-gpu` artifact for 7 days). Pixel figures are pixels of t
 At every distance the black pixels equal the captured ones (505,376 at 5 M down to 1,656 at
 200 M), none reached the step limit, and no pixel disagrees with the analytic edge. As on the CPU,
 the residual is the quantisation of the area count.
+
+## Outside code: kgeo
+
+kgeo (A. Chael, https://github.com/achael/kgeo) traces null geodesics in the Kerr metric with the
+analytic formalism of Gralla and Lupsasca (arXiv:1910.12881, as its README states) and treats
+spin 0 exactly. photonring integrates the planar Binet equation and uses Carlson's integrals, so
+the two codes share no method. kgeo returns what photonring computes: the emission radius at each
+crossing of the equatorial plane for a screen point and an image order, the number of crossings,
+and the redshift of a Keplerian disk. It requires an observer at $r_o \ge 100M$, so the comparison
+runs at 100 and 1000 M (the page's distances run from 5 to 200 M).
+
+**Licence.** kgeo is GPL-3.0, and so is ehtim, which kgeo imports when it loads. kgeo was called
+from a separate Python driver run outside photonring's build and tests; no kgeo code is in the
+repository. Only its output numbers are committed, as the test fixture
+`tests/data/kgeo-bc5affe.json`, which `npm test` re-checks without Python.
+
+**Versions and machine.** kgeo at commit bc5affe810650fdb2396a1defc645c089db9f9e4 (version
+0.0.1) with Python 3.12.12, numpy 2.5.4, scipy 1.18.1, mpmath 1.4.1, ehtim 1.3.2 and astropy
+8.0.2, in a uv environment at `~/.cache/photonring-crosscheck/kgeo`, outside the repository;
+Apple M5, macOS 27.0; 2026-11-09. Every run of kgeo and of its ODE oracle had the network denied
+(a macOS `sandbox-exec` profile with `deny network*`), and every Python run used the interpreter
+with `-I` from a directory outside the repository. The full package list, also stored in the fixture: astropy 8.0.2,
+astropy-iers-data 0.2026.11.2.0.34.55, certifi 2026.10.23, charset-normalizer 3.5.2, contourpy
+1.4.0, cycler 0.12.1, ehtim 1.3.2, fonttools 4.68.0, future 1.0.0, h5py 3.16.0, hdrhistogram
+0.10.8, idna 3.20, jplephem 2.24, kgeo at bc5affe, kiwisolver 1.5.1, matplotlib 3.11.2, mpmath
+1.4.1, networkx 3.7, numpy 2.5.4, packaging 26.3, pandas 3.1.1, pandas-appender 0.9.9,
+paramsurvey 0.4.21, pbr 7.1.3, pillow 13.0.0, psutil 7.2.2, pyerfa 2.0.1.5, pyparsing 3.3.3,
+python-dateutil 4.0.0, pyyaml 6.0.3, requests 2.34.2, scipy 1.18.1, setuptools 84.2.1, sgp4 2.27,
+skyfield 1.55, tqdm 4.70.1, tzdata 2026.6, urllib3 2.8.0.
+
+**What the driver does.** Its scripts are in `artifacts/stage8/cross-check/driver/`, which git
+ignores. For each observer distance it samples 5184 rays: 24 image angles 15 degrees apart (exact
+on the axes) at inclinations of 0, 17 and 78 degrees (photonring's elevations 90, 73 and 12),
+each with 72 impact parameters: 30 from 0.5 to 15 M, $b_c(1 + \varepsilon)$ for 20 values of
+$\varepsilon$ from $10^{-6}$ to 0.5, $b_c(1 - \delta)$ for 20 values of $\delta$ from $10^{-6}$ to
+0.1, and $b_c(1 \pm 10^{-9})$. For each ray it records `r_equatorial` for $\bar m$ = 0 to 9,
+$N_{max}$, `is_outside_crit`, and `Iobs` $g$ with `Velocity('kep')` for $\bar m$ = 0 and 1. It also
+finds 432 ring images per distance: Brent roots (scipy's `brentq` with `xtol` $10^{-15}$ and
+`rtol` $4 \cdot 2^{-52}$) of $r_s(b) = R$ along each image angle, for rings at 6 and 20 M and
+$\bar m$ = 0, 1, 2. A second script runs kgeo's own ODE oracle on every sample, and a third writes
+the fixture: 509 of the rays (four image angles at 0 and 17 degrees and six at 78 degrees, each
+with 16 of the impact parameters and both of $b_c(1 \pm 10^{-9})$, and five rays that cross the
+plane again beyond $r_o$), 288 of the ring images (eight image angles) and three Keplerian
+velocities. The driver took 3.3 and 3.4 s and the oracle 41.8 and 42.9 s (8 processes). The
+commands, with the repository's path written `<repo>`:
+
+```sh
+cd /tmp && sandbox-exec -p '(version 1)(allow default)(deny network*)' \
+  ~/.cache/photonring-crosscheck/kgeo/bin/python -I \
+  <repo>/artifacts/stage8/cross-check/driver/kgeo_driver.py --ro 1000 \
+  --out <repo>/artifacts/stage8/cross-check/out/kgeo-ro1000.json
+cd /tmp && sandbox-exec -p '(version 1)(allow default)(deny network*)' \
+  ~/.cache/photonring-crosscheck/kgeo/bin/python -I \
+  <repo>/artifacts/stage8/cross-check/driver/kgeo_ode_check.py \
+  --in <repo>/artifacts/stage8/cross-check/out/kgeo-ro1000.json \
+  --out <repo>/artifacts/stage8/cross-check/out/ode-ro1000.json
+# the same two with 100 in place of 1000, then:
+cd /tmp && ~/.cache/photonring-crosscheck/kgeo/bin/python -I \
+  <repo>/artifacts/stage8/cross-check/driver/make_fixture.py <repo>
+cd <repo> && npx prettier --write tests/data/kgeo-bc5affe.json
+D=artifacts/stage8/cross-check/out
+node tools/cross-check/kgeo-report.ts $D/kgeo-ro100.json $D/ode-ro100.json \
+  $D/kgeo-ro1000.json $D/ode-ro1000.json
+```
+
+**kgeo against its own ODE oracle.** The oracle is kgeo's `tests/geodesic_ode.py` at the same
+commit (sha256 a282f34c4a837169813bd0449ad413dbd99f433bead05121e014e5d844570f5e), copied, not
+downloaded, from the kgeo files read for the design's critique, whose four package files equal
+the installed package byte for byte; it was not compared with GitHub. It integrates the geodesic
+equations with scipy's DOP853 at rtol $2.5\times10^{-14}$ (scipy clamps rtol at
+$2.2\times10^{-14}$), finds each crossing as an event, integrates again to the event and corrects
+it by one Newton step; a second run at 10 times the rtol estimates its own error. Worst relative
+difference of kgeo's radius from the oracle's, with the oracle's change between its two runs in
+brackets, both rounded up to two significant digits as rsErr is:
+
+| Crossings                                                      | $r_o = 100M$                              | $r_o = 1000M$                             |
+| -------------------------------------------------------------- | ----------------------------------------- | ----------------------------------------- |
+| Order 0 (4762 and 4764)                                        | $1.6\times10^{-11}$ ($1.4\times10^{-12}$) | $1.1\times10^{-11}$ ($1.7\times10^{-12}$) |
+| Order 1 (2871 and 2964)                                        | $7.6\times10^{-13}$ ($1.5\times10^{-11}$) | $2.4\times10^{-12}$ ($2.9\times10^{-10}$) |
+| Order 2 (1924 and 1931)                                        | $5.4\times10^{-12}$ ($9.5\times10^{-11}$) | $7.6\times10^{-12}$ ($6.9\times10^{-11}$) |
+| Orders 3 and up (1870 and 1922)                                | $1.5\times10^{-5}$ ($1.5\times10^{-4}$)   | $1.8\times10^{-5}$ ($6.8\times10^{-5}$)   |
+| Ring images (432 each)                                         | $3.3\times10^{-12}$ ($4.1\times10^{-11}$) | $4.4\times10^{-12}$ ($4.2\times10^{-11}$) |
+| Just inside the critical curve (504 each; not used, see below) | 0.21 ($2.2\times10^{-6}$)                 | 0.31 ($1.7\times10^{-6}$)                 |
+
+At orders 3 and up the oracle itself is the limit. The design's $10^{-10}$, a tolerance of kgeo's
+test suite for another function, is used nowhere: every fixture sample carries a measured bound,
+rsErr, the difference of kgeo from the oracle plus the oracle's two-run change, rounded up to two
+digits. The oracle's crossings inside $r_o$ equal kgeo's $N_{max} + 1$ on every ray (the fixture
+script checks this).
+
+**Where the codes disagreed.**
+
+1. kgeo is inaccurate just inside the critical curve. For $b_c - b$ below about
+   $2\times10^{-9}b_c$, kgeo's formula for rays inside the critical curve calls scipy's `ellipj`
+   with $1 - m < 10^{-10}$ beyond the quarter period, where that routine loses accuracy: against
+   mpmath at 50 digits and $u = 23$, its cn and dn are off by $3.6\times10^{-3}$ for
+   $1 - m = 9.9\times10^{-11}$ and by $4.2\times10^{-15}$ for $1.01\times10^{-10}$ (scipy 1.18.1,
+   mpmath 1.4.1). kgeo's radii there are off by up to 20.7 % at 100 M and 30.3 % at 1000 M, while its
+   crossing counts and its classification stay right: K4 passes on these rays, and K5 on those at
+   $b_c(1 - 10^{-9})$. These rays are compared with the oracle's radii instead (the row "K1 just
+   inside the critical curve").
+   kgeo also returns NaN for $b = b_c$ exactly, which is not sampled.
+2. kgeo stops counting crossings at $r_o$ on the way out: its largest Mino time is twice the time
+   from $r_o$ to the turning point. The oracle, which integrates on to escape, found more crossings
+   than kgeo on 61 rays (59 at 100 M, 2 at 1000 M), all beyond $r_o$. K4 therefore counts
+   photonring's crossings with $r < r_o$; with that rule the counts equal kgeo's on all 10,368
+   rays.
+3. At one crossing the oracle is the outlier: $b = 13.5M$, inclination 78 degrees, order 1,
+   $r_o = 1000M$. photonring at $d\phi$ = $2.5\times10^{-4}$, $1.25\times10^{-4}$ and
+   $6.25\times10^{-5}$ agrees with kgeo within $1.6\times10^{-14}$, while the oracle differs from
+   them by $1.3\times10^{-13}$ and $1.4\times10^{-13}$; its own two-run estimate there was
+   $1.9\times10^{-14}$, about 7 times too small. So rsErr is generous at that crossing, and the
+   direct comparison of photonring with the oracle (a report, not a test) puts it at 1.10 of its
+   tolerance.
+4. As first written, K1 failed on photonring's side: the design's tolerance missed two of
+   photonring's own error sources. Neither is a defect (Tolerance changes).
+
+**Tolerances.** $\varepsilon = b/b_c - 1$, $b$ = hypot($\alpha$, $\beta$), and ulp means
+$2^{-52}$.
+
+- K1, relative, per crossing: rsErr, plus $2\lvert r_h - r_{h/2}\rvert/(15r)$ (photonring's RK4
+  step-halving estimate at $h = 5\times10^{-4}$, doubled), plus
+  $2\min(\delta_b, 2 \cdot 2^{-53}\sqrt{N})(1 + S(b/b_c)/\lvert\varepsilon\rvert)$ (rounding), plus
+  $S(\lvert b_p/b - 1\rvert + 8 \cdot 2^{-53})(b/b_c)/\lvert\varepsilon\rvert$ (input), plus
+  $(\lvert w\rvert/u)(\lvert\phi_{0,p} - \phi_0\rvert + 8 \cdot 2^{-53}(\phi_0 + n\pi))$ (phase),
+  plus 4 ulp. $S = \lvert d\ln r/d\ln\lvert\varepsilon\rvert\rvert$ comes from `traceRay` at
+  $\varepsilon e^{\pm 10^{-3}}$. $\delta_b$ is the largest relative drift, up to the crossing, of
+  $b = (w^2 + u^2 - 2u^3)^{-1/2}$ with $w = du/d\phi$, a conserved quantity, along the traced ray;
+  its factor 2 is a choice, as for step halving. It enters capped at the rounding model
+  $2 \cdot 2^{-53}\sqrt{N}$, $N$ the steps up to the crossing, and a separate test asserts that it
+  stays below that cap, because a wrong force law also breaks the conservation and would otherwise
+  widen the tolerance with the error under test. $b_p$ is `traceRay`'s impact parameter,
+  $\phi_{0,p}$ its first crossing angle from its own ray-plane basis, and $\lvert w\rvert/u$ is the
+  exact $\lvert d\ln r/d\phi\rvert$ at the crossing.
+- K2, relative in $\varepsilon$:
+  $S_R(\text{rsErr} + 4\thinspace\text{ulp}) + (10^{-15} + 4\thinspace\text{ulp}\thinspace b)/(b_c\lvert\varepsilon\rvert) + 8\thinspace\text{ulp}\thinspace(b/b_c)/\lvert\varepsilon\rvert + 10^{-12}S_\Phi$,
+  with $S_R = \lvert d\ln\varepsilon/d\ln R\rvert$ and $S_\Phi = \lvert d\ln\varepsilon/d\Phi\rvert$
+  from photonring by finite differences: kgeo's error at its root carried into $\varepsilon$, the
+  root's tolerance (`brentq`'s `xtol` and `rtol`), the rounding of $b$ in both codes, and a sweep
+  residual of $10^{-12}$ rad for photonring's solver: the bound `tests/unit/subrings.test.ts`
+  validates at 30 M for orders 1 to 5, which the row "K2's solver term" checks on these images,
+  order 0 included and inbound ones (through `ringImageAngle`) too. Images within 0.05 rad of the fold sweep, where $\varepsilon$ is
+  ill-conditioned in $R$, are skipped: 2 of 432 per distance in the full set, none in the fixture.
+- K3: $S_g\tau_{K1} + S_L(\lvert b_p/b - 1\rvert + 4\thinspace\text{ulp}) + 16\thinspace\text{ulp}$,
+  with $S_g = \lvert d\ln g/d\ln r\rvert$, $S_L = \lvert d\ln g/d\ln L\rvert$ and $\tau_{K1}$ the K1
+  tolerance of the radius. `redshiftFactor` is compared directly: kgeo's $g$ assumes $p_t = -1$,
+  an observer at rest at infinity, so no static-observer factor enters.
+- K4 and K5: exact. K4 would leave out a ray with a crossing within $10^{-9}$ rad of an end of the
+  ray; none came that close (smallest $5.3\times10^{-5}$ rad, at 100 M).
+
+**Results over the full sample set**, from `node tools/cross-check/kgeo-report.ts` (14 s); the
+fixture's values, which `npm test` re-checks, are in the rows K1 to P4 above.
+
+| Check                                                                                     | $r_o = 100M$                                                                                             | $r_o = 1000M$                                                                                            |
+| ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| K1, worst relative difference at orders 0, 1, 2 and 3 and up                              | $1.56\times10^{-11}$, $4.45\times10^{-13}$, $1.00\times10^{-11}$, $4.46\times10^{-5}$ (11,427 crossings) | $1.05\times10^{-11}$, $2.39\times10^{-12}$, $3.35\times10^{-11}$, $2.09\times10^{-4}$ (11,581 crossings) |
+| K1, worst fraction of the tolerance                                                       | 0.999                                                                                                    | 0.999                                                                                                    |
+| K1 just inside the critical curve, against the oracle (504 crossings)                     | 0.494 of the tolerance                                                                                   | 0.658                                                                                                    |
+| K1's rounding term: drift of $b$ against the rounding model (11,931 and 12,085 crossings) | 0.621 of the model                                                                                       | 0.690                                                                                                    |
+| photonring against the oracle directly (a report, not a test)                             | 0.947 of the tolerance (11,931 crossings)                                                                | 1.102 (12,085 crossings; the crossing of item 3)                                                         |
+| K2 (430 images, 2 near the fold skipped)                                                  | $1.59\times10^{-12}$, 0.078 of the tolerance                                                             | $5.67\times10^{-13}$, 0.081                                                                              |
+| K2's solver term: sweep residual (432 images)                                             | 0.117 of $10^{-12}$ rad $+ 2^{-52}/\varepsilon$ (81 inbound)                                             | 0.093 (113 inbound)                                                                                      |
+| K3                                                                                        | $2.32\times10^{-12}$, 0.998 of the tolerance (1712 values)                                               | $2.51\times10^{-12}$, 0.993 (1612 values)                                                                |
+| K4 (5184 rays)                                                                            | 0 differ                                                                                                 | 0 differ                                                                                                 |
+| K5 (144 rays)                                                                             | 0 disagree                                                                                               | 0 disagree                                                                                               |
+
+Every K1 fraction above 0.97 is an order 0 crossing near the critical curve, at
+$\varepsilon = 10^{-9}$ or between $10^{-6}$ and $8\times10^{-6}$, where photonring is within
+$1.6\times10^{-14}$ of the oracle and kgeo's measured error is most of the tolerance: a fraction
+near 1 there reflects kgeo's error, not photonring's. Every K3 fraction above 0.97 is order 0 at
+$\varepsilon = 10^{-9}$ and 78 degrees.
+
+## Tsupko (2022) Fig. 6, digitized
+
+`tests/data/tsupko2022-fig6.json` holds 18 values read from Fig. 6 of Tsupko (2022):
+$b_{exact} - b_{analytic}$ in units of $M$ against the ring radius, for sweeps of $2\pi$, $5\pi/2$
+and $3\pi$, where "exact" is his numerical integration and "analytic" his eq. (5). The file
+stores the citation, the method, the pixel coordinates of every marker and calibration tick, and
+the tolerance of each panel in value units. No image is committed.
+
+- **Image.** The raster embedded in page 8 of the arXiv v2 PDF, the only image on that page, used
+  as it is: 3000 x 5929 px at 945 ppi, 8-bit grey, extracted with `pdfimages -f 8 -l 8` (poppler
+  26.04.0). The file records the SHA-256 of the PDF and of the image.
+- **Axes and ticks.** The axes are the columns and rows with dark runs longer than 1000 px. The
+  labelled y ticks are darkness-weighted centroids over the columns 16 to 24 px left of the axis,
+  where the minor ticks do not reach; the x ticks, at the labels 3 to 10, 20 and 30 of the
+  logarithmic axis, are centroids over the rows 6 to 20 px below it.
+- **Markers.** The grey fill of each marker (grey level 154, inside a black outline that the
+  connecting lines do not cross) as a connected component; its centroid weights each fill pixel by
+  1 and each antialiased pixel between fill and outline by its grey level over 154.
+- **Calibration.** Least-squares lines through the labelled ticks of each panel, linear in $y$ and
+  in $\log_{10}r$ along $x$. The worst y tick lies 0.10 px off its line, and the marker positions
+  give the radii 3.3, 4, 6, 10, 20 and 30 M to $2.0\times10^{-5}$ relative (the radii of his
+  Figs. 3 and 4, which his text says Fig. 6 uses).
+- **Tolerance.** One pixel of the raster in value units: $5.8\times10^{-6}M$, $2.9\times10^{-7}M$
+  and $1.5\times10^{-8}M$ for the three panels. It covers the tick residual, up to half a pixel if
+  the plotting program put the axes on whole pixels, and where it placed the markers, which the
+  image cannot show. In $\varepsilon$ one pixel is $4.3\times10^{-5}$ to $6.8\times10^{-4}$
+  relative for $2\pi$, $1.1\times10^{-5}$ to $1.6\times10^{-4}$ for $5\pi/2$, and
+  $2.6\times10^{-6}$ to $3.8\times10^{-5}$ for $3\pi$: the levels to which A6 checks the exact
+  solver.
+- **When and how.** Digitized on 2026-11-09 on the Apple M5 (macOS 27.0, Node 25.6.1) by a script
+  kept in `artifacts/stage8/cross-check/part-a/`, which git ignores. The journal's figure was not
+  seen.
 
 ## Manual checks in Safari
 
@@ -334,3 +581,66 @@ These requests went through the office network's proxy. A local build of this re
   Stage 3 (tolerance $10^{-11}$, above) and the other toy-profile tests of
   `tests/unit/analytic.test.ts`. The Newtonian flux stays in `tests/unit/disk-flux.test.ts` as
   the large-radius oracle.
+- **Stage 8, cross-checks: the K1 tolerance gained two measured terms.** The design
+  (`artifacts/stage8/design/cross-checks.md`, gitignored) proposed three: kgeo's own bound
+  ($10^{-10}$), photonring's step halving, and an input term of $10^{-15}/\varepsilon$ times the
+  slope $S$. The $10^{-10}$ is a tolerance of kgeo's test suite for another function, not a bound
+  kgeo states for `r_equatorial` at spin 0, so it was replaced by kgeo's error measured against its
+  own ODE oracle at every sample (rsErr: smaller at orders 0 to 2, larger at 3 and up, where the
+  oracle itself is the limit). As first written, K1 then failed on photonring's side, for two
+  error sources that step halving cannot see. (1) Rounding: below $d\phi$ of about $10^{-3}$ it
+  accumulates over the $10^4$ to $10^5$ steps of a ray and does not shrink with the step. It shows
+  as a drift of the conserved $b$ along the ray (up to $1.2\times10^{-14}$ relative in the full
+  sample set), which near the critical curve moves the radius by that times
+  $(b/b_c)\thinspace S/\lvert\varepsilon\rvert$. (2) The direction: `traceRay` takes a unit
+  direction vector whose transverse part is only $\sin\psi = kb$ at large $r_o$, so it carries $b$
+  to about $2^{-53}/\sin\psi$ (up to $1.1\times10^{-13}$ relative, at $b = 1M$ and
+  $r_o = 1000M$), and its ray plane is off by a similar amount. Both are now measured per ray and
+  added (derivation in "Outside code: kgeo"). In a scratch run over the full sample set, leaving
+  out the drift term makes 606 crossings fail at 100 M and 432 at 1000 M (worst 3.4 and 2.5 times
+  the tolerance), and leaving out the measured input and phase terms makes 383 fail at 1000 M
+  (worst 9.5 times). The extended tolerance was checked against the oracle as a third route: worst
+  0.947 of it at 100 M, and at 1000 M 1.10 at the one crossing where the oracle is the outlier
+  (item 3 of "Where the codes disagreed"). These are limits of photonring's 64-bit rounding, not
+  defects. A review then found that the drift term would also grow with a wrong force law, which
+  breaks the same conservation: on a copy of the integrator with the $3M$ coefficient off by
+  $10^{-12}$, the drift was 192 times the rounding model $2^{-53}\sqrt{N}$ and K1's worst ratio
+  levelled off near 3.9 instead of growing with the error. The drift now enters capped at
+  $2 \cdot 2^{-53}\sqrt{N}$, and a test asserts that it stays below that. The factor 2 is a
+  choice, set from the measured worst over the full sample set: 1.24 times $2^{-53}\sqrt{N}$ at
+  100 M and 1.38 at 1000 M, both at a first crossing (0.90 and 0.76 in the fixture). With the
+  coefficient off by $10^{-12}$ or $10^{-10}$, both the drift test and K1 now fail.
+- **Stage 8, cross-checks: K2 and K3.** Both take kgeo's error from rsErr instead of $10^{-10}$, as
+  K1 does. K2 allows $10^{-12}$ rad of sweep for photonring's solver, times
+  $\lvert d\ln\varepsilon/d\Phi\rvert$, in place of the design's $10^{-14}$, for which the
+  design gave no source. The $10^{-12}$ is the residual bound `tests/unit/subrings.test.ts`
+  validates at 30 M for orders 1 to 5 on the outbound branch; because K2 also has order 0, inbound
+  images and observers at 100 and 1000 M, a test now checks that bound on the K2 images
+  themselves (worst 0.093 of it). Measured worst K2: 0.078 and 0.081 of the tolerance. K3 adds the rounding of $L_z/E$ and $16 \cdot 2^{-52}$ for the two evaluations of
+  $g$.
+- **Stage 8, cross-checks: A1 and A2 became a rounding count.** The design's
+  $10^{-14} + 4 \cdot 2^{-52}/(1 - 3M/R)$, set from one scratch run, became
+  $(100 + 4(1 + \text{sweep}) + 6/\eta_o + 6/\eta_R)\thinspace2^{-52}$, which is 1.5 to 5.1 times
+  looser over the tested cases. The 100 is there because $C = 216(7 - 4\sqrt3)$ cancels; it takes
+  `Math.sqrt` within 1 ulp, and with correct rounding the bound would be about 28. The two
+  printed forms of Bisnovatyi-Kogan and Tsupko's eq. (11) differ by $5.1\times10^{-15}$ in f64,
+  half the design's $10^{-14}$, with no error in either. Measured worst: 0.24 to 0.29 of the new
+  tolerance.
+- **Stage 8, cross-checks: A6 is one pixel of the embedded raster.** The design allowed 2 px of a
+  220 dpi render of the page; the test reads the raster embedded in the PDF (945 ppi) and allows
+  one of its pixels, about 8.6 times tighter. The design's worst of 1.07 px came from the
+  re-render; on the embedded raster the worst is 0.062 px.
+- **Stage 8, cross-checks: A7 allows one unit of the last quoted digit**, not the design's half
+  unit (decided for this step and reported to the owner). Bisnovatyi-Kogan and Tsupko state
+  neither their rounding nor the accuracy of their integration, and their printed
+  $\Omega_S = 594$, against $\pi(15^2 - 6^2) = 593.76$, moves $\Omega_0/\Omega_S$ from 1.09508 to
+  1.09464, which would fail at half a unit (0.54 units from 1.10) although both numbers are
+  theirs. The definitions are pinned instead: $\Omega_S$ exact, observer at infinity, no other
+  factor. Measured: 0.49, 0.005 and 0.39 units.
+- **Stage 8, cross-checks: A8's floor is a rounding count.** The design's
+  $3000t^6 + 4\times10^{-16}$ became $\tfrac{9024}{7}t^6 + 20 \cdot 2^{-53}$. The $t^6$ term is
+  the exact next coefficient (1289.1, tighter than 3000). The floor counts about 14 units of
+  $2^{-53}$ through the `atan2` form of `shadowAngularRadius`, 4 for the product and $b_c$ and 1
+  for the series, assuming `Math.pow` and `Math.atan2` within 1 ulp (an assumption, not
+  measured); the design's $4\times10^{-16}$ failed at 40 of the 4001 distances (worst 1.66 times
+  it, at 4140 M). Measured rounding: $6.0 \cdot 2^{-53}$ for $D \ge 1000M$.

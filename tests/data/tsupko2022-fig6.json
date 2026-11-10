@@ -1,0 +1,404 @@
+{
+  "source": "Tsupko, O. Yu. (2022). Shape of higher-order images of equatorial emission rings around a Schwarzschild black hole: analytical description with polar curves. Phys. Rev. D 106, 064033. doi:10.1103/PhysRevD.106.064033. arXiv:2208.02084v2, Fig. 6 (page 8).",
+  "quantity": "b_exact - b_analytic in units of m (G = c = 1): impact parameter of the ray from a circular ring of radius r_S to an observer at infinity with azimuthal shift Delta phi (dphiOverPi times pi), exact from his numerical integration, analytic from his eq. (5).",
+  "image": {
+    "description": "the raster embedded in page 8 of the arXiv v2 PDF (the only image on that page), used as it is, without re-rendering",
+    "extraction": "pdfimages -f 8 -l 8 2208.02084v2.pdf p8 (poppler 26.04.0), giving a binary PPM",
+    "pdfSha256": "feade082931877b13ba3d0d00e9569fea4875261b6a1b6465066c1cee3df5072",
+    "ppmSha256": "9b30d964fcd9af52ac922d55b4caa3dd30c8e41b8ce9817c8267ae1f70ed85fe",
+    "widthPx": 3000,
+    "heightPx": 5929,
+    "ppi": 945,
+    "pixels": "8-bit gray (stored as RGB with equal channels)"
+  },
+  "coordinates": "pixels of that image, origin at the top-left corner of the top-left pixel, x to the right, y down; a pixel centre is at (i + 0.5, j + 0.5)",
+  "method": [
+    "Axes: the columns and rows holding dark runs longer than 1000 px.",
+    "y ticks: the labelled (major) ticks only, as darkness-weighted centroids (darkness = 255 - gray) of the rows they cover, over the columns 16 to 24 px left of the y axis, where the minor ticks do not reach. Their values are the printed labels.",
+    "x ticks: darkness-weighted centroids of the columns they cover, over the rows 6 to 20 px below the x axis, at the printed labels 3, 4, 5, 6, 7, 8, 9, 10, 20, 30 (logarithmic axis).",
+    "Markers: the grey fill of each marker (gray level 154, about 760 px, enclosed by a black outline that the connecting lines do not cross) as a connected component; centroid with each fill pixel weighted 1 and each antialiased pixel between fill and outline weighted by its gray level over 154.",
+    "Calibration: least-squares line value = a + b y through all labelled y ticks of the panel, and log10(r) = c + d x through the x ticks. Worst tick residuals: 0.10 px (y) and 0.07 px (x). The marker x positions give r_S = 3.3, 4, 6, 10, 20, 30 to within 1e-4 relative, the radii of his Figs. 3 and 4 that the text says Fig. 6 uses.",
+    "value: a + b y of the marker, rounded to 6 significant digits; tests recompute it from the stored pixels."
+  ],
+  "tolerance": "One pixel of the embedded raster in value units (valuePerPx rounded up to two digits): the worst tick residual (0.10 px), plus up to 0.5 px if the plotting program put the axis on whole pixels (the ticks of the 3 pi panel sit on whole pixels, 138.00 px apart), plus a margin for where the plotting program placed the markers, which the image cannot show.",
+  "digitized": "2026-11-09, Apple M5, macOS 27.0, Node 25.6.1, by artifacts/stage8/cross-check/part-a/digitize-fig6.ts (not in the repository)",
+  "panels": [
+    {
+      "dphiOverPi": 2,
+      "valuePerPx": 0.0000057744,
+      "tolerance": 0.0000058,
+      "yTicks": [
+        {
+          "value": 0.007,
+          "y": 280.5
+        },
+        {
+          "value": 0.006,
+          "y": 453.59
+        },
+        {
+          "value": 0.005,
+          "y": 626.863
+        },
+        {
+          "value": 0.004,
+          "y": 800
+        },
+        {
+          "value": 0.003,
+          "y": 973.301
+        },
+        {
+          "value": 0.002,
+          "y": 1146.41
+        },
+        {
+          "value": 0.001,
+          "y": 1319.5
+        },
+        {
+          "value": 0,
+          "y": 1492.699
+        },
+        {
+          "value": -0.001,
+          "y": 1665.934
+        }
+      ],
+      "xTicks": [
+        {
+          "r": 3,
+          "x": 593.666
+        },
+        {
+          "r": 4,
+          "x": 856.229
+        },
+        {
+          "r": 5,
+          "x": 1059.751
+        },
+        {
+          "r": 6,
+          "x": 1226.145
+        },
+        {
+          "r": 7,
+          "x": 1366.686
+        },
+        {
+          "r": 8,
+          "x": 1488.574
+        },
+        {
+          "r": 9,
+          "x": 1596.066
+        },
+        {
+          "r": 10,
+          "x": 1692.21
+        },
+        {
+          "r": 20,
+          "x": 2324.568
+        },
+        {
+          "r": 30,
+          "x": 2694.511
+        }
+      ],
+      "markers": [
+        {
+          "r": 3.3,
+          "x": 680.68,
+          "y": 1547.8,
+          "value": -0.000317954
+        },
+        {
+          "r": 4,
+          "x": 856.192,
+          "y": 1527.492,
+          "value": -0.000200688
+        },
+        {
+          "r": 6,
+          "x": 1226.12,
+          "y": 1366.417,
+          "value": 0.000729418
+        },
+        {
+          "r": 10,
+          "x": 1692.181,
+          "y": 1033.13,
+          "value": 0.00265394
+        },
+        {
+          "r": 20,
+          "x": 2324.584,
+          "y": 556.167,
+          "value": 0.0054081
+        },
+        {
+          "r": 30,
+          "x": 2694.51,
+          "y": 326.847,
+          "value": 0.00673228
+        }
+      ]
+    },
+    {
+      "dphiOverPi": 2.5,
+      "valuePerPx": 2.8871e-7,
+      "tolerance": 2.9e-7,
+      "yTicks": [
+        {
+          "value": 0.00035,
+          "y": 2137.301
+        },
+        {
+          "value": 0.0003,
+          "y": 2310.5
+        },
+        {
+          "value": 0.00025,
+          "y": 2483.699
+        },
+        {
+          "value": 0.0002,
+          "y": 2656.863
+        },
+        {
+          "value": 0.00015,
+          "y": 2830
+        },
+        {
+          "value": 0.0001,
+          "y": 3003.301
+        },
+        {
+          "value": 0.00005,
+          "y": 3176.5
+        },
+        {
+          "value": 0,
+          "y": 3349.59
+        },
+        {
+          "value": -0.00005,
+          "y": 3522.764
+        }
+      ],
+      "xTicks": [
+        {
+          "r": 3,
+          "x": 593.666
+        },
+        {
+          "r": 4,
+          "x": 856.229
+        },
+        {
+          "r": 5,
+          "x": 1059.751
+        },
+        {
+          "r": 6,
+          "x": 1226.145
+        },
+        {
+          "r": 7,
+          "x": 1366.686
+        },
+        {
+          "r": 8,
+          "x": 1488.574
+        },
+        {
+          "r": 9,
+          "x": 1596.066
+        },
+        {
+          "r": 10,
+          "x": 1692.21
+        },
+        {
+          "r": 20,
+          "x": 2324.568
+        },
+        {
+          "r": 30,
+          "x": 2694.511
+        }
+      ],
+      "markers": [
+        {
+          "r": 3.3,
+          "x": 680.68,
+          "y": 3396.16,
+          "value": -0.0000134377
+        },
+        {
+          "r": 4,
+          "x": 856.192,
+          "y": 3370.606,
+          "value": -0.00000606006
+        },
+        {
+          "r": 6,
+          "x": 1226.121,
+          "y": 3199.695,
+          "value": 0.0000432831
+        },
+        {
+          "r": 10,
+          "x": 1692.181,
+          "y": 2863.888,
+          "value": 0.000140233
+        },
+        {
+          "r": 20,
+          "x": 2324.579,
+          "y": 2400.377,
+          "value": 0.000274052
+        },
+        {
+          "r": 30,
+          "x": 2694.51,
+          "y": 2182.489,
+          "value": 0.000336957
+        }
+      ]
+    },
+    {
+      "dphiOverPi": 3,
+      "valuePerPx": 1.4492e-8,
+      "tolerance": 1.5e-8,
+      "yTicks": [
+        {
+          "value": 0.000018,
+          "y": 3994
+        },
+        {
+          "value": 0.000016,
+          "y": 4132
+        },
+        {
+          "value": 0.000014,
+          "y": 4270
+        },
+        {
+          "value": 0.000012,
+          "y": 4408
+        },
+        {
+          "value": 0.00001,
+          "y": 4546
+        },
+        {
+          "value": 0.000008,
+          "y": 4684
+        },
+        {
+          "value": 0.000006,
+          "y": 4822
+        },
+        {
+          "value": 0.000004,
+          "y": 4960
+        },
+        {
+          "value": 0.000002,
+          "y": 5098
+        },
+        {
+          "value": 0,
+          "y": 5236
+        },
+        {
+          "value": -0.000002,
+          "y": 5374.077
+        }
+      ],
+      "xTicks": [
+        {
+          "r": 3,
+          "x": 602.45
+        },
+        {
+          "r": 4,
+          "x": 863.88
+        },
+        {
+          "r": 5,
+          "x": 1066.655
+        },
+        {
+          "r": 6,
+          "x": 1232.423
+        },
+        {
+          "r": 7,
+          "x": 1372.502
+        },
+        {
+          "r": 8,
+          "x": 1493.839
+        },
+        {
+          "r": 9,
+          "x": 1600.893
+        },
+        {
+          "r": 10,
+          "x": 1696.629
+        },
+        {
+          "r": 20,
+          "x": 2326.605
+        },
+        {
+          "r": 30,
+          "x": 2695.161
+        }
+      ],
+      "markers": [
+        {
+          "r": 3.3,
+          "x": 689.053,
+          "y": 5275.27,
+          "value": -5.68812e-7
+        },
+        {
+          "r": 4,
+          "x": 863.891,
+          "y": 5246.877,
+          "value": -1.57329e-7
+        },
+        {
+          "r": 6,
+          "x": 1232.399,
+          "y": 5072.308,
+          "value": 0.00000237259
+        },
+        {
+          "r": 10,
+          "x": 1696.665,
+          "y": 4737.443,
+          "value": 0.00000722558
+        },
+        {
+          "r": 20,
+          "x": 2326.632,
+          "y": 4281.734,
+          "value": 0.0000138299
+        },
+        {
+          "r": 30,
+          "x": 2695.134,
+          "y": 4069.254,
+          "value": 0.0000169092
+        }
+      ]
+    }
+  ]
+}
